@@ -426,12 +426,9 @@ onMounted(loadData)
     <div v-else class="relative">
       <!-- SIDEBAR -->
       <aside class="fixed inset-y-0 left-0 hidden w-80 border-r border-slate-200 bg-white/95 px-6 py-6 shadow-sm dark:bg-slate-800 dark:border-slate-700 lg:block">
-        <div class="mb-8 flex items-center gap-4">
-          <img :src="logoUrl" alt="DRIVOLUTION logo" class="h-12 w-auto object-contain" />
-          <div>
-            <p class="text-xs font-bold uppercase tracking-[0.18em] text-drivolution-700">DRIVOLUTION WP3</p>
-            <h1 class="text-xl font-black tracking-tight">DriveTrace Core</h1>
-          </div>
+        <div class="mb-8 text-center">
+          <img :src="logoUrl" alt="DRIVOLUTION logo" class="mx-auto h-16 w-auto max-w-full object-contain" />
+          <h1 class="mt-3 text-xl font-black tracking-tight text-slate-900 dark:text-slate-100">DriveTrace Core</h1>
         </div>
         <nav class="space-y-2">
           <button

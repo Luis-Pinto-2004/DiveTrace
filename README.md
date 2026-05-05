@@ -12,7 +12,7 @@ DriveTrace Core é uma plataforma académica para rastreabilidade e monitorizaç
 - .NET 8 SDK apenas para desenvolvimento local da API.
 - Node.js 20+ ou 22+ apenas para desenvolvimento local do frontend.
 
-## Primeira execução recomendada
+## Primeira execução principal
 
 Na raiz do projeto:
 
@@ -35,7 +35,7 @@ admin
 admin
 ```
 
-Este comando arranca o core principal sem Grafana. O Grafana é opcional e não bloqueia a aplicação.
+Este comando arranca o core principal SEM Grafana por defeito.
 
 ## URLs principais
 
@@ -48,7 +48,7 @@ Este comando arranca o core principal sem Grafana. O Grafana é opcional e não 
 | Orion-LD | `http://localhost:1026/version` |
 | IoT Agent | `http://localhost:4041/iot/about` |
 | QuantumLeap | `http://localhost:8668/version` |
-| Grafana opcional | `http://localhost:${GRAFANA_PORT:-3010}` |
+| Grafana (opcional) | `http://localhost:33010` (ou `http://localhost:${GRAFANA_PORT}`) |
 
 ## Execuções seguintes
 
@@ -82,31 +82,46 @@ A opção `-v` apaga volumes e recria os dados demo.
 
 ## Grafana opcional
 
-Sem Grafana:
-
-```powershell
-docker compose up -d --build
-```
-
-Com Grafana:
+Para arrancar Grafana:
 
 ```powershell
 docker compose --profile monitoring up -d grafana
 ```
 
-Ou tudo com monitorização:
+Ou toda a stack com monitorização:
 
 ```powershell
 docker compose --profile monitoring up -d
 ```
 
-A porta é configurável no ficheiro `.env`:
+URL por defeito:
 
-```env
-GRAFANA_PORT=3010
+```text
+http://localhost:33010
 ```
 
-Em Windows, algumas portas podem estar bloqueadas ou reservadas. Se o Grafana falhar, altere `GRAFANA_PORT`. A aplicação principal continua válida mesmo sem Grafana.
+Login:
+
+```text
+admin
+admin
+```
+
+Se a porta falhar no Windows, crie/edite `.env` na raiz com outra porta:
+
+```env
+GRAFANA_PORT=33011
+```
+
+Depois correr novamente:
+
+```powershell
+docker compose --profile monitoring up -d grafana
+```
+
+## Portas bloqueadas no Windows
+
+Se surgir erro “ports are not available” ou “forbidden by its access permissions”, a porta está ocupada/reservada pelo Windows, Hyper-V, WSL ou Docker. Troque `GRAFANA_PORT` para outra porta alta, por exemplo 33011, 33012 ou 34010.
 
 ## Desenvolvimento local
 

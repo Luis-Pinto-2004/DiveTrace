@@ -119,9 +119,8 @@ services:
       POSTGRES_DB_PASS: drivetrace
       LOGLEVEL: INFO
 
-  # Grafana is optional. It is isolated behind a Docker profile so it never
-  # blocks the core application on first run. Start it explicitly with:
-  # docker compose --profile monitoring up -d grafana
+  # Grafana is optional to avoid blocking stack startup when Windows has reserved/blocked ports.
+  # Start it explicitly with: docker compose --profile monitoring up -d grafana
   grafana:
     image: grafana/grafana:latest
     hostname: grafana
@@ -131,7 +130,7 @@ services:
     depends_on:
       - db
     ports:
-      - "${GRAFANA_PORT:-3010}:3000"
+      - "${GRAFANA_PORT:-33010}:3000"
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin

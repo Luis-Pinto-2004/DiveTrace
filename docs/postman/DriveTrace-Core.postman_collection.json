@@ -1,0 +1,61 @@
+{
+  "info": {
+    "name": "DriveTrace Core API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Dashboard summary",
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:5181/api/dashboard/summary"
+      }
+    },
+    {
+      "name": "Product units",
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:5181/api/product-units"
+      }
+    },
+    {
+      "name": "Supports",
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:5181/api/supports"
+      }
+    },
+    {
+      "name": "Traceability for DU-001 by id",
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:5181/api/traceability/product-units/1"
+      }
+    },
+    {
+      "name": "Execute playback",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"scenario\":\"door-line-demo\"}" },
+        "url": "http://localhost:5181/api/events/playback"
+      }
+    },
+    {
+      "name": "Manual support movement",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"eventType\": \"MoveSupport\",\n  \"supportCode\": \"SUP-005\",\n  \"sectionCode\": \"SEC-WELD\",\n  \"productUnitCode\": \"DU-005\",\n  \"notes\": \"Manual controlled event from Postman.\"\n}" },
+        "url": "http://localhost:5181/api/events/manual"
+      }
+    },
+    {
+      "name": "Current FIWARE context",
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:5181/api/fiware/context"
+      }
+    }
+  ]
+}

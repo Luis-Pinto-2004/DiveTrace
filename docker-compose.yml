@@ -1,0 +1,145 @@
+services:
+  db:
+    image: timescale/timescaledb:2.17.2-pg17
+    container_name: drivetrace-db
+    ports:
+      - "15432:5432"
+    environment:
+      POSTGRES_DB: drivetrace
+      POSTGRES_USER: drivetrace
+      POSTGRES_PASSWORD: drivetrace
+    volumes:
+      - drivetrace-db:/var/lib/postgresql/data
+      - ./database/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U drivetrace -d drivetrace"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: ./api
+    container_name: drivetrace-api
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "5181:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: Host=db;Port=5432;Database=drivetrace;Username=drivetrace;Password=drivetrace
+      Database__EnsureCreated: "true"
+      Database__SeedDemoData: "true"
+      Fiware__OrionLdBaseUrl: http://orion:1026/ngsi-ld/v1
+      Fiware__ContextUrl: https://uri.drivolution.local/context.jsonld
+
+  dashboard:
+    build:
+      context: ./dashboard
+      args:
+        VITE_API_URL: http://localhost:5181/api
+    container_name: drivetrace-dashboard
+    depends_on:
+      - api
+    ports:
+      - "8088:80"
+
+  mongo-db:
+    image: mongo:4.4
+    hostname: mongo-db
+    container_name: drivetrace-mongo
+    command: --nojournal
+    ports:
+      - "27017:27017"
+    volumes:
+      - drivetrace-mongo:/data/db
+
+  orion:
+    platform: linux/x86_64
+    image: fiware/orion-ld:latest
+    hostname: orion
+    container_name: drivetrace-orion-ld
+    depends_on:
+      - mongo-db
+    ports:
+      - "1026:1026"
+    command: -dbhost mongo-db -logLevel INFO
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail -s http://localhost:1026/version || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  iot-agent:
+    image: quay.io/fiware/iotagent-json:latest
+    hostname: iot-agent
+    container_name: drivetrace-iot-agent
+    depends_on:
+      - mongo-db
+      - orion
+    ports:
+      - "4041:4041"
+      - "7896:7896"
+    environment:
+      IOTA_CB_HOST: orion
+      IOTA_CB_PORT: 1026
+      IOTA_CB_NGSI_VERSION: ld
+      IOTA_NORTH_PORT: 4041
+      IOTA_REGISTRY_TYPE: mongodb
+      IOTA_MONGO_URI: mongodb://mongo-db:27017/iotagentjson
+      IOTA_MONGO_HOST: mongo-db
+      IOTA_MONGO_PORT: "27017"
+      IOTA_MONGO_DB: iotagentjson
+      IOTA_LOG_LEVEL: INFO
+      IOTA_TIMESTAMP: "true"
+      IOTA_AUTOCAST: "true"
+      IOTA_HTTP_PORT: 7896
+      IOTA_PROVIDER_URL: http://iot-agent:4041
+      IOTA_DEFAULT_RESOURCE: /iot/json
+      IOTA_MQTT_DISABLED: "true"
+      IOTA_AMQP_DISABLED: "true"
+      IOTA_JSON_MQTT_DISABLED: "true"
+      IOTA_JSON_AMQP_DISABLED: "true"
+
+  quantumleap:
+    image: fiware/quantum-leap:latest
+    hostname: quantumleap
+    container_name: drivetrace-quantumleap
+    depends_on:
+      - db
+      - orion
+    ports:
+      - "8668:8668"
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB_NAME: drivetrace
+      POSTGRES_DB_USER: drivetrace
+      POSTGRES_DB_PASS: drivetrace
+      LOGLEVEL: INFO
+
+  # Grafana is optional. It is isolated behind a Docker profile so it never
+  # blocks the core application on first run. Start it explicitly with:
+  # docker compose --profile monitoring up -d grafana
+  grafana:
+    image: grafana/grafana:latest
+    hostname: grafana
+    container_name: drivetrace-grafana
+    profiles:
+      - monitoring
+    depends_on:
+      - db
+    ports:
+      - "${GRAFANA_PORT:-3010}:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - drivetrace-grafana:/var/lib/grafana
+
+volumes:
+  drivetrace-db:
+  drivetrace-mongo:
+  drivetrace-grafana:

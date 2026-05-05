@@ -1,0 +1,17 @@
+{
+  "@context": {
+    "Support": "https://uri.drivolution.local/ns/Support",
+    "ProductUnit": "https://uri.drivolution.local/ns/ProductUnit",
+    "Rack": "https://uri.drivolution.local/ns/Rack",
+    "ProductionLineSection": "https://uri.drivolution.local/ns/ProductionLineSection",
+    "supportCode": "https://uri.drivolution.local/ns/supportCode",
+    "unitCode": "https://uri.drivolution.local/ns/unitCode",
+    "rackCode": "https://uri.drivolution.local/ns/rackCode",
+    "unitType": "https://uri.drivolution.local/ns/unitType",
+    "status": "https://uri.drivolution.local/ns/status",
+    "qualityStatus": "https://uri.drivolution.local/ns/qualityStatus",
+    "currentSupport": "https://uri.drivolution.local/ns/currentSupport",
+    "currentSection": "https://uri.drivolution.local/ns/currentSection",
+    "schema": "https://schema.org/"
+  }
+}

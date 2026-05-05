@@ -35,7 +35,7 @@ admin
 admin
 ```
 
-Este comando arranca o core principal sem Grafana. O Grafana é opcional e não bloqueia a aplicação.
+Este comando arranca toda a stack, incluindo Grafana.
 
 ## URLs principais
 
@@ -48,7 +48,7 @@ Este comando arranca o core principal sem Grafana. O Grafana é opcional e não 
 | Orion-LD | `http://localhost:1026/version` |
 | IoT Agent | `http://localhost:4041/iot/about` |
 | QuantumLeap | `http://localhost:8668/version` |
-| Grafana opcional | `http://localhost:${GRAFANA_PORT:-3010}` |
+| Grafana | `http://localhost:3010` (ou `http://localhost:${GRAFANA_PORT}`) |
 
 ## Execuções seguintes
 
@@ -80,33 +80,34 @@ docker compose up -d --build
 
 A opção `-v` apaga volumes e recria os dados demo.
 
-## Grafana opcional
+## Grafana
 
-Sem Grafana:
+O Grafana arranca por defeito com a stack:
 
 ```powershell
 docker compose up -d --build
 ```
 
-Com Grafana:
+Aceder em:
 
-```powershell
-docker compose --profile monitoring up -d grafana
+```text
+http://localhost:3010
 ```
 
-Ou tudo com monitorização:
+Login padrão:
 
-```powershell
-docker compose --profile monitoring up -d
+```text
+admin
+admin
 ```
 
-A porta é configurável no ficheiro `.env`:
+A porta externa é configurável com `GRAFANA_PORT` no ficheiro `.env`:
 
 ```env
 GRAFANA_PORT=3010
 ```
 
-Em Windows, algumas portas podem estar bloqueadas ou reservadas. Se o Grafana falhar, altere `GRAFANA_PORT`. A aplicação principal continua válida mesmo sem Grafana.
+Em Windows, se a porta estiver ocupada, altere apenas `GRAFANA_PORT` no `.env` e volte a executar `docker compose up -d --build`.
 
 ## Desenvolvimento local
 

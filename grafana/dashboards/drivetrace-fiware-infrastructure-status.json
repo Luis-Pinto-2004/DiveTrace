@@ -24,7 +24,8 @@
     {
       "id": 1,
       "type": "stat",
-      "title": "Open manufacturing orders",
+      "title": "Estimated publishable context entities",
+      "description": "Derived from relational entities managed by the FIWARE sync process.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -84,14 +85,15 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT COUNT(*)::bigint AS \"Open manufacturing orders\" FROM \"ManufacturingOrders\" WHERE COALESCE(\"Status\", '') NOT IN ('Completed', 'Closed', 'Cancelled')"
+          "rawSql": "SELECT ((SELECT COUNT(*) FROM \"Supports\") + (SELECT COUNT(*) FROM \"ProductUnits\") + (SELECT COUNT(*) FROM \"Racks\") + (SELECT COUNT(*) FROM \"ProductionLineSections\") + (SELECT COUNT(*) FROM \"Checkpoints\"))::bigint AS value;"
         }
       ]
     },
     {
       "id": 2,
       "type": "stat",
-      "title": "Active product units",
+      "title": "Current supports count",
+      "description": "Current supports in PostgreSQL/TimescaleDB.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -116,11 +118,11 @@
               },
               {
                 "color": "orange",
-                "value": 20
+                "value": 10
               },
               {
                 "color": "red",
-                "value": 60
+                "value": 25
               }
             ]
           }
@@ -151,14 +153,15 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT COUNT(*)::bigint AS \"Active product units\" FROM \"ProductUnits\" WHERE \"Status\" IN ('Active', 'In Progress', 'Rework', 'Blocked')"
+          "rawSql": "SELECT COUNT(*)::bigint AS value FROM \"Supports\";"
         }
       ]
     },
     {
       "id": 3,
       "type": "stat",
-      "title": "Active supports",
+      "title": "Current product units count",
+      "description": "Current product units in PostgreSQL/TimescaleDB.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -187,7 +190,7 @@
               },
               {
                 "color": "red",
-                "value": 30
+                "value": 25
               }
             ]
           }
@@ -218,14 +221,15 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT COUNT(*)::bigint AS \"Active supports\" FROM \"Supports\" WHERE \"Status\" IN ('Loaded', 'Blocked', 'Rework', 'Active')"
+          "rawSql": "SELECT COUNT(*)::bigint AS value FROM \"ProductUnits\";"
         }
       ]
     },
     {
       "id": 4,
       "type": "stat",
-      "title": "Open quality issues",
+      "title": "Current racks count",
+      "description": "Current racks in PostgreSQL/TimescaleDB.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -250,73 +254,6 @@
               },
               {
                 "color": "orange",
-                "value": 5
-              },
-              {
-                "color": "red",
-                "value": 15
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "orientation": "auto",
-        "textMode": "value",
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "postgres",
-            "uid": "drivetrace-timescaledb"
-          },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT COUNT(*)::bigint AS \"Open quality issues\" FROM \"Nonconformities\" WHERE COALESCE(\"Status\", '') IN ('Open', 'In Progress')"
-        }
-      ]
-    },
-    {
-      "id": 5,
-      "type": "stat",
-      "title": "Active rack assignments",
-      "datasource": {
-        "type": "postgres",
-        "uid": "drivetrace-timescaledb"
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 0,
-        "y": 4
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "orange",
                 "value": 10
               },
               {
@@ -352,102 +289,15 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT COUNT(*)::bigint AS \"Active rack assignments\" FROM \"RackSupportAssignments\" WHERE \"DateTimeOut\" IS NULL"
+          "rawSql": "SELECT COUNT(*)::bigint AS value FROM \"Racks\";"
         }
       ]
     },
     {
-      "id": 6,
+      "id": 5,
       "type": "table",
-      "title": "Product units by status",
-      "datasource": {
-        "type": "postgres",
-        "uid": "drivetrace-timescaledb"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 9,
-        "x": 6,
-        "y": 4
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "options": {
-        "showHeader": true,
-        "cellHeight": "sm",
-        "footer": {
-          "show": false,
-          "reducer": [
-            "sum"
-          ],
-          "fields": "",
-          "countRows": false
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "postgres",
-            "uid": "drivetrace-timescaledb"
-          },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT \"Status\" AS status, COUNT(*) AS total FROM \"ProductUnits\" GROUP BY \"Status\" ORDER BY \"Status\";"
-        }
-      ]
-    },
-    {
-      "id": 7,
-      "type": "table",
-      "title": "Supports by status",
-      "datasource": {
-        "type": "postgres",
-        "uid": "drivetrace-timescaledb"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 9,
-        "x": 15,
-        "y": 4
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "options": {
-        "showHeader": true,
-        "cellHeight": "sm",
-        "footer": {
-          "show": false,
-          "reducer": [
-            "sum"
-          ],
-          "fields": "",
-          "countRows": false
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "postgres",
-            "uid": "drivetrace-timescaledb"
-          },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT \"Status\" AS status, COUNT(*) AS total FROM \"Supports\" GROUP BY \"Status\" ORDER BY \"Status\";"
-        }
-      ]
-    },
-    {
-      "id": 8,
-      "type": "table",
-      "title": "WIP by production section",
+      "title": "Context entity candidates by type",
+      "description": "Candidate entity totals by type for FIWARE publish operations.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -456,7 +306,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 12
+        "y": 4
       },
       "fieldConfig": {
         "defaults": {},
@@ -484,14 +334,15 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT pls.\"Name\" AS section, COUNT(pu.\"Id\") AS total FROM \"ProductionLineSections\" pls LEFT JOIN \"ProductUnits\" pu ON pu.\"CurrentSectionId\" = pls.\"Id\" GROUP BY pls.\"Name\", pls.\"Id\" ORDER BY pls.\"Id\";"
+          "rawSql": "SELECT 'Support' AS entity_type, COUNT(*) AS total FROM \"Supports\" UNION ALL SELECT 'ProductUnit' AS entity_type, COUNT(*) AS total FROM \"ProductUnits\" UNION ALL SELECT 'Rack' AS entity_type, COUNT(*) AS total FROM \"Racks\" UNION ALL SELECT 'ProductionLineSection' AS entity_type, COUNT(*) AS total FROM \"ProductionLineSections\" UNION ALL SELECT 'Checkpoint' AS entity_type, COUNT(*) AS total FROM \"Checkpoints\" ORDER BY entity_type;"
         }
       ]
     },
     {
-      "id": 9,
+      "id": 6,
       "type": "table",
-      "title": "Quality results PASS/FAIL",
+      "title": "Recent support movement events",
+      "description": "Latest movement events from relational history.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -500,7 +351,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 12
+        "y": 4
       },
       "fieldConfig": {
         "defaults": {},
@@ -528,58 +379,42 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT \"Result\" AS result, COUNT(*) AS total FROM \"QualityResults\" GROUP BY \"Result\" ORDER BY \"Result\";"
+          "rawSql": "SELECT slh.\"DateTime\", s.\"SupportCode\", pls.\"Name\" AS section, slh.\"EventType\" FROM \"SupportLocalizationHistory\" slh LEFT JOIN \"Supports\" s ON s.\"Id\" = slh.\"SupportId\" LEFT JOIN \"ProductionLineSections\" pls ON pls.\"Id\" = slh.\"SectionId\" ORDER BY slh.\"DateTime\" DESC LIMIT 30;"
         }
       ]
     },
     {
-      "id": 10,
-      "type": "table",
-      "title": "Recent support movements",
+      "id": 7,
+      "type": "text",
+      "title": "Datasource health indication",
+      "description": "Operational note for demo context.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
       },
       "gridPos": {
-        "h": 10,
+        "h": 5,
         "w": 24,
         "x": 0,
-        "y": 20
+        "y": 12
       },
       "fieldConfig": {
         "defaults": {},
         "overrides": []
       },
       "options": {
-        "showHeader": true,
-        "sortBy": [
-          {
-            "displayName": "DateTime",
-            "desc": true
-          }
-        ]
+        "mode": "markdown",
+        "content": "This dashboard intentionally reads from the **DriveTrace TimescaleDB** datasource (`drivetrace-timescaledb`).\n\n- If SQL panels render data, datasource connectivity is healthy.\n- FIWARE connectivity remains validated through API and `scripts/test-fiware.ps1`.\n- No direct Orion-LD datasource is used in Grafana for V1 stability."
       },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "postgres",
-            "uid": "drivetrace-timescaledb"
-          },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT slh.\"DateTime\", s.\"SupportCode\", pls.\"Name\" AS \"Section\", slh.\"EventType\" FROM \"SupportLocalizationHistory\" slh JOIN \"Supports\" s ON s.\"Id\" = slh.\"SupportId\" JOIN \"ProductionLineSections\" pls ON pls.\"Id\" = slh.\"SectionId\" ORDER BY slh.\"DateTime\" DESC LIMIT 20"
-        }
-      ]
+      "targets": []
     }
   ],
   "refresh": "30s",
   "schemaVersion": 39,
   "tags": [
     "drivetrace",
-    "wip",
-    "timescaledb"
+    "fiware",
+    "infrastructure"
   ],
   "templating": {
     "list": []
@@ -590,8 +425,8 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "DriveTrace Core - WIP Overview",
-  "uid": "drivetrace-wip-overview",
+  "title": "DriveTrace Core - FIWARE / Infrastructure Status",
+  "uid": "drivetrace-fiware-infra-status",
   "version": 1,
   "weekStart": ""
 }

@@ -135,6 +135,7 @@ services:
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_PLUGINS_PLUGIN_ADMIN_ENABLED: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
     volumes:
       - drivetrace-grafana:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro

@@ -119,25 +119,26 @@ services:
       POSTGRES_DB_PASS: drivetrace
       LOGLEVEL: INFO
 
-  # Grafana is optional. It is isolated behind a Docker profile so it never
-  # blocks the core application on first run. Start it explicitly with:
-  # docker compose --profile monitoring up -d grafana
   grafana:
     image: grafana/grafana:latest
     hostname: grafana
     container_name: drivetrace-grafana
-    profiles:
-      - monitoring
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     ports:
       - "${GRAFANA_PORT:-33010}:3000"
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
       GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_PLUGINS_PLUGIN_ADMIN_ENABLED: "false"
     volumes:
       - drivetrace-grafana:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
 
 volumes:
   drivetrace-db:

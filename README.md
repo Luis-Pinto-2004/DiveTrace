@@ -32,7 +32,7 @@ Login:
 admin/admin
 ```
 
-Este comando NÃO arranca Grafana. O arranque principal inclui apenas `db`, `mongo-db`, `orion`, `iot-agent`, `quantumleap`, `api` e `dashboard`.
+Este comando arranca a stack principal completa, incluindo `db`, `mongo-db`, `orion`, `iot-agent`, `quantumleap`, `api`, `dashboard` e `grafana`.
 
 ## URLs principais
 
@@ -42,7 +42,7 @@ Este comando NÃO arranca Grafana. O arranque principal inclui apenas `db`, `mon
 - Orion-LD: http://localhost:1026/version
 - IoT Agent: http://localhost:4041/iot/about
 - QuantumLeap: http://localhost:8668/version
-- Grafana opcional: http://localhost:33010
+- Grafana: http://localhost:${GRAFANA_PORT:-33010}
 
 ## Guia FIWARE
 
@@ -80,43 +80,40 @@ docker compose up -d --build
 
 A opção `-v` apaga volumes e recria os dados demo. Use isto se ainda existirem dados antigos nos volumes Docker.
 
-## Grafana opcional
-
-```powershell
-docker compose --profile monitoring up -d grafana
-```
+## Grafana Monitoring
 
 URL:
 
 ```text
-http://localhost:33010
+http://localhost:${GRAFANA_PORT:-33010}
 ```
 
-Login:
+Credenciais:
 
 ```text
 admin/admin
 ```
 
-Também pode arrancar a stack com monitorização:
+O Grafana é provisionado automaticamente no arranque:
 
-```powershell
-docker compose --profile monitoring up -d
-```
+- datasource PostgreSQL/TimescaleDB: `DriveTrace TimescaleDB`
+- dashboard inicial: `DriveTrace Core - WIP Overview`
 
-Se a porta falhar, crie um `.env` na raiz:
+Se existir conflito de porta no Windows, crie ou edite `.env` na raiz:
 
 ```env
-GRAFANA_PORT=33011
+GRAFANA_PORT=33010
 ```
 
-Depois:
+Pode usar outra porta livre, por exemplo `33011`, `33012` ou `34010`.
+
+Comandos de validação:
 
 ```powershell
-docker compose --profile monitoring up -d grafana
+docker compose up -d --build
+docker compose ps
+docker compose logs --tail=100 grafana
 ```
-
-Em Windows, “ports are not available” ou “forbidden by its access permissions” significa porta ocupada ou reservada. Troque para uma porta alta, por exemplo `33011`, `33012` ou `34010`.
 
 ## Desenvolvimento local
 
@@ -168,6 +165,6 @@ docker compose up -d --build
 
 - Auth local/demo no frontend
 - API ainda não protegida por JWT
-- Grafana opcional via profile `monitoring`
+- Grafana local provisionado para demonstração académica
 - FIWARE opcional para demonstração
 - Previsões demonstrativas, sem IA real nesta V1

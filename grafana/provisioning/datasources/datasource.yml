@@ -1,0 +1,18 @@
+apiVersion: 1
+
+datasources:
+  - name: DriveTrace TimescaleDB
+    uid: drivetrace-timescaledb
+    type: postgres
+    access: proxy
+    url: db:5432
+    user: drivetrace
+    isDefault: true
+    editable: false
+    secureJsonData:
+      password: drivetrace
+    jsonData:
+      database: drivetrace
+      sslmode: disable
+      postgresVersion: 1500
+      timescaledb: true

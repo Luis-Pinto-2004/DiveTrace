@@ -29,7 +29,10 @@ builder.Services.AddDbContext<DriveTraceDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddScoped<DemoEventService>();
-builder.Services.AddHttpClient<IFiwareContextService, FiwareContextService>();
+builder.Services.AddHttpClient<IFiwareContextService, FiwareContextService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(12);
+});
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {

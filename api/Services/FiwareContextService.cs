@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -8,105 +9,558 @@ namespace DriveTraceCore.Api.Services;
 
 public interface IFiwareContextService
 {
-    Task<IReadOnlyList<object>> BuildCurrentContextAsync();
-    Task<object> PublishCurrentContextAsync();
+    Task<FiwareContextResponse> GetContextAsync(CancellationToken cancellationToken = default);
+    Task<FiwarePublishResponse> PublishCurrentContextAsync(CancellationToken cancellationToken = default);
+}
+
+public sealed class FiwareEntityItem
+{
+    public string Id { get; init; } = string.Empty;
+    public string Type { get; init; } = string.Empty;
+    public IReadOnlyDictionary<string, object?> Attributes { get; init; } = new Dictionary<string, object?>();
+}
+
+public sealed class FiwareContextResponse
+{
+    public DateTime Timestamp { get; init; } = DateTime.UtcNow;
+    public bool BrokerReachable { get; init; }
+    public string Source { get; init; } = "relational-fallback";
+    public string Message { get; init; } = string.Empty;
+    public int EntityCount { get; init; }
+    public int RelationalSnapshotCount { get; init; }
+    public string OrionLdBaseUrl { get; init; } = string.Empty;
+    public IReadOnlyList<FiwareEntityItem> Entities { get; init; } = Array.Empty<FiwareEntityItem>();
+    public IReadOnlyList<string> Errors { get; init; } = Array.Empty<string>();
+}
+
+public sealed class FiwarePublishResponse
+{
+    public DateTime Timestamp { get; init; } = DateTime.UtcNow;
+    public bool BrokerReachable { get; init; }
+    public string Message { get; init; } = string.Empty;
+    public int AttemptedCount { get; init; }
+    public int PublishedCount { get; init; }
+    public int FailedCount { get; init; }
+    public int StaleDeletedCount { get; init; }
+    public string OrionLdBaseUrl { get; init; } = string.Empty;
+    public IReadOnlyList<string> EntityIds { get; init; } = Array.Empty<string>();
+    public IReadOnlyList<string> StaleEntityIds { get; init; } = Array.Empty<string>();
+    public IReadOnlyList<string> Errors { get; init; } = Array.Empty<string>();
 }
 
 public sealed class FiwareContextService : IFiwareContextService
 {
+    private const string DefaultOrionLdBaseUrl = "http://localhost:1026/ngsi-ld/v1";
+    private const string NgsiLdCoreContext = "https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context-v1.8.jsonld";
+    private static readonly string[] ManagedEntityIdPatterns =
+    [
+        "urn:ngsi-ld:Support:.*",
+        "urn:ngsi-ld:ProductUnit:.*",
+        "urn:ngsi-ld:Rack:.*",
+        "urn:ngsi-ld:ProductionLineSection:.*",
+        "urn:ngsi-ld:Checkpoint:.*"
+    ];
+
+    private static readonly IReadOnlyDictionary<string, string> EmbeddedDomainContext = new Dictionary<string, string>
+    {
+        ["Support"] = "https://uri.drivolution.local/ns/Support",
+        ["ProductUnit"] = "https://uri.drivolution.local/ns/ProductUnit",
+        ["Rack"] = "https://uri.drivolution.local/ns/Rack",
+        ["ProductionLineSection"] = "https://uri.drivolution.local/ns/ProductionLineSection",
+        ["Checkpoint"] = "https://uri.drivolution.local/ns/Checkpoint",
+        ["supportCode"] = "https://uri.drivolution.local/ns/supportCode",
+        ["unitCode"] = "https://uri.drivolution.local/ns/unitCode",
+        ["rackCode"] = "https://uri.drivolution.local/ns/rackCode",
+        ["checkpointCode"] = "https://uri.drivolution.local/ns/checkpointCode",
+        ["unitType"] = "https://uri.drivolution.local/ns/unitType",
+        ["status"] = "https://uri.drivolution.local/ns/status",
+        ["qualityStatus"] = "https://uri.drivolution.local/ns/qualityStatus",
+        ["currentSupport"] = "https://uri.drivolution.local/ns/currentSupport",
+        ["currentSection"] = "https://uri.drivolution.local/ns/currentSection",
+        ["sectionCode"] = "https://uri.drivolution.local/ns/sectionCode",
+        ["sectionType"] = "https://uri.drivolution.local/ns/sectionType",
+        ["lineId"] = "https://uri.drivolution.local/ns/lineId",
+        ["name"] = "https://uri.drivolution.local/ns/name"
+    };
+
     private readonly DriveTraceDbContext _db;
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
+    private readonly ILogger<FiwareContextService> _logger;
 
-    public FiwareContextService(DriveTraceDbContext db, HttpClient httpClient, IConfiguration configuration)
+    public FiwareContextService(
+        DriveTraceDbContext db,
+        HttpClient httpClient,
+        IConfiguration configuration,
+        ILogger<FiwareContextService> logger)
     {
         _db = db;
         _httpClient = httpClient;
         _configuration = configuration;
+        _logger = logger;
     }
 
-    public async Task<IReadOnlyList<object>> BuildCurrentContextAsync()
+    public async Task<FiwareContextResponse> GetContextAsync(CancellationToken cancellationToken = default)
     {
-        var contextUrl = _configuration["Fiware:ContextUrl"] ?? "https://uri.drivolution.local/context.jsonld";
-        var supports = await _db.Supports.AsNoTracking().ToListAsync();
-        var units = await _db.ProductUnits.AsNoTracking().ToListAsync();
-        var sections = await _db.ProductionLineSections.AsNoTracking().ToListAsync();
-        var racks = await _db.Racks.AsNoTracking().ToListAsync();
+        var baseUrl = OrionLdBaseUrl();
+        var localEntities = await BuildCurrentContextEntitiesAsync(cancellationToken);
+        var localSummaries = localEntities.Select(ToEntityItem).ToList();
 
-        var supportEntities = supports.Select(s => new
+        var brokerErrors = new List<string>();
+        var brokerEntities = await ReadBrokerEntitiesAsync(baseUrl, brokerErrors, cancellationToken);
+
+        if (brokerEntities is not null)
         {
-            id = $"urn:ngsi-ld:Support:{s.SupportCode}",
-            type = "Support",
-            supportCode = new { type = "Property", value = s.SupportCode },
-            status = new { type = "Property", value = s.Status },
-            currentSection = new { type = "Relationship", @object = SectionUrn(sections.FirstOrDefault(x => x.Id == s.CurrentSectionId)?.SectionCode) },
-            atContext = contextUrl
-        });
+            var message = brokerEntities.Count == 0
+                ? "Orion-LD is reachable but no FIWARE entities are currently published."
+                : $"Retrieved {brokerEntities.Count} FIWARE entities from Orion-LD.";
 
-        var unitEntities = units.Select(u => new
+            return new FiwareContextResponse
+            {
+                Timestamp = DateTime.UtcNow,
+                BrokerReachable = true,
+                Source = "orion-ld",
+                Message = message,
+                EntityCount = brokerEntities.Count,
+                RelationalSnapshotCount = localSummaries.Count,
+                OrionLdBaseUrl = baseUrl,
+                Entities = brokerEntities,
+                Errors = brokerErrors
+            };
+        }
+
+        _logger.LogWarning("Falling back to relational FIWARE snapshot because Orion-LD is unavailable. Errors: {Errors}", string.Join(" | ", brokerErrors));
+
+        return new FiwareContextResponse
         {
-            id = $"urn:ngsi-ld:ProductUnit:{u.UnitCode}",
-            type = "ProductUnit",
-            unitCode = new { type = "Property", value = u.UnitCode },
-            unitType = new { type = "Property", value = u.UnitType },
-            status = new { type = "Property", value = u.Status },
-            qualityStatus = new { type = "Property", value = u.QualityStatus },
-            currentSupport = new { type = "Relationship", @object = SupportUrn(supports.FirstOrDefault(x => x.Id == u.CurrentSupportId)?.SupportCode) },
-            atContext = contextUrl
-        });
-
-        var rackEntities = racks.Select(r => new
-        {
-            id = $"urn:ngsi-ld:Rack:{r.RackCode}",
-            type = "Rack",
-            rackCode = new { type = "Property", value = r.RackCode },
-            status = new { type = "Property", value = r.Status },
-            atContext = contextUrl
-        });
-
-        return supportEntities.Cast<object>().Concat(unitEntities).Concat(rackEntities).ToList();
+            Timestamp = DateTime.UtcNow,
+            BrokerReachable = false,
+            Source = "relational-fallback",
+            Message = "Orion-LD is unavailable. Returning relational snapshot so the dashboard remains usable.",
+            EntityCount = localSummaries.Count,
+            RelationalSnapshotCount = localSummaries.Count,
+            OrionLdBaseUrl = baseUrl,
+            Entities = localSummaries,
+            Errors = brokerErrors
+        };
     }
 
-    public async Task<object> PublishCurrentContextAsync()
+    public async Task<FiwarePublishResponse> PublishCurrentContextAsync(CancellationToken cancellationToken = default)
     {
-        var baseUrl = _configuration["Fiware:OrionLdBaseUrl"] ?? "http://localhost:1026/ngsi-ld/v1";
-        var entities = await BuildCurrentContextAsync();
-        var results = new List<object>();
+        var baseUrl = OrionLdBaseUrl();
+        var entities = await BuildCurrentContextEntitiesAsync(cancellationToken);
+        var entityIds = entities.Select(ExtractEntityId).Where(id => !string.IsNullOrWhiteSpace(id)).Cast<string>().ToList();
+        var entityIdSet = entityIds.ToHashSet(StringComparer.Ordinal);
+        var errors = new List<string>();
+        var staleEntityIds = new List<string>();
+        var staleDeletedCount = 0;
 
-        foreach (var entity in entities)
+        var brokerEntitiesBeforePublish = await ReadBrokerEntitiesAsync(baseUrl, errors, cancellationToken);
+        var staleCandidates = brokerEntitiesBeforePublish?
+            .Select(item => item.Id)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal)
+            .Where(id => !entityIdSet.Contains(id))
+            .ToList() ?? new List<string>();
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/entityOperations/upsert");
+        request.Content = new StringContent(JsonSerializer.Serialize(entities), Encoding.UTF8, "application/ld+json");
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+        HttpResponseMessage? response = null;
+        try
         {
-            var json = JsonSerializer.Serialize(entity).Replace("\"atContext\"", "\"@context\"");
-            using var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl.TrimEnd('/')}/entities");
-            request.Content = new StringContent(json, Encoding.UTF8, "application/ld+json");
-            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/ld+json"));
+            response = await _httpClient.SendAsync(request, cancellationToken);
+            if (response.IsSuccessStatusCode)
+            {
+                staleDeletedCount = await DeleteStaleEntitiesAsync(baseUrl, staleCandidates, staleEntityIds, errors, cancellationToken);
+                _logger.LogInformation(
+                    "FIWARE publish succeeded. Status={StatusCode}, Count={Count}, StaleDeleted={StaleDeleted}",
+                    (int)response.StatusCode,
+                    entityIds.Count,
+                    staleDeletedCount);
 
+                var summaryMessage = staleDeletedCount > 0
+                    ? $"Published {entityIds.Count} entities to Orion-LD and removed {staleDeletedCount} stale entities."
+                    : $"Published {entityIds.Count} entities to Orion-LD.";
+
+                return new FiwarePublishResponse
+                {
+                    Timestamp = DateTime.UtcNow,
+                    BrokerReachable = true,
+                    Message = summaryMessage,
+                    AttemptedCount = entityIds.Count,
+                    PublishedCount = entityIds.Count,
+                    FailedCount = 0,
+                    StaleDeletedCount = staleDeletedCount,
+                    OrionLdBaseUrl = baseUrl,
+                    EntityIds = entityIds,
+                    StaleEntityIds = staleEntityIds,
+                    Errors = errors
+                };
+            }
+
+            var body = await SafeReadBodyAsync(response);
+            var error = $"Orion-LD returned HTTP {(int)response.StatusCode} during publish." + (string.IsNullOrWhiteSpace(body) ? string.Empty : $" Body: {body}");
+            errors.Add(error);
+            _logger.LogWarning("FIWARE publish failed. {Error}", error);
+
+            return new FiwarePublishResponse
+            {
+                Timestamp = DateTime.UtcNow,
+                BrokerReachable = response.StatusCode != HttpStatusCode.ServiceUnavailable,
+                Message = "Unable to publish context to Orion-LD. The relational mode remains available.",
+                AttemptedCount = entityIds.Count,
+                PublishedCount = 0,
+                FailedCount = entityIds.Count,
+                StaleDeletedCount = staleDeletedCount,
+                OrionLdBaseUrl = baseUrl,
+                EntityIds = Array.Empty<string>(),
+                StaleEntityIds = staleEntityIds,
+                Errors = errors
+            };
+        }
+        catch (Exception ex)
+        {
+            var error = $"Could not reach Orion-LD publish endpoint: {ex.Message}";
+            errors.Add(error);
+            _logger.LogWarning(ex, "FIWARE publish endpoint is unreachable.");
+
+            return new FiwarePublishResponse
+            {
+                Timestamp = DateTime.UtcNow,
+                BrokerReachable = false,
+                Message = "Could not reach Orion-LD publish endpoint. The relational mode remains available.",
+                AttemptedCount = entityIds.Count,
+                PublishedCount = 0,
+                FailedCount = entityIds.Count,
+                StaleDeletedCount = staleDeletedCount,
+                OrionLdBaseUrl = baseUrl,
+                EntityIds = Array.Empty<string>(),
+                StaleEntityIds = staleEntityIds,
+                Errors = errors
+            };
+        }
+    }
+
+    private async Task<List<FiwareEntityItem>?> ReadBrokerEntitiesAsync(
+        string baseUrl,
+        List<string> errors,
+        CancellationToken cancellationToken)
+    {
+        var output = new List<FiwareEntityItem>();
+
+        foreach (var pattern in ManagedEntityIdPatterns)
+        {
+            var requestUri = $"{baseUrl}/entities?idPattern={Uri.EscapeDataString(pattern)}&options=keyValues&limit=500";
+            using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+            HttpResponseMessage response;
             try
             {
-                var response = await _httpClient.SendAsync(request);
-                results.Add(new { entity = TryExtractId(json), statusCode = (int)response.StatusCode, response.IsSuccessStatusCode });
+                response = await _httpClient.SendAsync(request, cancellationToken);
             }
             catch (Exception ex)
             {
-                results.Add(new { entity = TryExtractId(json), statusCode = 0, isSuccessStatusCode = false, error = ex.Message });
+                errors.Add($"Failed to read Orion-LD entities for pattern '{pattern}': {ex.Message}");
+                return null;
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await SafeReadBodyAsync(response);
+                errors.Add($"Orion-LD HTTP {(int)response.StatusCode} for pattern '{pattern}'." + (string.IsNullOrWhiteSpace(body) ? string.Empty : $" Body: {body}"));
+                return null;
+            }
+
+            var json = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (string.IsNullOrWhiteSpace(json)) continue;
+
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.ValueKind != JsonValueKind.Array) continue;
+                foreach (var entry in doc.RootElement.EnumerateArray())
+                {
+                    output.Add(ToEntityItem(entry));
+                }
+            }
+            catch (Exception ex)
+            {
+                errors.Add($"Invalid JSON from Orion-LD for pattern '{pattern}': {ex.Message}");
+                return null;
             }
         }
 
-        return new { publishedAt = DateTime.UtcNow, count = entities.Count, results };
+        return output;
     }
 
-    private static string? TryExtractId(string json)
+    private async Task<int> DeleteStaleEntitiesAsync(
+        string baseUrl,
+        IReadOnlyList<string> staleCandidates,
+        List<string> deletedStaleEntityIds,
+        List<string> errors,
+        CancellationToken cancellationToken)
+    {
+        if (staleCandidates.Count == 0) return 0;
+
+        var deletedCount = 0;
+        foreach (var staleId in staleCandidates)
+        {
+            var encodedId = Uri.EscapeDataString(staleId);
+            using var request = new HttpRequestMessage(HttpMethod.Delete, $"{baseUrl}/entities/{encodedId}");
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+            HttpResponseMessage response;
+            try
+            {
+                response = await _httpClient.SendAsync(request, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                errors.Add($"Failed to delete stale entity '{staleId}': {ex.Message}");
+                continue;
+            }
+
+            if (response.IsSuccessStatusCode || response.StatusCode == HttpStatusCode.NotFound)
+            {
+                deletedCount++;
+                deletedStaleEntityIds.Add(staleId);
+                continue;
+            }
+
+            var body = await SafeReadBodyAsync(response);
+            errors.Add(
+                $"Orion-LD HTTP {(int)response.StatusCode} while deleting stale entity '{staleId}'."
+                + (string.IsNullOrWhiteSpace(body) ? string.Empty : $" Body: {body}"));
+        }
+
+        return deletedCount;
+    }
+
+    private async Task<List<Dictionary<string, object?>>> BuildCurrentContextEntitiesAsync(CancellationToken cancellationToken)
+    {
+        var supports = await _db.Supports.AsNoTracking().ToListAsync(cancellationToken);
+        var units = await _db.ProductUnits.AsNoTracking().ToListAsync(cancellationToken);
+        var sections = await _db.ProductionLineSections.AsNoTracking().ToListAsync(cancellationToken);
+        var checkpoints = await _db.Checkpoints.AsNoTracking().ToListAsync(cancellationToken);
+        var racks = await _db.Racks.AsNoTracking().ToListAsync(cancellationToken);
+
+        var sectionsById = sections.ToDictionary(item => item.Id);
+        var supportsById = supports.ToDictionary(item => item.Id);
+        var entities = new List<Dictionary<string, object?>>();
+
+        foreach (var section in sections)
+        {
+            if (string.IsNullOrWhiteSpace(section.SectionCode)) continue;
+            var entity = CreateEntity($"urn:ngsi-ld:ProductionLineSection:{section.SectionCode}", "ProductionLineSection");
+            AddProperty(entity, "sectionCode", section.SectionCode);
+            AddProperty(entity, "name", section.Name);
+            AddProperty(entity, "sectionType", section.SectionType);
+            if (section.LineId.HasValue) AddProperty(entity, "lineId", section.LineId.Value);
+            entities.Add(entity);
+        }
+
+        foreach (var support in supports)
+        {
+            if (string.IsNullOrWhiteSpace(support.SupportCode)) continue;
+            var entity = CreateEntity($"urn:ngsi-ld:Support:{support.SupportCode}", "Support");
+            AddProperty(entity, "supportCode", support.SupportCode);
+            AddProperty(entity, "status", support.Status);
+            AddRelationship(entity, "currentSection", SectionUrn(sectionsById, support.CurrentSectionId));
+            entities.Add(entity);
+        }
+
+        foreach (var unit in units)
+        {
+            if (string.IsNullOrWhiteSpace(unit.UnitCode)) continue;
+            var entity = CreateEntity($"urn:ngsi-ld:ProductUnit:{unit.UnitCode}", "ProductUnit");
+            AddProperty(entity, "unitCode", unit.UnitCode);
+            AddProperty(entity, "unitType", unit.UnitType);
+            AddProperty(entity, "status", unit.Status);
+            AddProperty(entity, "qualityStatus", unit.QualityStatus);
+            AddRelationship(entity, "currentSupport", SupportUrn(supportsById, unit.CurrentSupportId));
+            AddRelationship(entity, "currentSection", SectionUrn(sectionsById, unit.CurrentSectionId));
+            entities.Add(entity);
+        }
+
+        foreach (var rack in racks)
+        {
+            if (string.IsNullOrWhiteSpace(rack.RackCode)) continue;
+            var entity = CreateEntity($"urn:ngsi-ld:Rack:{rack.RackCode}", "Rack");
+            AddProperty(entity, "rackCode", rack.RackCode);
+            AddProperty(entity, "status", rack.Status);
+            AddRelationship(entity, "currentSection", SectionUrn(sectionsById, rack.SectionId));
+            entities.Add(entity);
+        }
+
+        foreach (var checkpoint in checkpoints)
+        {
+            if (string.IsNullOrWhiteSpace(checkpoint.CheckpointCode)) continue;
+            var entity = CreateEntity($"urn:ngsi-ld:Checkpoint:{checkpoint.CheckpointCode}", "Checkpoint");
+            AddProperty(entity, "checkpointCode", checkpoint.CheckpointCode);
+            AddProperty(entity, "name", checkpoint.Name);
+            AddProperty(entity, "status", checkpoint.Status);
+            AddRelationship(entity, "currentSection", SectionUrn(sectionsById, checkpoint.SectionId));
+            entities.Add(entity);
+        }
+
+        return entities;
+    }
+
+    private static FiwareEntityItem ToEntityItem(Dictionary<string, object?> entity)
+    {
+        var attributes = new Dictionary<string, object?>();
+        foreach (var pair in entity)
+        {
+            if (pair.Key is "id" or "type" or "@context") continue;
+            attributes[pair.Key] = NormalizeAttributeValue(pair.Value);
+        }
+
+        return new FiwareEntityItem
+        {
+            Id = Convert.ToString(entity.GetValueOrDefault("id")) ?? string.Empty,
+            Type = NormalizeToken(Convert.ToString(entity.GetValueOrDefault("type")) ?? string.Empty),
+            Attributes = attributes
+        };
+    }
+
+    private static FiwareEntityItem ToEntityItem(JsonElement entry)
+    {
+        var id = entry.TryGetProperty("id", out var idProp) ? idProp.GetString() ?? string.Empty : string.Empty;
+        var typeRaw = entry.TryGetProperty("type", out var typeProp) ? typeProp.GetString() ?? string.Empty : string.Empty;
+        var attributes = new Dictionary<string, object?>();
+
+        foreach (var prop in entry.EnumerateObject())
+        {
+            if (prop.Name is "id" or "type" or "@context") continue;
+            attributes[NormalizeToken(prop.Name)] = NormalizeJsonValue(prop.Value);
+        }
+
+        return new FiwareEntityItem
+        {
+            Id = id,
+            Type = NormalizeToken(typeRaw),
+            Attributes = attributes
+        };
+    }
+
+    private Dictionary<string, object?> CreateEntity(string id, string type)
+    {
+        return new Dictionary<string, object?>
+        {
+            ["id"] = id,
+            ["type"] = type,
+            ["@context"] = EmbeddedContext()
+        };
+    }
+
+    private static void AddProperty(Dictionary<string, object?> entity, string key, object? value)
+    {
+        if (value is null) return;
+        if (value is string text && string.IsNullOrWhiteSpace(text)) return;
+        entity[key] = new Dictionary<string, object?>
+        {
+            ["type"] = "Property",
+            ["value"] = value
+        };
+    }
+
+    private static void AddRelationship(Dictionary<string, object?> entity, string key, string? referenceUrn)
+    {
+        if (string.IsNullOrWhiteSpace(referenceUrn)) return;
+        entity[key] = new Dictionary<string, object?>
+        {
+            ["type"] = "Relationship",
+            ["object"] = referenceUrn
+        };
+    }
+
+    private static string? SupportUrn(IReadOnlyDictionary<int, DriveTraceCore.Api.Models.Support> supportsById, int? supportId)
+    {
+        if (!supportId.HasValue) return null;
+        return supportsById.TryGetValue(supportId.Value, out var support) && !string.IsNullOrWhiteSpace(support.SupportCode)
+            ? $"urn:ngsi-ld:Support:{support.SupportCode}"
+            : null;
+    }
+
+    private static string? SectionUrn(IReadOnlyDictionary<int, DriveTraceCore.Api.Models.ProductionLineSection> sectionsById, int? sectionId)
+    {
+        if (!sectionId.HasValue) return null;
+        return sectionsById.TryGetValue(sectionId.Value, out var section) && !string.IsNullOrWhiteSpace(section.SectionCode)
+            ? $"urn:ngsi-ld:ProductionLineSection:{section.SectionCode}"
+            : null;
+    }
+
+    private static object[] EmbeddedContext()
+    {
+        return
+        [
+            NgsiLdCoreContext,
+            EmbeddedDomainContext
+        ];
+    }
+
+    private string OrionLdBaseUrl()
+    {
+        return (_configuration["Fiware:OrionLdBaseUrl"] ?? DefaultOrionLdBaseUrl).TrimEnd('/');
+    }
+
+    private static string NormalizeToken(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+        var hashIndex = value.LastIndexOf('#');
+        if (hashIndex >= 0 && hashIndex + 1 < value.Length) return value[(hashIndex + 1)..];
+        var slashIndex = value.LastIndexOf('/');
+        if (slashIndex >= 0 && slashIndex + 1 < value.Length) return value[(slashIndex + 1)..];
+        return value;
+    }
+
+    private static object? NormalizeAttributeValue(object? value)
+    {
+        if (value is not Dictionary<string, object?> map) return value;
+        if (map.TryGetValue("value", out var propertyValue)) return propertyValue;
+        if (map.TryGetValue("object", out var relationshipValue)) return relationshipValue;
+        return map;
+    }
+
+    private static object? NormalizeJsonValue(JsonElement value)
+    {
+        return value.ValueKind switch
+        {
+            JsonValueKind.Null => null,
+            JsonValueKind.String => value.GetString(),
+            JsonValueKind.Number => value.TryGetInt64(out var longValue) ? longValue : value.GetDouble(),
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.Object => NormalizeJsonObject(value),
+            JsonValueKind.Array => JsonSerializer.Deserialize<List<object?>>(value.GetRawText()),
+            _ => value.GetRawText()
+        };
+    }
+
+    private static object? NormalizeJsonObject(JsonElement value)
+    {
+        if (value.TryGetProperty("value", out var propertyValue)) return NormalizeJsonValue(propertyValue);
+        if (value.TryGetProperty("object", out var relationshipValue)) return NormalizeJsonValue(relationshipValue);
+        return JsonSerializer.Deserialize<Dictionary<string, object?>>(value.GetRawText());
+    }
+
+    private static string? ExtractEntityId(Dictionary<string, object?> entity)
+    {
+        return entity.TryGetValue("id", out var value) ? Convert.ToString(value) : null;
+    }
+
+    private static async Task<string> SafeReadBodyAsync(HttpResponseMessage response)
     {
         try
         {
-            using var doc = JsonDocument.Parse(json);
-            return doc.RootElement.GetProperty("id").GetString();
+            return await response.Content.ReadAsStringAsync();
         }
         catch
         {
-            return null;
+            return string.Empty;
         }
     }
-
-    private static string? SupportUrn(string? supportCode) => string.IsNullOrWhiteSpace(supportCode) ? null : $"urn:ngsi-ld:Support:{supportCode}";
-    private static string? SectionUrn(string? sectionCode) => string.IsNullOrWhiteSpace(sectionCode) ? null : $"urn:ngsi-ld:ProductionLineSection:{sectionCode}";
 }

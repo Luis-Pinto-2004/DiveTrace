@@ -1,20 +1,18 @@
 # DriveTrace Core
 DRIVOLUTION WP3 — WIP Traceability and Monitoring Platform
 
-DriveTrace Core é uma plataforma académica para rastreabilidade e monitorização do Work-in-Progress (WIP) em contexto automóvel. A V1 centra-se em `ProductUnit`, no `Support` como âncora física intra-linha, na `Rack` como logística pós-linha, em FIWARE/Orion-LD como contexto atual, numa API ASP.NET Core e numa dashboard Vue 3.
+DriveTrace Core é uma plataforma académica para rastreabilidade e monitorização WIP em contexto automóvel. A unidade rastreável é a `ProductUnit`, o `Support` é a âncora física intra-linha e a `Rack` representa logística pós-linha. A stack combina FIWARE/Orion-LD, ASP.NET Core/.NET 8 API, PostgreSQL/TimescaleDB, MongoDB, QuantumLeap e uma dashboard Vue 3.
 
 ## Requisitos
 
-- Windows 10/11.
-- Docker Desktop.
-- PowerShell.
-- VS Code recomendado.
-- .NET 8 SDK apenas para desenvolvimento local da API.
-- Node.js 20+ ou 22+ apenas para desenvolvimento local do frontend.
+- Windows 10/11
+- Docker Desktop
+- .NET 8 SDK, apenas para desenvolvimento local
+- Node.js 20+ ou 22+, apenas para desenvolvimento local
+- PowerShell
+- VS Code recomendado
 
-## Primeira execução recomendada
-
-Na raiz do projeto:
+## Primeira execução principal
 
 ```powershell
 docker compose config
@@ -31,24 +29,26 @@ http://localhost:8088
 Login:
 
 ```text
-admin
-admin
+admin/admin
 ```
 
-Este comando arranca o core principal sem Grafana. O Grafana é opcional e não bloqueia a aplicação.
+Este comando NÃO arranca Grafana. O arranque principal inclui apenas `db`, `mongo-db`, `orion`, `iot-agent`, `quantumleap`, `api` e `dashboard`.
 
 ## URLs principais
 
-| Serviço | URL |
-|---|---|
-| Dashboard Docker | `http://localhost:8088` |
-| Dashboard dev | `http://localhost:5173` |
-| Swagger | `http://localhost:5181/swagger` |
-| Dashboard summary | `http://localhost:5181/api/dashboard/summary` |
-| Orion-LD | `http://localhost:1026/version` |
-| IoT Agent | `http://localhost:4041/iot/about` |
-| QuantumLeap | `http://localhost:8668/version` |
-| Grafana opcional | `http://localhost:${GRAFANA_PORT:-3010}` |
+- Dashboard: http://localhost:8088
+- Swagger: http://localhost:5181/swagger
+- Dashboard summary: http://localhost:5181/api/dashboard/summary
+- Orion-LD: http://localhost:1026/version
+- IoT Agent: http://localhost:4041/iot/about
+- QuantumLeap: http://localhost:8668/version
+- Grafana opcional: http://localhost:33010
+
+## Guia FIWARE
+
+Para testes detalhados, troubleshooting e validação ponta-a-ponta da integração FIWARE, consultar:
+
+- `docs/FIWARE_TESTING.md`
 
 ## Execuções seguintes
 
@@ -63,52 +63,73 @@ docker compose ps
 docker compose stop
 ```
 
-Ou:
+ou:
 
 ```powershell
 docker compose down
 ```
 
-Estes comandos mantêm os volumes Docker.
+Ambos mantêm os volumes Docker.
 
-## Recomeçar do zero
+## Recriar dados do zero
 
 ```powershell
 docker compose down -v
 docker compose up -d --build
 ```
 
-A opção `-v` apaga volumes e recria os dados demo.
+A opção `-v` apaga volumes e recria os dados demo. Use isto se ainda existirem dados antigos nos volumes Docker.
 
 ## Grafana opcional
-
-Sem Grafana:
-
-```powershell
-docker compose up -d --build
-```
-
-Com Grafana:
 
 ```powershell
 docker compose --profile monitoring up -d grafana
 ```
 
-Ou tudo com monitorização:
+URL:
+
+```text
+http://localhost:33010
+```
+
+Login:
+
+```text
+admin/admin
+```
+
+Também pode arrancar a stack com monitorização:
 
 ```powershell
 docker compose --profile monitoring up -d
 ```
 
-A porta é configurável no ficheiro `.env`:
+Se a porta falhar, crie um `.env` na raiz:
 
 ```env
-GRAFANA_PORT=3010
+GRAFANA_PORT=33011
 ```
 
-Em Windows, algumas portas podem estar bloqueadas ou reservadas. Se o Grafana falhar, altere `GRAFANA_PORT`. A aplicação principal continua válida mesmo sem Grafana.
+Depois:
+
+```powershell
+docker compose --profile monitoring up -d grafana
+```
+
+Em Windows, “ports are not available” ou “forbidden by its access permissions” significa porta ocupada ou reservada. Troque para uma porta alta, por exemplo `33011`, `33012` ou `34010`.
 
 ## Desenvolvimento local
+
+API:
+
+```powershell
+docker compose up -d db
+cd api
+dotnet restore
+dotnet run
+```
+
+A API local exige a base de dados ativa em `127.0.0.1:15432`.
 
 Frontend:
 
@@ -118,45 +139,25 @@ npm install
 npm run dev
 ```
 
-API local:
+## Operações CRUD na interface
 
-```powershell
-docker compose up -d db
-cd api
-dotnet restore
-dotnet run
-```
+O admin pode gerir pela dashboard ordens de fabrico, unidades de produto, suportes, materiais e lotes, qualidade, racks, previsões e parâmetros do sistema. As operações de eliminação têm confirmação na interface e podem ser recusadas pela API quando existirem associações históricas ou regras de chave estrangeira.
 
-A API local precisa da base de dados ativa em `127.0.0.1:15432`.
-
-## Testes rápidos
-
-1. Abrir `http://localhost:8088`.
-2. Entrar com `admin/admin`.
-3. Confirmar PT-PT por defeito.
-4. Mudar idioma para inglês e voltar para PT-PT.
-5. Testar tema claro/escuro.
-6. Abrir Perfil.
-7. Abrir Definições.
-8. Abrir Utilizadores como admin.
-9. Criar utilizador.
-10. Terminar sessão.
-11. Entrar com o novo utilizador.
-12. Confirmar que o novo utilizador não vê Gestão de Utilizadores.
-13. Abrir Previsões.
-14. Testar Event Playback.
-15. Abrir Monitor de Contexto FIWARE.
-16. Validar `http://localhost:5181/api/dashboard/summary`.
+A autenticação continua a ser demo/local no frontend e o backend ainda não aplica RBAC real. O histórico de localização de suportes é apresentado apenas para consulta, porque deve ser gerado por eventos/movimentos e não editado manualmente.
 
 ## Autenticação demo
 
-A autenticação é local/demo no frontend. O admin existe sempre. Novos utilizadores são guardados em `localStorage`. A API ainda não está protegida por JWT. A estrutura foi preparada para evolução futura com autenticação real e RBAC.
+- `admin/admin`
+- Autenticação local/demo no frontend
+- Sessão e utilizadores guardados em `localStorage`
+- A API ainda não está protegida por JWT
+- Preparado para evolução futura com autenticação real e RBAC
 
 ## Dados demo
 
-Os dados demo representam uma linha automóvel de portas, com unidades `DU`, suportes `SUP`, racks, materiais/lotes, resultados de qualidade, retrabalho, sucata e uma base simples de previsões. Os seeds principais foram traduzidos para PT-PT.
+O cenário demo representa uma linha automóvel de portas em PT-PT: `ProductUnit` como unidade rastreável, `Support` como âncora intra-linha, `Rack` para logística pós-linha, materiais/lotes de matéria-prima, qualidade, não conformidades, retrabalho, sucata e previsões demonstrativas.
 
-Se já existirem volumes Docker antigos, execute:
+Se os dados antigos persistirem em volumes Docker, usar:
 
 ```powershell
 docker compose down -v
@@ -165,9 +166,8 @@ docker compose up -d --build
 
 ## Limitações conhecidas
 
-- Auth local/demo.
-- API não protegida.
-- Grafana opcional.
-- FIWARE opcional para demonstração.
-- Previsões apenas como base/futuro.
-- Roles ainda não aplicam permissões funcionais profundas.
+- Auth local/demo no frontend
+- API ainda não protegida por JWT
+- Grafana opcional via profile `monitoring`
+- FIWARE opcional para demonstração
+- Previsões demonstrativas, sem IA real nesta V1

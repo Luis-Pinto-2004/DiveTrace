@@ -1,0 +1,523 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "id": 1,
+      "type": "barchart",
+      "title": "Product units by current section",
+      "description": "Current WIP distribution by section.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0,
+        "showValue": "auto",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.9,
+        "barRadius": 0,
+        "fullHighlight": false,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(pls.\"Name\", 'Unknown section') AS section, COUNT(pu.\"Id\") AS total FROM \"ProductionLineSections\" pls LEFT JOIN \"ProductUnits\" pu ON pu.\"CurrentSectionId\" = pls.\"Id\" GROUP BY COALESCE(pls.\"Name\", 'Unknown section'), pls.\"Id\" ORDER BY pls.\"Id\";"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "barchart",
+      "title": "Supports by current section",
+      "description": "Support distribution by section.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0,
+        "showValue": "auto",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.9,
+        "barRadius": 0,
+        "fullHighlight": false,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(pls.\"Name\", 'Unknown section') AS section, COUNT(s.\"Id\") AS total FROM \"ProductionLineSections\" pls LEFT JOIN \"Supports\" s ON s.\"CurrentSectionId\" = pls.\"Id\" GROUP BY COALESCE(pls.\"Name\", 'Unknown section'), pls.\"Id\" ORDER BY pls.\"Id\";"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "barchart",
+      "title": "Product units by status",
+      "description": "Operational status split for product units.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0,
+        "showValue": "auto",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.9,
+        "barRadius": 0,
+        "fullHighlight": false,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(\"Status\", 'Unknown') AS status, COUNT(*) AS total FROM \"ProductUnits\" GROUP BY COALESCE(\"Status\", 'Unknown') ORDER BY status;"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "barchart",
+      "title": "Supports by status",
+      "description": "Operational status split for supports.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0,
+        "showValue": "auto",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.9,
+        "barRadius": 0,
+        "fullHighlight": false,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(\"Status\", 'Unknown') AS status, COUNT(*) AS total FROM \"Supports\" GROUP BY COALESCE(\"Status\", 'Unknown') ORDER BY status;"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Current unit-support assignments",
+      "description": "Product units mapped to current supports and sections.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": "",
+          "countRows": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT pu.\"UnitCode\", COALESCE(s.\"SupportCode\", '-') AS support_code, COALESCE(pls.\"Name\", '-') AS current_section, COALESCE(pu.\"QualityStatus\", 'Pending') AS quality_status, COALESCE(pu.\"Status\", 'Unknown') AS unit_status FROM \"ProductUnits\" pu LEFT JOIN \"Supports\" s ON s.\"Id\" = pu.\"CurrentSupportId\" LEFT JOIN \"ProductionLineSections\" pls ON pls.\"Id\" = pu.\"CurrentSectionId\" ORDER BY pu.\"UnitCode\";"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "barchart",
+      "title": "Supports currently loaded/blocked/rework/available",
+      "description": "Operational support status snapshot.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 16
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0,
+        "showValue": "auto",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.9,
+        "barRadius": 0,
+        "fullHighlight": false,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT CASE WHEN COALESCE(\"Status\", '') = 'Available' THEN 'Available' WHEN \"Status\" = 'Loaded' THEN 'Loaded' WHEN \"Status\" = 'Blocked' THEN 'Blocked' WHEN \"Status\" = 'Rework' THEN 'Rework' ELSE 'Other' END AS category, COUNT(*) AS total FROM \"Supports\" GROUP BY CASE WHEN COALESCE(\"Status\", '') = 'Available' THEN 'Available' WHEN \"Status\" = 'Loaded' THEN 'Loaded' WHEN \"Status\" = 'Blocked' THEN 'Blocked' WHEN \"Status\" = 'Rework' THEN 'Rework' ELSE 'Other' END ORDER BY category;"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "barchart",
+      "title": "Manufacturing orders by status",
+      "description": "Current manufacturing order distribution.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 16
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0,
+        "showValue": "auto",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.9,
+        "barRadius": 0,
+        "fullHighlight": false,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(\"Status\", 'Unknown') AS status, COUNT(*) AS total FROM \"ManufacturingOrders\" GROUP BY COALESCE(\"Status\", 'Unknown') ORDER BY status;"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "table",
+      "title": "Recent support localization history",
+      "description": "Latest 30 localization events for supports.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": "",
+          "countRows": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT slh.\"DateTime\", s.\"SupportCode\", COALESCE(pls.\"Name\", 'Unknown section') AS section, slh.\"EventType\" FROM \"SupportLocalizationHistory\" slh LEFT JOIN \"Supports\" s ON s.\"Id\" = slh.\"SupportId\" LEFT JOIN \"ProductionLineSections\" pls ON pls.\"Id\" = slh.\"SectionId\" ORDER BY slh.\"DateTime\" DESC LIMIT 30;"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "barchart",
+      "title": "Bottleneck indication by section",
+      "description": "Sections with highest blocked/rework concentration.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 34
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0,
+        "showValue": "auto",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.9,
+        "barRadius": 0,
+        "fullHighlight": false,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(pls.\"Name\", 'Unknown section') AS section, COUNT(pu.\"Id\") FILTER (WHERE COALESCE(pu.\"Status\", '') IN ('Blocked', 'Rework')) AS blocked_or_rework_units, COUNT(pu.\"Id\") AS total_units FROM \"ProductionLineSections\" pls LEFT JOIN \"ProductUnits\" pu ON pu.\"CurrentSectionId\" = pls.\"Id\" GROUP BY COALESCE(pls.\"Name\", 'Unknown section'), pls.\"Id\" ORDER BY blocked_or_rework_units DESC, total_units DESC, pls.\"Id\";"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "table",
+      "title": "Throughput proxy by day",
+      "description": "Created vs completed product units by day.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 34
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": "",
+          "countRows": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT DATE_TRUNC('day', pu.\"CreatedAt\")::date AS day, COUNT(*) AS created_units, COUNT(*) FILTER (WHERE pu.\"CompletedAt\" IS NOT NULL OR COALESCE(pu.\"Status\", '') IN ('Completed', 'Closed')) AS completed_units FROM \"ProductUnits\" pu GROUP BY DATE_TRUNC('day', pu.\"CreatedAt\")::date ORDER BY day DESC LIMIT 30;"
+        }
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": [
+    "drivetrace",
+    "operations",
+    "wip"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "DriveTrace Core - WIP Operations",
+  "uid": "drivetrace-wip-operations",
+  "version": 10,
+  "weekStart": ""
+}

@@ -1,0 +1,606 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "id": 1,
+      "type": "barchart",
+      "title": "Quality results PASS/FAIL",
+      "description": "Quality outcomes from inspection results.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0,
+        "showValue": "auto",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.9,
+        "barRadius": 0,
+        "fullHighlight": false,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(\"Result\", 'Unknown') AS result, COUNT(*) AS total FROM \"QualityResults\" GROUP BY COALESCE(\"Result\", 'Unknown') ORDER BY result;"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "barchart",
+      "title": "Nonconformities by severity",
+      "description": "Nonconformities grouped by severity level.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0,
+        "showValue": "auto",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.9,
+        "barRadius": 0,
+        "fullHighlight": false,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(\"Severity\", 'Unknown') AS severity, COUNT(*) AS total FROM \"Nonconformities\" GROUP BY COALESCE(\"Severity\", 'Unknown') ORDER BY severity;"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "barchart",
+      "title": "Nonconformities by status",
+      "description": "Lifecycle status for nonconformities.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0,
+        "showValue": "auto",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.9,
+        "barRadius": 0,
+        "fullHighlight": false,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(\"Status\", 'Unknown') AS status, COUNT(*) AS total FROM \"Nonconformities\" GROUP BY COALESCE(\"Status\", 'Unknown') ORDER BY status;"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Open rework records",
+      "description": "Rework records that are not closed.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 10
+              },
+              {
+                "color": "red",
+                "value": 25
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(*)::bigint AS value FROM \"ReworkRecords\" WHERE COALESCE(\"Status\", '') <> 'Closed';"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Scrap records count",
+      "description": "Total registered scrap records.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 10
+              },
+              {
+                "color": "red",
+                "value": 25
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(*)::bigint AS value FROM \"ScrapRecords\";"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "Units with FAIL quality status",
+      "description": "Units currently flagged with FAIL quality status.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": "",
+          "countRows": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT \"UnitCode\", COALESCE(\"Status\", 'Unknown') AS status, COALESCE(\"QualityStatus\", 'Unknown') AS quality_status FROM \"ProductUnits\" WHERE COALESCE(\"QualityStatus\", '') = 'FAIL' ORDER BY \"Id\";"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Recent quality events table",
+      "description": "Most recent 20 quality results with notes.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": "",
+          "countRows": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT q.\"RecordedAt\", pu.\"UnitCode\", COALESCE(pls.\"Name\", '-') AS section, COALESCE(cp.\"Name\", '-') AS checkpoint, q.\"Result\", COALESCE(q.\"Notes\", '-') AS notes FROM \"QualityResults\" q LEFT JOIN \"ProductUnits\" pu ON pu.\"Id\" = q.\"ProductUnitId\" LEFT JOIN \"Checkpoints\" cp ON cp.\"Id\" = q.\"CheckpointId\" LEFT JOIN \"ProductionLineSections\" pls ON pls.\"Id\" = cp.\"SectionId\" ORDER BY q.\"RecordedAt\" DESC LIMIT 30;"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "barchart",
+      "title": "Material lot usage by raw material or lot",
+      "description": "Aggregated lot usage by material and lot number.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0,
+        "showValue": "auto",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.9,
+        "barRadius": 0,
+        "fullHighlight": false,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT CONCAT(rm.\"Name\", ' / ', lrm.\"LotNumber\") AS material_lot, SUM(umlu.\"Quantity\") AS total FROM \"UnitMaterialLotUsages\" umlu LEFT JOIN \"LotRawMaterials\" lrm ON lrm.\"Id\" = umlu.\"LotId\" LEFT JOIN \"RawMaterials\" rm ON rm.\"Id\" = lrm.\"RawMaterialId\" GROUP BY CONCAT(rm.\"Name\", ' / ', lrm.\"LotNumber\") ORDER BY material_lot;"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "table",
+      "title": "Unit genealogy/material lot usage table",
+      "description": "Traceability table linking units to consumed material lots.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 26
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": "",
+          "countRows": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT pu.\"UnitCode\", lrm.\"LotNumber\", rm.\"Name\" AS material, umlu.\"Quantity\", umlu.\"AssociationType\" FROM \"UnitMaterialLotUsages\" umlu LEFT JOIN \"ProductUnits\" pu ON pu.\"Id\" = umlu.\"ProductUnitId\" LEFT JOIN \"LotRawMaterials\" lrm ON lrm.\"Id\" = umlu.\"LotId\" LEFT JOIN \"RawMaterials\" rm ON rm.\"Id\" = lrm.\"RawMaterialId\" ORDER BY pu.\"UnitCode\", lrm.\"LotNumber\";"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "table",
+      "title": "Traceability table: unit-support-section-quality",
+      "description": "Current traceability state for product units.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 36
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": "",
+          "countRows": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT pu.\"UnitCode\" AS \"ProductUnit\", COALESCE(s.\"SupportCode\", '-') AS \"CurrentSupport\", COALESCE(pls.\"Name\", '-') AS \"CurrentSection\", COALESCE(pu.\"QualityStatus\", 'Pending') AS \"QualityStatus\", COALESCE(pu.\"Status\", 'Unknown') AS \"Status\" FROM \"ProductUnits\" pu LEFT JOIN \"Supports\" s ON s.\"Id\" = pu.\"CurrentSupportId\" LEFT JOIN \"ProductionLineSections\" pls ON pls.\"Id\" = pu.\"CurrentSectionId\" ORDER BY pu.\"UnitCode\";"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "barchart",
+      "title": "Quality issues by checkpoint section",
+      "description": "FAIL outcomes by checkpoint section.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 46
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0,
+        "showValue": "auto",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.9,
+        "barRadius": 0,
+        "fullHighlight": false,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(pls.\"Name\", 'Unknown section') AS section, COUNT(q.\"Id\") FILTER (WHERE COALESCE(q.\"Result\", '') = 'FAIL') AS fail_results, COUNT(q.\"Id\") AS total_results FROM \"QualityResults\" q LEFT JOIN \"Checkpoints\" cp ON cp.\"Id\" = q.\"CheckpointId\" LEFT JOIN \"ProductionLineSections\" pls ON pls.\"Id\" = cp.\"SectionId\" GROUP BY COALESCE(pls.\"Name\", 'Unknown section') ORDER BY fail_results DESC, total_results DESC;"
+        }
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": [
+    "drivetrace",
+    "quality",
+    "traceability"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "DriveTrace Core - Quality & Traceability",
+  "uid": "drivetrace-quality-traceability",
+  "version": 10,
+  "weekStart": ""
+}

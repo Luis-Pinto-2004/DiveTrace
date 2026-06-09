@@ -1,0 +1,432 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Estimated publishable context entities",
+      "description": "Derived from relational entities managed by the FIWARE sync process.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 10
+              },
+              {
+                "color": "red",
+                "value": 25
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT ((SELECT COUNT(*) FROM \"Supports\") + (SELECT COUNT(*) FROM \"ProductUnits\") + (SELECT COUNT(*) FROM \"Racks\") + (SELECT COUNT(*) FROM \"ProductionLineSections\") + (SELECT COUNT(*) FROM \"Checkpoints\"))::bigint AS value;"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Current supports count",
+      "description": "Current supports in PostgreSQL/TimescaleDB.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 10
+              },
+              {
+                "color": "red",
+                "value": 25
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(*)::bigint AS value FROM \"Supports\";"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Current product units count",
+      "description": "Current product units in PostgreSQL/TimescaleDB.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 10
+              },
+              {
+                "color": "red",
+                "value": 25
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(*)::bigint AS value FROM \"ProductUnits\";"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Current racks count",
+      "description": "Current racks in PostgreSQL/TimescaleDB.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 10
+              },
+              {
+                "color": "red",
+                "value": 25
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(*)::bigint AS value FROM \"Racks\";"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Context entity candidates by type",
+      "description": "Candidate entity totals by type for FIWARE publish operations.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": "",
+          "countRows": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT entity_type, total FROM (SELECT 'Support' AS entity_type, COUNT(*) AS total FROM \"Supports\" UNION ALL SELECT 'ProductUnit' AS entity_type, COUNT(*) AS total FROM \"ProductUnits\" UNION ALL SELECT 'Rack' AS entity_type, COUNT(*) AS total FROM \"Racks\" UNION ALL SELECT 'ProductionLineSection' AS entity_type, COUNT(*) AS total FROM \"ProductionLineSections\" UNION ALL SELECT 'Checkpoint' AS entity_type, COUNT(*) AS total FROM \"Checkpoints\") source ORDER BY total DESC, entity_type;"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "Recent support movement events",
+      "description": "Latest movement events from relational history.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": "",
+          "countRows": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT slh.\"DateTime\", s.\"SupportCode\", COALESCE(pls.\"Name\", 'Unknown section') AS section, slh.\"EventType\" FROM \"SupportLocalizationHistory\" slh LEFT JOIN \"Supports\" s ON s.\"Id\" = slh.\"SupportId\" LEFT JOIN \"ProductionLineSections\" pls ON pls.\"Id\" = slh.\"SectionId\" ORDER BY slh.\"DateTime\" DESC LIMIT 30;"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "text",
+      "title": "Datasource health note and FIWARE scope",
+      "description": "Operational note for demo context.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "This dashboard reads from **DriveTrace TimescaleDB** (`drivetrace-timescaledb`).\n\n- If SQL panels load, datasource connectivity is healthy.\n- FIWARE connectivity is validated through API endpoints and `scripts/test-fiware.ps1`.\n- In V1, Grafana does **not** connect directly to Orion-LD.\n- Entity publication status should be interpreted together with the FIWARE monitor page in the application."
+      },
+      "targets": []
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": [
+    "drivetrace",
+    "fiware",
+    "infrastructure"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "DriveTrace Core - FIWARE / Infrastructure Status",
+  "uid": "drivetrace-fiware-infra-status",
+  "version": 10,
+  "weekStart": ""
+}

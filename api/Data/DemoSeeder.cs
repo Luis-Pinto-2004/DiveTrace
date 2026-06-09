@@ -15,56 +15,56 @@ public static class DemoSeeder
 
         var now = DateTime.UtcNow;
 
-        var door = new Product { Name = "Automotive Door", Info = "Traceable automotive door subproduct used as the main V1 demo scenario." };
-        var body = new Product { Name = "Car Body Module", Info = "Higher-level product that can consume door subproducts in final assembly." };
-        var steering = new Product { Name = "Steering Wheel", Info = "Optional component for future line extension." };
-        var seat = new Product { Name = "Seat", Info = "Optional interior subassembly." };
+        var door = new Product { Name = "Porta automóvel", Info = "Subproduto automóvel rastreável usado como cenário demo principal da V1." };
+        var body = new Product { Name = "Módulo de carroçaria", Info = "Produto de nível superior que pode consumir subprodutos de porta na montagem final." };
+        var steering = new Product { Name = "Volante", Info = "Componente opcional para futura extensão da linha." };
+        var seat = new Product { Name = "Banco", Info = "Subconjunto interior opcional." };
         db.Products.AddRange(door, body, steering, seat);
         await db.SaveChangesAsync();
 
-        var standardDoor = new Variant { ProductId = door.Id, VariantCode = "DOOR-STD", Name = "Standard Door" };
-        var premiumDoor = new Variant { ProductId = door.Id, VariantCode = "DOOR-PRM", Name = "Premium Door" };
-        var reinforcedDoor = new Variant { ProductId = door.Id, VariantCode = "DOOR-REINF", Name = "Reinforced Door" };
-        var sportInterior = new Variant { ProductId = seat.Id, VariantCode = "INT-SPORT", Name = "Sport Interior Variant" };
+        var standardDoor = new Variant { ProductId = door.Id, VariantCode = "DOOR-STD", Name = "Porta standard" };
+        var premiumDoor = new Variant { ProductId = door.Id, VariantCode = "DOOR-PRM", Name = "Porta premium" };
+        var reinforcedDoor = new Variant { ProductId = door.Id, VariantCode = "DOOR-REINF", Name = "Porta reforçada" };
+        var sportInterior = new Variant { ProductId = seat.Id, VariantCode = "INT-SPORT", Name = "Variante interior desportiva" };
         db.Variants.AddRange(standardDoor, premiumDoor, reinforcedDoor, sportInterior);
 
-        var line = new ProductionLine { LineCode = "DL-01", Name = "Door Assembly Line" };
+        var line = new ProductionLine { LineCode = "DL-01", Name = "Linha de Montagem de Portas" };
         db.ProductionLines.Add(line);
         await db.SaveChangesAsync();
 
-        var raw = new ProductionLineSection { LineId = line.Id, SectionCode = "SEC-RAW", Name = "Raw Materials", SectionType = "Warehouse" };
-        var assign = new ProductionLineSection { LineId = line.Id, SectionCode = "SEC-SUPPORT", Name = "Support Assignment", SectionType = "Tracking" };
-        var stamping = new ProductionLineSection { LineId = line.Id, SectionCode = "SEC-STAMP", Name = "Blanking / Stamping / Cutting", SectionType = "Production" };
-        var welding = new ProductionLineSection { LineId = line.Id, SectionCode = "SEC-WELD", Name = "Hemming & Welding", SectionType = "Production" };
-        var painting = new ProductionLineSection { LineId = line.Id, SectionCode = "SEC-PAINT", Name = "Painting", SectionType = "Production" };
-        var quality = new ProductionLineSection { LineId = line.Id, SectionCode = "SEC-QC", Name = "Quality Control", SectionType = "Quality" };
-        var rackStorage = new ProductionLineSection { LineId = line.Id, SectionCode = "SEC-RACK", Name = "Rack Storage", SectionType = "Post-line Logistics" };
+        var raw = new ProductionLineSection { LineId = line.Id, SectionCode = "SEC-RAW", Name = "Matérias-primas", SectionType = "Armazém" };
+        var assign = new ProductionLineSection { LineId = line.Id, SectionCode = "SEC-SUPPORT", Name = "Atribuição do suporte", SectionType = "Rastreio" };
+        var stamping = new ProductionLineSection { LineId = line.Id, SectionCode = "SEC-STAMP", Name = "Corte / Estampagem", SectionType = "Produção" };
+        var welding = new ProductionLineSection { LineId = line.Id, SectionCode = "SEC-WELD", Name = "Dobra e Soldadura", SectionType = "Produção" };
+        var painting = new ProductionLineSection { LineId = line.Id, SectionCode = "SEC-PAINT", Name = "Pintura", SectionType = "Produção" };
+        var quality = new ProductionLineSection { LineId = line.Id, SectionCode = "SEC-QC", Name = "Controlo de Qualidade", SectionType = "Qualidade" };
+        var rackStorage = new ProductionLineSection { LineId = line.Id, SectionCode = "SEC-RACK", Name = "Armazenamento em Rack", SectionType = "Logística Pós-Linha" };
         db.ProductionLineSections.AddRange(raw, assign, stamping, welding, painting, quality, rackStorage);
         await db.SaveChangesAsync();
 
         var resources = new[]
         {
-            new Resource { Name = "Operator A", Type = "Operator", Function = "Support assignment and local validation" },
-            new Resource { Name = "Robot Cell R1", Type = "Robot", Function = "Stamping and cutting assistance" },
-            new Resource { Name = "Welding Robot WR-02", Type = "Robot", Function = "Hemming and welding" },
-            new Resource { Name = "Paint Booth PB-01", Type = "Machine", Function = "Primer and final paint application" },
-            new Resource { Name = "Quality Inspector QI-01", Type = "Operator", Function = "Visual and checkpoint quality control" }
+            new Resource { Name = "Operador A", Type = "Operador", Function = "Atribuição do suporte e validação local" },
+            new Resource { Name = "Célula Robotizada R1", Type = "Robot", Function = "Apoio ao corte e estampagem" },
+            new Resource { Name = "Robot de Soldadura WR-02", Type = "Robot", Function = "Dobra e soldadura" },
+            new Resource { Name = "Cabina de Pintura PB-01", Type = "Máquina", Function = "Aplicação de primário e tinta final" },
+            new Resource { Name = "Inspetor de Qualidade QI-01", Type = "Operador", Function = "Controlo visual e checkpoints de qualidade" }
         };
         db.Resources.AddRange(resources);
 
-        var process = new ManufacturingProcess { ProductId = door.Id, ProcessName = "Door Manufacturing Process", Info = "Nominal linear process for WIP traceability of automotive door subproducts." };
+        var process = new ManufacturingProcess { ProductId = door.Id, ProcessName = "Processo de Fabrico de Porta", Info = "Processo linear nominal para rastreabilidade WIP de subprodutos de porta automóvel." };
         db.ManufacturingProcesses.Add(process);
         await db.SaveChangesAsync();
 
         var phases = new[]
         {
-            new ManufacturingSectionPhase { SectionId = raw.Id, PhaseInfo = "Material Preparation", PhaseDuration = 20 },
-            new ManufacturingSectionPhase { SectionId = assign.Id, PhaseInfo = "Support Assignment", PhaseDuration = 10 },
-            new ManufacturingSectionPhase { SectionId = stamping.Id, PhaseInfo = "Stamping and Cutting", PhaseDuration = 35 },
-            new ManufacturingSectionPhase { SectionId = welding.Id, PhaseInfo = "Hemming and Welding", PhaseDuration = 45 },
-            new ManufacturingSectionPhase { SectionId = painting.Id, PhaseInfo = "Painting", PhaseDuration = 55 },
-            new ManufacturingSectionPhase { SectionId = quality.Id, PhaseInfo = "Quality Inspection", PhaseDuration = 25 },
-            new ManufacturingSectionPhase { SectionId = rackStorage.Id, PhaseInfo = "Post-line Storage", PhaseDuration = 15 }
+            new ManufacturingSectionPhase { SectionId = raw.Id, PhaseInfo = "Preparação de materiais", PhaseDuration = 20 },
+            new ManufacturingSectionPhase { SectionId = assign.Id, PhaseInfo = "Atribuição do suporte", PhaseDuration = 10 },
+            new ManufacturingSectionPhase { SectionId = stamping.Id, PhaseInfo = "Corte e Estampagem", PhaseDuration = 35 },
+            new ManufacturingSectionPhase { SectionId = welding.Id, PhaseInfo = "Dobra e Soldadura", PhaseDuration = 45 },
+            new ManufacturingSectionPhase { SectionId = painting.Id, PhaseInfo = "Pintura", PhaseDuration = 55 },
+            new ManufacturingSectionPhase { SectionId = quality.Id, PhaseInfo = "Inspeção de Qualidade", PhaseDuration = 25 },
+            new ManufacturingSectionPhase { SectionId = rackStorage.Id, PhaseInfo = "Armazenamento Pós-Linha", PhaseDuration = 15 }
         };
         db.ManufacturingSectionPhases.AddRange(phases);
         await db.SaveChangesAsync();
@@ -87,10 +87,10 @@ public static class DemoSeeder
 
         var checkpoints = new[]
         {
-            new Checkpoint { CheckpointCode = "CP-STAMP-01", Name = "Stamping Geometry Check", Status = "Active", SectionId = stamping.Id },
-            new Checkpoint { CheckpointCode = "CP-WELD-01", Name = "Weld Seam Check", Status = "Active", SectionId = welding.Id },
-            new Checkpoint { CheckpointCode = "CP-PAINT-01", Name = "Paint Thickness Check", Status = "Active", SectionId = painting.Id },
-            new Checkpoint { CheckpointCode = "CP-QC-01", Name = "Final Door Quality Gate", Status = "Active", SectionId = quality.Id }
+            new Checkpoint { CheckpointCode = "CP-STAMP-01", Name = "Verificação de geometria na estampagem", Status = "Active", SectionId = stamping.Id },
+            new Checkpoint { CheckpointCode = "CP-WELD-01", Name = "Verificação do cordão de soldadura", Status = "Active", SectionId = welding.Id },
+            new Checkpoint { CheckpointCode = "CP-PAINT-01", Name = "Verificação da espessura de pintura", Status = "Active", SectionId = painting.Id },
+            new Checkpoint { CheckpointCode = "CP-QC-01", Name = "Controlo final de qualidade da porta", Status = "Active", SectionId = quality.Id }
         };
         db.Checkpoints.AddRange(checkpoints);
 
@@ -104,7 +104,7 @@ public static class DemoSeeder
             PlannedQty = 5,
             ScheduledUntil = now.Date.AddDays(3).AddHours(17),
             Status = "In Progress",
-            Observations = "Demo order for Door Assembly Line WIP traceability. Production is unitary; no final product lots are generated."
+            Observations = "Ordem demo para rastreabilidade WIP da linha de montagem de portas. A produção é unitária; não são gerados lotes de produto final."
         };
         db.ManufacturingOrders.Add(order);
         await db.SaveChangesAsync();
@@ -162,12 +162,12 @@ public static class DemoSeeder
         var rack2 = new Rack { RackCode = "RACK-002", Status = "Available", SectionId = rackStorage.Id };
         db.Racks.AddRange(rack1, rack2);
 
-        var steel = new RawMaterial { Name = "Steel Sheet", Info = "Exterior panel steel used in the door structure." };
-        var aluminium = new RawMaterial { Name = "Aluminium Panel", Info = "Lightweight panel alternative for premium variants." };
-        var primer = new RawMaterial { Name = "Paint Primer", Info = "Primer paint used before final coating." };
-        var finalPaint = new RawMaterial { Name = "Final Paint", Info = "Final coating for automotive door surface." };
-        var rubber = new RawMaterial { Name = "Rubber Seal", Info = "Door sealing material." };
-        var wiring = new RawMaterial { Name = "Wiring Clip", Info = "Small component used to retain wiring inside the door." };
+        var steel = new RawMaterial { Name = "Chapa de aço", Info = "Chapa de aço exterior usada na estrutura da porta." };
+        var aluminium = new RawMaterial { Name = "Painel de alumínio", Info = "Painel leve usado em variantes premium." };
+        var primer = new RawMaterial { Name = "Primário de pintura", Info = "Primário aplicado antes da pintura final." };
+        var finalPaint = new RawMaterial { Name = "Tinta final", Info = "Revestimento final da superfície da porta." };
+        var rubber = new RawMaterial { Name = "Vedante de borracha", Info = "Material de vedação da porta." };
+        var wiring = new RawMaterial { Name = "Clip de cablagem", Info = "Componente usado para fixar cablagem no interior da porta." };
         db.RawMaterials.AddRange(steel, aluminium, primer, finalPaint, rubber, wiring);
         await db.SaveChangesAsync();
 
@@ -178,7 +178,7 @@ public static class DemoSeeder
             new LotRawMaterial { RawMaterialId = primer.Id, SectionId = painting.Id, LotNumber = "PAINT-LOT-001", LotQuantity = 80, LotUnit = "L" },
             new LotRawMaterial { RawMaterialId = finalPaint.Id, SectionId = painting.Id, LotNumber = "PAINT-LOT-002", LotQuantity = 120, LotUnit = "L" },
             new LotRawMaterial { RawMaterialId = rubber.Id, SectionId = welding.Id, LotNumber = "RUBBER-LOT-001", LotQuantity = 300, LotUnit = "m" },
-            new LotRawMaterial { RawMaterialId = wiring.Id, SectionId = welding.Id, LotNumber = "WIRING-LOT-001", LotQuantity = 500, LotUnit = "pcs" }
+            new LotRawMaterial { RawMaterialId = wiring.Id, SectionId = welding.Id, LotNumber = "WIRING-LOT-001", LotQuantity = 500, LotUnit = "un." }
         };
         db.LotRawMaterials.AddRange(lots);
         await db.SaveChangesAsync();
@@ -191,22 +191,22 @@ public static class DemoSeeder
         }
 
         db.QualityResults.AddRange(
-            new QualityResult { ProductUnitId = units[0].Id, CheckpointId = checkpoints[3].Id, Result = "PASS", RecordedAt = now.AddMinutes(-70), Notes = "Final inspection passed." },
-            new QualityResult { ProductUnitId = units[1].Id, CheckpointId = checkpoints[2].Id, Result = "PASS", RecordedAt = now.AddMinutes(-55), Notes = "Paint thickness within tolerance." },
-            new QualityResult { ProductUnitId = units[2].Id, CheckpointId = checkpoints[3].Id, Result = "FAIL", RecordedAt = now.AddMinutes(-45), Notes = "Door alignment deviation detected at final gate." },
-            new QualityResult { ProductUnitId = units[3].Id, CheckpointId = checkpoints[1].Id, Result = "FAIL", RecordedAt = now.AddMinutes(-35), Notes = "Weld seam requires rework." });
+            new QualityResult { ProductUnitId = units[0].Id, CheckpointId = checkpoints[3].Id, Result = "PASS", RecordedAt = now.AddMinutes(-70), Notes = "Inspeção final aprovada." },
+            new QualityResult { ProductUnitId = units[1].Id, CheckpointId = checkpoints[2].Id, Result = "PASS", RecordedAt = now.AddMinutes(-55), Notes = "Espessura da pintura dentro da tolerância." },
+            new QualityResult { ProductUnitId = units[2].Id, CheckpointId = checkpoints[3].Id, Result = "FAIL", RecordedAt = now.AddMinutes(-45), Notes = "Desvio de alinhamento detetado no controlo final." },
+            new QualityResult { ProductUnitId = units[3].Id, CheckpointId = checkpoints[1].Id, Result = "FAIL", RecordedAt = now.AddMinutes(-35), Notes = "Cordão de soldadura requer retrabalho." });
         await db.SaveChangesAsync();
 
         var failDoor = await db.QualityResults.FirstAsync(x => x.ProductUnitId == units[2].Id && x.Result == "FAIL");
         var failWeld = await db.QualityResults.FirstAsync(x => x.ProductUnitId == units[3].Id && x.Result == "FAIL");
 
-        var nc1 = new Nonconformity { ProductUnitId = units[2].Id, QualityResultId = failDoor.Id, Severity = "Major", Status = "Blocked", Description = "Alignment outside nominal tolerance; quality manager decision required." };
-        var nc2 = new Nonconformity { ProductUnitId = units[3].Id, QualityResultId = failWeld.Id, Severity = "Medium", Status = "Rework", Description = "Weld seam underfill; route to controlled rework." };
+        var nc1 = new Nonconformity { ProductUnitId = units[2].Id, QualityResultId = failDoor.Id, Severity = "Major", Status = "Blocked", Description = "Alinhamento fora da tolerância nominal; decisão do responsável de qualidade necessária." };
+        var nc2 = new Nonconformity { ProductUnitId = units[3].Id, QualityResultId = failWeld.Id, Severity = "Medium", Status = "Rework", Description = "Falta de enchimento no cordão de soldadura; encaminhar para retrabalho controlado." };
         db.Nonconformities.AddRange(nc1, nc2);
         await db.SaveChangesAsync();
 
-        db.ReworkRecords.Add(new ReworkRecord { ProductUnitId = units[3].Id, NonconformityId = nc2.Id, StartedAt = now.AddMinutes(-20), Status = "Open", Notes = "Repair weld seam and repeat quality checkpoint." });
-        db.ScrapRecords.Add(new ScrapRecord { ProductUnitId = units[2].Id, NonconformityId = nc1.Id, ScrappedAt = now.AddMinutes(-10), Reason = "Demo scrap decision path; record retained for audit and genealogy." });
+        db.ReworkRecords.Add(new ReworkRecord { ProductUnitId = units[3].Id, NonconformityId = nc2.Id, StartedAt = now.AddMinutes(-20), Status = "Open", Notes = "Reparar cordão de soldadura e repetir checkpoint de qualidade." });
+        db.ScrapRecords.Add(new ScrapRecord { ProductUnitId = units[2].Id, NonconformityId = nc1.Id, ScrappedAt = now.AddMinutes(-10), Reason = "Caminho de decisão de sucata para demonstração; registo mantido para auditoria e genealogia." });
         db.Predictions.Add(new Prediction { ManufacturingOrderId = order.Id, ModelVersion = "future-v1", ModelType = "Placeholder", LastDate = now, CreatedAt = now });
 
         await db.SaveChangesAsync();

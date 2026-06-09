@@ -15,14 +15,14 @@ public sealed class FiwareContextController : ControllerBase
     }
 
     [HttpGet("context")]
-    public async Task<IActionResult> CurrentContext()
+    public async Task<IActionResult> CurrentContext(CancellationToken cancellationToken)
     {
-        return Ok(await _fiware.BuildCurrentContextAsync());
+        return Ok(await _fiware.GetContextAsync(cancellationToken));
     }
 
     [HttpPost("publish-current")]
-    public async Task<IActionResult> PublishCurrentContext()
+    public async Task<IActionResult> PublishCurrentContext(CancellationToken cancellationToken)
     {
-        return Ok(await _fiware.PublishCurrentContextAsync());
+        return Ok(await _fiware.PublishCurrentContextAsync(cancellationToken));
     }
 }

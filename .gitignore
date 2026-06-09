@@ -6,7 +6,9 @@
 # Docker/local data
 docker-data/
 volumes/
+logs/
 *.log
+*.zip
 
 # .NET
 bin/
@@ -17,9 +19,11 @@ obj/
 
 # Node / frontend
 node_modules/
+.vite/
 .next/
 dist/
 build/
+npm-debug.log*
 
 # OS / Editor
 .DS_Store

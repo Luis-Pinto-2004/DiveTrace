@@ -1,6 +1,10 @@
 bin
 obj
 TestResults
+logs
+.env
+*.zip
+npm-debug.log
 *.user
 *.suo
 .vs

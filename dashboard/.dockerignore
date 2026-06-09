@@ -2,6 +2,9 @@ node_modules
 dist
 .vite
 .cache
+logs
+.env
+*.zip
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

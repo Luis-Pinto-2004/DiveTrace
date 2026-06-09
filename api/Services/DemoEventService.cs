@@ -54,7 +54,7 @@ public sealed class DemoEventService
             if (unit is not null)
             {
                 unit.CurrentSectionId = nextSection.Id;
-                if (nextSection.SectionType == "Post-line Logistics")
+                if (nextSection.SectionType is "Post-line Logistics" or "Logística Pós-Linha")
                 {
                     unit.Status = unit.QualityStatus == "FAIL" ? unit.Status : "Completed";
                     unit.CompletedAt ??= DateTime.UtcNow;

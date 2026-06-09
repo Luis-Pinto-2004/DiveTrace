@@ -66,7 +66,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT pls.\"Name\" AS section, COUNT(pu.\"Id\") AS total FROM \"ProductionLineSections\" pls LEFT JOIN \"ProductUnits\" pu ON pu.\"CurrentSectionId\" = pls.\"Id\" GROUP BY pls.\"Name\", pls.\"Id\" ORDER BY pls.\"Id\";"
+          "rawSql": "SELECT COALESCE(pls.\"Name\", 'Unknown section') AS section, COUNT(pu.\"Id\") AS total FROM \"ProductionLineSections\" pls LEFT JOIN \"ProductUnits\" pu ON pu.\"CurrentSectionId\" = pls.\"Id\" GROUP BY COALESCE(pls.\"Name\", 'Unknown section'), pls.\"Id\" ORDER BY pls.\"Id\";"
         }
       ]
     },
@@ -115,7 +115,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT pls.\"Name\" AS section, COUNT(s.\"Id\") AS total FROM \"ProductionLineSections\" pls LEFT JOIN \"Supports\" s ON s.\"CurrentSectionId\" = pls.\"Id\" GROUP BY pls.\"Name\", pls.\"Id\" ORDER BY pls.\"Id\";"
+          "rawSql": "SELECT COALESCE(pls.\"Name\", 'Unknown section') AS section, COUNT(s.\"Id\") AS total FROM \"ProductionLineSections\" pls LEFT JOIN \"Supports\" s ON s.\"CurrentSectionId\" = pls.\"Id\" GROUP BY COALESCE(pls.\"Name\", 'Unknown section'), pls.\"Id\" ORDER BY pls.\"Id\";"
         }
       ]
     },
@@ -164,7 +164,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT \"Status\" AS status, COUNT(*) AS total FROM \"ProductUnits\" GROUP BY \"Status\" ORDER BY \"Status\";"
+          "rawSql": "SELECT COALESCE(\"Status\", 'Unknown') AS status, COUNT(*) AS total FROM \"ProductUnits\" GROUP BY COALESCE(\"Status\", 'Unknown') ORDER BY status;"
         }
       ]
     },
@@ -213,15 +213,15 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT \"Status\" AS status, COUNT(*) AS total FROM \"Supports\" GROUP BY \"Status\" ORDER BY \"Status\";"
+          "rawSql": "SELECT COALESCE(\"Status\", 'Unknown') AS status, COUNT(*) AS total FROM \"Supports\" GROUP BY COALESCE(\"Status\", 'Unknown') ORDER BY status;"
         }
       ]
     },
     {
       "id": 5,
       "type": "table",
-      "title": "Units without support assigned",
-      "description": "Units that currently have no support anchor assigned.",
+      "title": "Current unit-support assignments",
+      "description": "Product units mapped to current supports and sections.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -258,15 +258,15 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT \"UnitCode\", \"Status\", \"QualityStatus\" FROM \"ProductUnits\" WHERE \"CurrentSupportId\" IS NULL ORDER BY \"Id\";"
+          "rawSql": "SELECT pu.\"UnitCode\", COALESCE(s.\"SupportCode\", '-') AS support_code, COALESCE(pls.\"Name\", '-') AS current_section, COALESCE(pu.\"QualityStatus\", 'Pending') AS quality_status, COALESCE(pu.\"Status\", 'Unknown') AS unit_status FROM \"ProductUnits\" pu LEFT JOIN \"Supports\" s ON s.\"Id\" = pu.\"CurrentSupportId\" LEFT JOIN \"ProductionLineSections\" pls ON pls.\"Id\" = pu.\"CurrentSectionId\" ORDER BY pu.\"UnitCode\";"
         }
       ]
     },
     {
       "id": 6,
       "type": "barchart",
-      "title": "Supports available vs loaded/blocked",
-      "description": "Simple availability indicator for supports.",
+      "title": "Supports currently loaded/blocked/rework/available",
+      "description": "Operational support status snapshot.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -307,7 +307,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT CASE WHEN \"Status\" = 'Available' THEN 'Available' ELSE 'Loaded/Blocked/Rework' END AS category, COUNT(*) AS total FROM \"Supports\" GROUP BY CASE WHEN \"Status\" = 'Available' THEN 'Available' ELSE 'Loaded/Blocked/Rework' END ORDER BY category;"
+          "rawSql": "SELECT CASE WHEN COALESCE(\"Status\", '') = 'Available' THEN 'Available' WHEN \"Status\" = 'Loaded' THEN 'Loaded' WHEN \"Status\" = 'Blocked' THEN 'Blocked' WHEN \"Status\" = 'Rework' THEN 'Rework' ELSE 'Other' END AS category, COUNT(*) AS total FROM \"Supports\" GROUP BY CASE WHEN COALESCE(\"Status\", '') = 'Available' THEN 'Available' WHEN \"Status\" = 'Loaded' THEN 'Loaded' WHEN \"Status\" = 'Blocked' THEN 'Blocked' WHEN \"Status\" = 'Rework' THEN 'Rework' ELSE 'Other' END ORDER BY category;"
         }
       ]
     },
@@ -356,7 +356,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT \"Status\" AS status, COUNT(*) AS total FROM \"ManufacturingOrders\" GROUP BY \"Status\" ORDER BY \"Status\";"
+          "rawSql": "SELECT COALESCE(\"Status\", 'Unknown') AS status, COUNT(*) AS total FROM \"ManufacturingOrders\" GROUP BY COALESCE(\"Status\", 'Unknown') ORDER BY status;"
         }
       ]
     },
@@ -401,7 +401,101 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT slh.\"DateTime\", s.\"SupportCode\", pls.\"Name\" AS section, slh.\"EventType\" FROM \"SupportLocalizationHistory\" slh LEFT JOIN \"Supports\" s ON s.\"Id\" = slh.\"SupportId\" LEFT JOIN \"ProductionLineSections\" pls ON pls.\"Id\" = slh.\"SectionId\" ORDER BY slh.\"DateTime\" DESC LIMIT 30;"
+          "rawSql": "SELECT slh.\"DateTime\", s.\"SupportCode\", COALESCE(pls.\"Name\", 'Unknown section') AS section, slh.\"EventType\" FROM \"SupportLocalizationHistory\" slh LEFT JOIN \"Supports\" s ON s.\"Id\" = slh.\"SupportId\" LEFT JOIN \"ProductionLineSections\" pls ON pls.\"Id\" = slh.\"SectionId\" ORDER BY slh.\"DateTime\" DESC LIMIT 30;"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "barchart",
+      "title": "Bottleneck indication by section",
+      "description": "Sections with highest blocked/rework concentration.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 34
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0,
+        "showValue": "auto",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.9,
+        "barRadius": 0,
+        "fullHighlight": false,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(pls.\"Name\", 'Unknown section') AS section, COUNT(pu.\"Id\") FILTER (WHERE COALESCE(pu.\"Status\", '') IN ('Blocked', 'Rework')) AS blocked_or_rework_units, COUNT(pu.\"Id\") AS total_units FROM \"ProductionLineSections\" pls LEFT JOIN \"ProductUnits\" pu ON pu.\"CurrentSectionId\" = pls.\"Id\" GROUP BY COALESCE(pls.\"Name\", 'Unknown section'), pls.\"Id\" ORDER BY blocked_or_rework_units DESC, total_units DESC, pls.\"Id\";"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "table",
+      "title": "Throughput proxy by day",
+      "description": "Created vs completed product units by day.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 34
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": "",
+          "countRows": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT DATE_TRUNC('day', pu.\"CreatedAt\")::date AS day, COUNT(*) AS created_units, COUNT(*) FILTER (WHERE pu.\"CompletedAt\" IS NOT NULL OR COALESCE(pu.\"Status\", '') IN ('Completed', 'Closed')) AS completed_units FROM \"ProductUnits\" pu GROUP BY DATE_TRUNC('day', pu.\"CreatedAt\")::date ORDER BY day DESC LIMIT 30;"
         }
       ]
     }
@@ -424,6 +518,6 @@
   "timezone": "browser",
   "title": "DriveTrace Core - WIP Operations",
   "uid": "drivetrace-wip-operations",
-  "version": 1,
+  "version": 10,
   "weekStart": ""
 }

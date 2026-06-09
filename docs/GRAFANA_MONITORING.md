@@ -1,109 +1,155 @@
 ﻿# Grafana Monitoring
 
-## Purpose
+## Scope
 
-This project uses Grafana as a local academic monitoring layer over the operational PostgreSQL/TimescaleDB data.
+DriveTrace Core uses Grafana as the analytical and monitoring layer on top of PostgreSQL/TimescaleDB operational data.
 
-- Primary source of truth: PostgreSQL/TimescaleDB (`db` service)
-- Domain backend: ASP.NET Core API (`api` service)
-- Industrial context layer (optional): FIWARE stack (Orion-LD, IoT Agent, QuantumLeap)
-- Monitoring UI: Grafana (`grafana` service)
+- Source of truth: ASP.NET Core API + PostgreSQL/TimescaleDB
+- Context layer: FIWARE stack (Orion-LD, IoT Agent, QuantumLeap)
+- Monitoring layer: Grafana
+- Frontend integration: Vue section `Grafana Analytics` with real iframe embeds (`/d` and `/d-solo`)
 
-Grafana is intentionally focused on stable, demonstrable SQL dashboards for WIP, quality and traceability.
+## Runtime Endpoints
 
-## Architecture
+- Frontend: `http://localhost:8088`
+- API Swagger: `http://localhost:5181/swagger`
+- Grafana: `http://localhost:${GRAFANA_PORT:-33010}`
+- Grafana login: `admin/admin`
 
-- Grafana URL: `http://localhost:${GRAFANA_PORT:-33010}`
-- Credentials: `admin/admin`
-- Datasource: `DriveTrace TimescaleDB`
+## Datasource and Provisioning
+
+- Datasource name: `DriveTrace TimescaleDB`
 - Datasource UID: `drivetrace-timescaledb`
-- Container datasource target: `db:5432`
-- Database: `drivetrace`
+- Provisioning folder: `grafana/provisioning/`
+- Dashboard JSON folder: `grafana/dashboards/`
 
-Provisioning paths (mounted read-only into container):
+Provisioned dashboards:
 
-- `grafana/provisioning`
-- `grafana/dashboards`
+1. `DriveTrace Core - Executive Overview` (`drivetrace-executive-overview`)
+2. `DriveTrace Core - FIWARE / Infrastructure Status` (`drivetrace-fiware-infra-status`)
+3. `DriveTrace Core - Quality & Traceability` (`drivetrace-quality-traceability`)
+4. `DriveTrace Core - WIP Operations` (`drivetrace-wip-operations`)
+5. `DriveTrace Core - WIP Overview` (`drivetrace-wip-overview`)
 
-## Provisioned Dashboards
+## Analytical Coverage
 
-1. `DriveTrace Core - WIP Overview` (UID `drivetrace-wip-overview`)
-2. `DriveTrace Core - Executive Overview` (UID `drivetrace-executive-overview`)
-3. `DriveTrace Core - WIP Operations` (UID `drivetrace-wip-operations`)
-4. `DriveTrace Core - Quality & Traceability` (UID `drivetrace-quality-traceability`)
-5. `DriveTrace Core - FIWARE / Infrastructure Status` (UID `drivetrace-fiware-infra-status`)
+- `DriveTrace Core - Executive Overview`
+  - Open manufacturing orders, active units/supports, open quality issues, active rack assignments
+  - Product/support status distributions, WIP by section, recent support movements, recent nonconformities
+- `DriveTrace Core - WIP Operations`
+  - WIP by section, supports by section and by status, manufacturing orders by status
+  - Current unit-support assignments, bottleneck indication, throughput proxy by day, recent movement history
+- `DriveTrace Core - Quality & Traceability`
+  - PASS/FAIL distribution, nonconformities by severity/status, rework and scrap metrics
+  - Recent quality events, product-unit traceability table, genealogy/material lot usage context
+- `DriveTrace Core - FIWARE / Infrastructure Status`
+  - Estimated publishable entities, supports/units/racks counts, candidate entities by type
+  - Recent movement events and explicit note about datasource scope versus FIWARE API validation
+- `DriveTrace Core - WIP Overview`
+  - Simplified baseline view with core stats, status distributions, WIP section distribution and recent events
 
-## Key SQL Queries
+## Phase 2 Operational Analytics Hub
 
-All queries use quoted PascalCase table/column names to match EF Core generated schema.
+The frontend analytics area now works as an operational hub, not only as a list of embedded dashboards.
 
-Open manufacturing orders:
+Access path:
 
-```sql
-SELECT COUNT(*) AS value
-FROM "ManufacturingOrders"
-WHERE "Status" <> 'Completed';
-```
+1. Open `http://localhost:8088`
+2. Use the sidebar entry `Grafana Analytics` / `Analítica operacional`
+3. Review the operational snapshot, insight cards and dashboard catalogue
+4. Use `Show in application` to focus an embedded dashboard family
+5. Use `Open in Grafana` for direct troubleshooting or full-screen analysis
 
-Active product units:
+The hub combines two data surfaces:
 
-```sql
-SELECT COUNT(*) AS value
-FROM "ProductUnits"
-WHERE "Status" IN ('Active', 'Rework', 'Blocked');
-```
+- current operational values already loaded by the Vue application from the DriveTrace Core API
+- provisioned Grafana dashboards backed by the `DriveTrace TimescaleDB` datasource
 
-Product units by status:
+No new production-line transfer logic, FIWARE publication logic or relational model changes are required by this layer. The hub is a presentation and observability improvement over the existing data model.
 
-```sql
-SELECT "Status" AS status, COUNT(*) AS total
-FROM "ProductUnits"
-GROUP BY "Status"
-ORDER BY "Status";
-```
+Iframe notes:
 
-Supports by current section:
+- Local demo embedding is enabled through Docker Compose Grafana settings.
+- Anonymous Viewer access is intended only for local academic/demo execution.
+- If a browser, proxy or Grafana policy blocks the iframe, use `Open in Grafana` and authenticate directly.
 
-```sql
-SELECT pls."Name" AS section, COUNT(s."Id") AS total
-FROM "ProductionLineSections" pls
-LEFT JOIN "Supports" s ON s."CurrentSectionId" = pls."Id"
-GROUP BY pls."Name", pls."Id"
-ORDER BY pls."Id";
-```
+## Phase 2B Visual and UX Redesign
 
-Quality results PASS/FAIL:
+Phase 2B keeps the same technical boundaries as Phase 2 and focuses on presentation quality.
 
-```sql
-SELECT "Result" AS result, COUNT(*) AS total
-FROM "QualityResults"
-GROUP BY "Result"
-ORDER BY "Result";
-```
+Changed at application level:
 
-Recent support movements:
+- Industrial visual shell with grouped sidebar navigation, system status topbar and a softer operational background
+- Decision-oriented `Dashboard / Line Overview` with WIP, quality, FIWARE coherence and recent movements
+- Improved `Racks / Post-line Logistics` page with post-line KPIs and rack-support interpretation
+- Improved `FIWARE Context Monitor` with context coherence cards and clearer entity table
+- Improved local `Users` administration with profile metrics, clearer form/list separation and consistent actions
+- `Grafana Analytics` now prioritizes snapshot, decision panel, dashboard catalogue questions, selected embedded panels and an optional full-dashboard embed
 
-```sql
-SELECT slh."DateTime", s."SupportCode", pls."Name" AS section, slh."EventType"
-FROM "SupportLocalizationHistory" slh
-LEFT JOIN "Supports" s ON s."Id" = slh."SupportId"
-LEFT JOIN "ProductionLineSections" pls ON pls."Id" = slh."SectionId"
-ORDER BY slh."DateTime" DESC
-LIMIT 30;
-```
+Grafana provisioning was intentionally kept stable:
 
-Material lot usage:
+- Datasource UID remains `drivetrace-timescaledb`
+- Dashboard UIDs remain unchanged
+- Existing dashboard JSON files remain the source of provisioned dashboards
+- The frontend improves the integration and interpretation layer around those dashboards
 
-```sql
-SELECT pu."UnitCode", lrm."LotNumber", rm."Name" AS material, umlu."Quantity", umlu."AssociationType"
-FROM "UnitMaterialLotUsages" umlu
-LEFT JOIN "ProductUnits" pu ON pu."Id" = umlu."ProductUnitId"
-LEFT JOIN "LotRawMaterials" lrm ON lrm."Id" = umlu."LotId"
-LEFT JOIN "RawMaterials" rm ON rm."Id" = lrm."RawMaterialId"
-ORDER BY pu."UnitCode", lrm."LotNumber";
-```
+Manual visual checks recommended:
 
-## Validation Steps
+- `http://localhost:8088` at 1366x768 and 1920x1080
+- Sidebar grouping and topbar wrapping
+- `Analítica operacional` dashboard catalogue and embedded panels
+- `Racks / Logística pós-linha` KPIs and CRUD tables
+- `Monitor de contexto FIWARE` coherence panel and entity table
+
+## Frontend Embedding Configuration
+
+Frontend env var (build-time):
+
+- `VITE_GRAFANA_BASE_URL=http://localhost:33010`
+
+Location:
+
+- `dashboard/.env.example`
+- root `.env.example`
+
+Used in Vue with fallback to local default:
+
+- `import.meta.env.VITE_GRAFANA_BASE_URL || 'http://localhost:33010'`
+
+Reusable component:
+
+- `dashboard/src/components/GrafanaPanel.vue`
+
+Main analytics page:
+
+- `dashboard/src/components/GrafanaAnalyticsView.vue`
+- Integrated in menu/sidebar through `dashboard/src/App.vue` as `Grafana Analytics` (`AN`)
+- Includes dashboard cards with purpose/decision text, insight cards and embedded full-dashboard preview
+
+## Grafana Docker Settings for Local Embed
+
+Configured in `docker-compose.yml` under `grafana.environment`:
+
+- `GF_SECURITY_ALLOW_EMBEDDING=true`
+- `GF_AUTH_ANONYMOUS_ENABLED=true`
+- `GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer`
+- `GF_USERS_ALLOW_SIGN_UP=false`
+- `GF_ANALYTICS_REPORTING_ENABLED=false`
+- `GF_ANALYTICS_CHECK_FOR_UPDATES=false`
+- `GF_PLUGINS_PREINSTALL_DISABLED=true`
+
+## Security Note
+
+These settings are suitable for local demo/academic environments only.
+
+Do not expose Grafana anonymously in production. Production should use authentication and access controls, such as:
+
+- reverse proxy with auth
+- private/internal network exposure
+- SSO / OAuth / enterprise auth
+- least-privilege roles and org permissions
+
+## Validation Commands
 
 Run from repository root:
 
@@ -112,42 +158,78 @@ docker compose config
 docker compose up -d --build
 docker compose restart grafana
 docker compose ps
-docker compose logs --tail=150 grafana
+docker compose logs --tail=200 grafana
 ```
 
 Validate endpoints:
 
-- Grafana login: `http://localhost:${GRAFANA_PORT:-33010}/login`
-- Frontend: `http://localhost:8088`
-- API Swagger: `http://localhost:5181/swagger`
+- `http://localhost:8088`
+- `http://localhost:5181/swagger`
+- `http://localhost:33010/login`
 
-Validate FIWARE remains healthy:
+Grafana API checks (Basic auth admin/admin):
+
+```powershell
+$pair = 'admin:admin'
+$auth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($pair))
+$headers = @{ Authorization = "Basic $auth" }
+
+Invoke-WebRequest -Uri 'http://localhost:33010/api/search?type=dash-db' -Headers $headers -UseBasicParsing
+Invoke-WebRequest -Uri 'http://localhost:33010/api/search?tag=drivetrace' -Headers $headers -UseBasicParsing
+Invoke-WebRequest -Uri 'http://localhost:33010/api/datasources/uid/drivetrace-timescaledb' -Headers $headers -UseBasicParsing
+Invoke-WebRequest -Uri 'http://localhost:33010/api/dashboards/uid/drivetrace-executive-overview' -Headers $headers -UseBasicParsing
+Invoke-WebRequest -Uri 'http://localhost:33010/api/dashboards/uid/drivetrace-fiware-infra-status' -Headers $headers -UseBasicParsing
+Invoke-WebRequest -Uri 'http://localhost:33010/api/dashboards/uid/drivetrace-quality-traceability' -Headers $headers -UseBasicParsing
+Invoke-WebRequest -Uri 'http://localhost:33010/api/dashboards/uid/drivetrace-wip-operations' -Headers $headers -UseBasicParsing
+Invoke-WebRequest -Uri 'http://localhost:33010/api/dashboards/uid/drivetrace-wip-overview' -Headers $headers -UseBasicParsing
+```
+
+Optional datasource query check (example payload):
+
+```powershell
+$body = @{
+  queries = @(
+    @{
+      refId = 'A'
+      datasource = @{ uid = 'drivetrace-timescaledb' }
+      rawSql = 'SELECT COUNT(*)::bigint AS value FROM \"ProductUnits\";'
+      format = 'table'
+    }
+  )
+} | ConvertTo-Json -Depth 8
+
+Invoke-RestMethod -Method Post -Uri 'http://localhost:33010/api/ds/query' -Headers $headers -ContentType 'application/json' -Body $body
+```
+
+Iframe URL checks (expected HTTP 200):
+
+```text
+http://localhost:33010/d-solo/drivetrace-executive-overview/drivetrace-executive-overview?orgId=1&from=now-30d&to=now&timezone=browser&refresh=30s&panelId=1&theme=dark
+http://localhost:33010/d/drivetrace-wip-operations/drivetrace-wip-operations?orgId=1&from=now-30d&to=now&timezone=browser&refresh=30s&theme=dark&kiosk
+```
+
+Frontend build validation:
+
+```powershell
+cd dashboard
+npm run build
+```
+
+Backend build validation:
+
+```powershell
+cd api
+dotnet build
+```
+
+FIWARE validation:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\test-fiware.ps1 -PublishCurrent
 ```
 
-## Grafana API Checks (optional but recommended)
+## Realistic Limitations
 
-Check datasource exists:
-
-- `GET /api/datasources/uid/drivetrace-timescaledb`
-
-Check dashboard exists:
-
-- `GET /api/dashboards/uid/drivetrace-wip-overview`
-- `GET /api/dashboards/uid/drivetrace-executive-overview`
-- `GET /api/dashboards/uid/drivetrace-wip-operations`
-- `GET /api/dashboards/uid/drivetrace-quality-traceability`
-- `GET /api/dashboards/uid/drivetrace-fiware-infra-status`
-
-Query execution check:
-
-- `POST /api/ds/query` with dashboard SQL to confirm frames/rows.
-
-## Known Limitations
-
-- Grafana runs local demo credentials (`admin/admin`) for V1 demonstration.
-- Some KPIs can legitimately show zero if demo data does not include active rows for that scenario.
-- In some Grafana image versions, a non-blocking plugin background installer message may appear in logs (for bundled `elasticsearch` plugin permissions). This does not block datasource provisioning or dashboard rendering.
-- FIWARE data is not queried directly from Grafana in this V1; FIWARE health is validated through API endpoints and `scripts/test-fiware.ps1`.
+- Dashboards depend on currently available demo data; some KPIs may show `0`.
+- Grafana reads PostgreSQL/TimescaleDB operational data only.
+- FIWARE connectivity and publish flow are validated through API/script checks, not a direct Grafana Orion-LD datasource.

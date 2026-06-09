@@ -72,9 +72,9 @@ function inputValue(key: string) {
 </script>
 
 <template>
-  <section class="card overflow-hidden p-5 sm:p-6">
+  <section class="industrial-panel">
     <div class="section-heading">
-      <div>
+      <div class="min-w-0">
         <p>{{ t('CRUD operations') }}</p>
         <h3>{{ t(config.title) }}</h3>
         <p v-if="config.description" class="mt-2 max-w-3xl normal-case tracking-normal text-slate-500 dark:text-slate-400">{{ t(config.description) }}</p>
@@ -84,7 +84,7 @@ function inputValue(key: string) {
 
     <p
       v-if="message"
-      class="mt-4 rounded-2xl border px-4 py-3 text-sm font-semibold"
+      class="mt-4 rounded-lg border px-4 py-3 text-sm font-semibold"
       :class="message.type === 'success'
         ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-100'
         : 'border-red-200 bg-red-50 text-red-800 dark:border-red-700 dark:bg-red-900/30 dark:text-red-100'"
@@ -123,8 +123,8 @@ function inputValue(key: string) {
         </label>
 
         <div class="sticky bottom-0 lg:col-span-2 -mx-4 -mb-4 mt-2 flex flex-wrap items-center gap-3 border-t border-slate-200 bg-white/95 px-4 py-4 backdrop-blur dark:border-slate-700 dark:bg-slate-800/95 sm:-mx-5 sm:-mb-5 sm:px-5">
-          <button class="btn-primary" type="submit">{{ editing ? t('Save') : t('Add') }}</button>
-          <button class="btn-secondary" type="button" @click="emit('cancel')">{{ t('Cancel') }}</button>
+          <button class="btn-primary w-full sm:w-auto" type="submit">{{ editing ? t('Save') : t('Add') }}</button>
+          <button class="btn-secondary w-full sm:w-auto" type="button" @click="emit('cancel')">{{ t('Cancel') }}</button>
         </div>
       </form>
     </div>
@@ -145,10 +145,10 @@ function inputValue(key: string) {
             </td>
             <td>
               <div class="flex flex-wrap gap-2">
-                <button class="btn-secondary" type="button" @click="emit('edit', item)">{{ t('Edit') }}</button>
+                <button class="btn-secondary btn-compact" type="button" @click="emit('edit', item)">{{ t('Edit') }}</button>
                 <button
                   v-if="config.allowDelete !== false"
-                  class="btn-secondary text-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-200"
+                  class="btn-danger btn-compact disabled:cursor-not-allowed disabled:opacity-50"
                   type="button"
                   :disabled="config.canDelete?.(item) !== true && config.canDelete?.(item) !== undefined"
                   :title="typeof config.canDelete?.(item) === 'string' ? t(String(config.canDelete?.(item))) : t('Delete')"
@@ -160,7 +160,12 @@ function inputValue(key: string) {
             </td>
           </tr>
           <tr v-if="!config.items().length">
-            <td :colspan="config.columns.length + 1" class="text-center">{{ t('No records found') }}</td>
+            <td :colspan="config.columns.length + 1">
+              <div class="empty-state">
+                <strong>{{ t('No records found') }}</strong>
+                <p>{{ t('No operational records are currently available for this table.') }}</p>
+              </div>
+            </td>
           </tr>
         </tbody>
       </table>

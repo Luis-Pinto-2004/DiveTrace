@@ -85,7 +85,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT COUNT(*)::bigint AS value FROM \"ManufacturingOrders\" WHERE \"Status\" <> 'Completed';"
+          "rawSql": "SELECT COUNT(*)::bigint AS value FROM \"ManufacturingOrders\" WHERE COALESCE(\"Status\", '') NOT IN ('Completed', 'Closed', 'Cancelled');"
         }
       ]
     },
@@ -153,7 +153,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT COUNT(*)::bigint AS value FROM \"ProductUnits\" WHERE \"Status\" IN ('Active', 'Rework', 'Blocked');"
+          "rawSql": "SELECT COUNT(*)::bigint AS value FROM \"ProductUnits\" WHERE COALESCE(\"Status\", '') IN ('Active', 'In Progress', 'Rework', 'Blocked');"
         }
       ]
     },
@@ -221,7 +221,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT COUNT(*)::bigint AS value FROM \"Supports\" WHERE \"Status\" <> 'Available';"
+          "rawSql": "SELECT COUNT(*)::bigint AS value FROM \"Supports\" WHERE COALESCE(\"Status\", '') IN ('Loaded', 'Blocked', 'Rework', 'Active');"
         }
       ]
     },
@@ -289,7 +289,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT COUNT(*)::bigint AS value FROM \"Nonconformities\" WHERE \"Status\" <> 'Closed';"
+          "rawSql": "SELECT COUNT(*)::bigint AS value FROM \"Nonconformities\" WHERE COALESCE(\"Status\", '') IN ('Open', 'In Progress');"
         }
       ]
     },
@@ -504,7 +504,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT \"Result\" AS result, COUNT(*) AS total FROM \"QualityResults\" GROUP BY \"Result\" ORDER BY \"Result\";"
+          "rawSql": "SELECT COALESCE(\"Result\", 'Unknown') AS result, COUNT(*) AS total FROM \"QualityResults\" GROUP BY COALESCE(\"Result\", 'Unknown') ORDER BY result;"
         }
       ]
     },
@@ -553,7 +553,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT pls.\"Name\" AS section, COUNT(pu.\"Id\") AS total FROM \"ProductionLineSections\" pls LEFT JOIN \"ProductUnits\" pu ON pu.\"CurrentSectionId\" = pls.\"Id\" GROUP BY pls.\"Name\", pls.\"Id\" ORDER BY pls.\"Id\";"
+          "rawSql": "SELECT COALESCE(pls.\"Name\", 'Unknown section') AS section, COUNT(pu.\"Id\") AS total FROM \"ProductionLineSections\" pls LEFT JOIN \"ProductUnits\" pu ON pu.\"CurrentSectionId\" = pls.\"Id\" GROUP BY COALESCE(pls.\"Name\", 'Unknown section'), pls.\"Id\" ORDER BY pls.\"Id\";"
         }
       ]
     },
@@ -568,7 +568,7 @@
       },
       "gridPos": {
         "h": 10,
-        "w": 24,
+        "w": 12,
         "x": 0,
         "y": 20
       },
@@ -598,7 +598,52 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT slh.\"DateTime\", s.\"SupportCode\", pls.\"Name\" AS section, slh.\"EventType\" FROM \"SupportLocalizationHistory\" slh LEFT JOIN \"Supports\" s ON s.\"Id\" = slh.\"SupportId\" LEFT JOIN \"ProductionLineSections\" pls ON pls.\"Id\" = slh.\"SectionId\" ORDER BY slh.\"DateTime\" DESC LIMIT 30;"
+          "rawSql": "SELECT slh.\"DateTime\", s.\"SupportCode\", COALESCE(pls.\"Name\", 'Unknown section') AS section, slh.\"EventType\" FROM \"SupportLocalizationHistory\" slh LEFT JOIN \"Supports\" s ON s.\"Id\" = slh.\"SupportId\" LEFT JOIN \"ProductionLineSections\" pls ON pls.\"Id\" = slh.\"SectionId\" ORDER BY slh.\"DateTime\" DESC LIMIT 30;"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "table",
+      "title": "Recent nonconformities",
+      "description": "Latest nonconformity records with severity and status.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 20
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": "",
+          "countRows": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT nc.\"CreatedAt\", pu.\"UnitCode\", COALESCE(nc.\"Severity\", 'Unknown') AS severity, COALESCE(nc.\"Status\", 'Unknown') AS status, COALESCE(nc.\"Description\", '-') AS description FROM \"Nonconformities\" nc LEFT JOIN \"ProductUnits\" pu ON pu.\"Id\" = nc.\"ProductUnitId\" ORDER BY nc.\"CreatedAt\" DESC LIMIT 30;"
         }
       ]
     }
@@ -621,6 +666,6 @@
   "timezone": "browser",
   "title": "DriveTrace Core - Executive Overview",
   "uid": "drivetrace-executive-overview",
-  "version": 1,
+  "version": 10,
   "weekStart": ""
 }

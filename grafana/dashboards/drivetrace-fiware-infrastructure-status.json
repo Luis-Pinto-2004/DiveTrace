@@ -334,7 +334,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT 'Support' AS entity_type, COUNT(*) AS total FROM \"Supports\" UNION ALL SELECT 'ProductUnit' AS entity_type, COUNT(*) AS total FROM \"ProductUnits\" UNION ALL SELECT 'Rack' AS entity_type, COUNT(*) AS total FROM \"Racks\" UNION ALL SELECT 'ProductionLineSection' AS entity_type, COUNT(*) AS total FROM \"ProductionLineSections\" UNION ALL SELECT 'Checkpoint' AS entity_type, COUNT(*) AS total FROM \"Checkpoints\" ORDER BY entity_type;"
+          "rawSql": "SELECT entity_type, total FROM (SELECT 'Support' AS entity_type, COUNT(*) AS total FROM \"Supports\" UNION ALL SELECT 'ProductUnit' AS entity_type, COUNT(*) AS total FROM \"ProductUnits\" UNION ALL SELECT 'Rack' AS entity_type, COUNT(*) AS total FROM \"Racks\" UNION ALL SELECT 'ProductionLineSection' AS entity_type, COUNT(*) AS total FROM \"ProductionLineSections\" UNION ALL SELECT 'Checkpoint' AS entity_type, COUNT(*) AS total FROM \"Checkpoints\") source ORDER BY total DESC, entity_type;"
         }
       ]
     },
@@ -379,14 +379,14 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT slh.\"DateTime\", s.\"SupportCode\", pls.\"Name\" AS section, slh.\"EventType\" FROM \"SupportLocalizationHistory\" slh LEFT JOIN \"Supports\" s ON s.\"Id\" = slh.\"SupportId\" LEFT JOIN \"ProductionLineSections\" pls ON pls.\"Id\" = slh.\"SectionId\" ORDER BY slh.\"DateTime\" DESC LIMIT 30;"
+          "rawSql": "SELECT slh.\"DateTime\", s.\"SupportCode\", COALESCE(pls.\"Name\", 'Unknown section') AS section, slh.\"EventType\" FROM \"SupportLocalizationHistory\" slh LEFT JOIN \"Supports\" s ON s.\"Id\" = slh.\"SupportId\" LEFT JOIN \"ProductionLineSections\" pls ON pls.\"Id\" = slh.\"SectionId\" ORDER BY slh.\"DateTime\" DESC LIMIT 30;"
         }
       ]
     },
     {
       "id": 7,
       "type": "text",
-      "title": "Datasource health indication",
+      "title": "Datasource health note and FIWARE scope",
       "description": "Operational note for demo context.",
       "datasource": {
         "type": "postgres",
@@ -404,7 +404,7 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "This dashboard intentionally reads from the **DriveTrace TimescaleDB** datasource (`drivetrace-timescaledb`).\n\n- If SQL panels render data, datasource connectivity is healthy.\n- FIWARE connectivity remains validated through API and `scripts/test-fiware.ps1`.\n- No direct Orion-LD datasource is used in Grafana for V1 stability."
+        "content": "This dashboard reads from **DriveTrace TimescaleDB** (`drivetrace-timescaledb`).\n\n- If SQL panels load, datasource connectivity is healthy.\n- FIWARE connectivity is validated through API endpoints and `scripts/test-fiware.ps1`.\n- In V1, Grafana does **not** connect directly to Orion-LD.\n- Entity publication status should be interpreted together with the FIWARE monitor page in the application."
       },
       "targets": []
     }
@@ -427,6 +427,6 @@
   "timezone": "browser",
   "title": "DriveTrace Core - FIWARE / Infrastructure Status",
   "uid": "drivetrace-fiware-infra-status",
-  "version": 1,
+  "version": 10,
   "weekStart": ""
 }

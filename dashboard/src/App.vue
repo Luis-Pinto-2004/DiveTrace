@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, type Ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 import logoUrl from './assets/branding/drivolution-logo.png'
 import lineDoorUrl from './assets/branding/production-line-door.png'
 import lineCarUrl from './assets/branding/production-line-car.png'
 import CrudPanel from './components/CrudPanel.vue'
+import GrafanaAnalyticsView from './components/GrafanaAnalyticsView.vue'
 import { api, apiGet, apiPost, baseURL as apiBaseUrl, createEntity, deleteEntity, getApiErrorMessage, updateEntity } from './services/api'
 import {
   demoCheckpoints,
@@ -179,6 +180,7 @@ function profileJobTitle(value: string | undefined) {
 function openProfileView() {
   activeView.value = 'profile'
   showUserMenu.value = false
+  closeMobileSidebar()
 }
 
 function startProfileEdit() {
@@ -439,6 +441,8 @@ function startEditUser(profile: UserProfile) {
 function logout() {
   setAuthenticatedUser(null)
   activeView.value = 'overview'
+  showUserMenu.value = false
+  closeMobileSidebar()
 }
 
 // On mount, read any persisted user and locale/theme preferences. If a
@@ -475,6 +479,7 @@ type ViewKey =
   | 'racks'
   | 'events'
   | 'fiware'
+  | 'analytics'
   | 'profile'
   | 'settings'
   | 'users'
@@ -586,12 +591,24 @@ const nav = [
   { key: 'racks', label: 'Racks / Post-line Logistics', icon: 'RK' },
   { key: 'events', label: 'Event Playback', icon: 'EV' },
   { key: 'fiware', label: 'FIWARE Context Monitor', icon: 'LD' },
+  { key: 'analytics', label: 'Grafana Analytics', icon: 'AN' },
   { key: 'predictions', label: 'Predictions', icon: 'PR' },
   { key: 'parameters', label: 'System Parameters', icon: 'CFG' },
   { key: 'users', label: 'Users', icon: 'USR' },
 ] as const
 
 const adminOnlyViews = new Set<ViewKey>(['users', 'parameters'])
+const navGroups = [
+  { key: 'Operation', items: ['overview', 'orders', 'racks'] },
+  { key: 'Traceability', items: ['units', 'supports', 'materials', 'quality'] },
+  { key: 'Monitoring', items: ['events', 'fiware', 'analytics', 'predictions'] },
+  { key: 'Administration', items: ['parameters', 'users'] },
+] as const
+function navByGroup(groupKey: typeof navGroups[number]['key']) {
+  const group = navGroups.find((candidate) => candidate.key === groupKey)
+  const groupItems = group?.items as readonly ViewKey[] | undefined
+  return groupItems ? nav.filter((item) => groupItems.includes(item.key) && canShowNav(item.key)) : []
+}
 
 function canShowNav(key: ViewKey) {
   return !adminOnlyViews.has(key) || canManageUsers.value
@@ -607,6 +624,7 @@ const viewTitles: Record<ViewKey, string> = {
   racks: 'Racks / Post-line Logistics',
   events: 'Event Playback',
   fiware: 'FIWARE Context Monitor',
+  analytics: 'Grafana Analytics',
   profile: 'Profile',
   settings: 'Settings',
   users: 'Users',
@@ -615,9 +633,28 @@ const viewTitles: Record<ViewKey, string> = {
 }
 
 const activeViewTitle = computed(() => viewTitles[activeView.value])
+const viewSubtitles: Record<ViewKey, string> = {
+  overview: 'Line overview subtitle',
+  orders: 'Manufacturing orders subtitle',
+  units: 'Product units subtitle',
+  supports: 'Supports tracking subtitle',
+  materials: 'Materials subtitle',
+  quality: 'Quality subtitle',
+  racks: 'Racks subtitle',
+  events: 'Events subtitle',
+  fiware: 'FIWARE subtitle',
+  analytics: 'Analytics subtitle',
+  profile: 'Profile subtitle',
+  settings: 'Settings subtitle',
+  users: 'Users subtitle',
+  parameters: 'Parameters subtitle',
+  predictions: 'Predictions subtitle',
+}
+const activeViewSubtitle = computed(() => viewSubtitles[activeView.value])
 
 function navIcon(key: ViewKey, icon: string) {
-  return key === 'overview' ? 'OV' : icon
+  if (key === 'overview') return 'OV'
+  return icon.length > 3 ? icon.slice(0, 3).toUpperCase() : icon
 }
 
 const sectionsById = computed(() => new Map(productionLineSections.value.map((section) => [section.id, section])))
@@ -626,6 +663,67 @@ const unitsById = computed(() => new Map(units.value.map((unit) => [unit.id, uni
 
 const activeUnits = computed(() => units.value.filter((unit) => ['Active', 'Blocked', 'Rework'].includes(unit.status)))
 const blockedUnits = computed(() => units.value.filter((unit) => ['Blocked', 'Rework', 'Scrap'].includes(unit.status) || unit.qualityStatus === 'FAIL'))
+const loadedSupports = computed(() => supports.value.filter((support) => support.status === 'Loaded'))
+const racksAvailable = computed(() => racks.value.filter((rack) => rack.status === 'Available'))
+const activeRackAssignments = computed(() => rackSupportAssignments.value.filter((assignment) => !assignment.dateTimeOut))
+const occupiedRacks = computed(() => new Set(activeRackAssignments.value.map((assignment) => assignment.rackId)).size)
+const postLineSupports = computed(() => supports.value.filter((support) => {
+  const section = support.currentSectionId ? sectionsById.value.get(support.currentSectionId) : undefined
+  return section?.sectionCode === 'SEC-RACK' || section?.sectionType?.toLowerCase().includes('log')
+}))
+const passQualityCount = computed(() => quality.value.filter((item) => item.result === 'PASS').length)
+const failQualityCount = computed(() => quality.value.filter((item) => item.result === 'FAIL').length)
+const passRate = computed(() => {
+  const total = passQualityCount.value + failQualityCount.value
+  return total > 0 ? Math.round((passQualityCount.value / total) * 100) : null
+})
+const topWipSection = computed(() => {
+  const sections = summary.value.wipBySection || []
+  return sections.length ? [...sections].sort((a, b) => b.productUnits - a.productUnits)[0] : null
+})
+const latestDataUpdate = computed(() => summary.value.generatedAt ? formatDate(summary.value.generatedAt) : '-')
+const fiwareCoherenceOk = computed(() => fiwareContext.value.entityCount === fiwareContext.value.relationalSnapshotCount && fiwareContext.value.brokerReachable)
+const activeUserCount = computed(() => users.value.filter((profile) => profile.active).length)
+const administratorCount = computed(() => users.value.filter((profile) => profile.roleKey === 'admin').length)
+const operatorCount = computed(() => users.value.filter((profile) => profile.roleKey === 'operator').length)
+const rackUtilization = computed(() => racks.value.length ? Math.round((occupiedRacks.value / racks.value.length) * 100) : 0)
+const overviewKpis = computed(() => [
+  { key: 'orders', label: 'Open orders', value: summary.value.counts.openOrders, detail: 'Orders requiring operational follow-up', tone: 'tone-info' },
+  { key: 'active-units', label: 'Active units', value: summary.value.counts.activeUnits, detail: 'Traceable units currently in flow', tone: 'tone-info' },
+  { key: 'supports', label: 'Active supports', value: summary.value.counts.activeSupports, detail: 'Supports carrying operational WIP', tone: 'tone-muted' },
+  { key: 'attention', label: 'Units requiring attention', value: blockedUnits.value.length, detail: 'Blocked, rework or failed quality units.', tone: blockedUnits.value.length ? 'tone-warning' : 'tone-success' },
+  { key: 'fiware', label: 'FIWARE coherence', value: fiwareCoherenceOk.value ? t('OK') : t('Review'), detail: fiwareContext.value.source || 'Orion-LD', tone: fiwareCoherenceOk.value ? 'tone-success' : 'tone-warning' },
+])
+const rackKpis = computed(() => [
+  { key: 'available', label: 'Available racks', value: racksAvailable.value.length, detail: 'Racks available for post-line storage', tone: 'tone-success' },
+  { key: 'occupied', label: 'Occupied racks', value: occupiedRacks.value, detail: `${rackUtilization.value}% ${t('Rack utilization')}`, tone: occupiedRacks.value ? 'tone-info' : 'tone-muted' },
+  { key: 'assignments', label: 'Active rack assignments', value: activeRackAssignments.value.length, detail: 'Temporal rack-support logistics links', tone: 'tone-info' },
+  { key: 'post-line', label: 'Supports in post-line', value: postLineSupports.value.length, detail: 'Supports currently in rack logistics area', tone: 'tone-muted' },
+])
+const fiwareStatusCards = computed(() => [
+  { key: 'connection', label: 'Connection status', value: fiwareConnectionText(), detail: fiwareContext.value.orionLdBaseUrl || 'Orion-LD', tone: fiwareContext.value.brokerReachable ? 'tone-success' : 'tone-warning' },
+  { key: 'source', label: 'Source', value: fiwareSourceText(), detail: 'Current context provider', tone: 'tone-info' },
+  { key: 'entities', label: 'Entities', value: fiwareContext.value.entityCount, detail: `${fiwareContext.value.relationalSnapshotCount} ${t('relational records expected')}`, tone: fiwareCoherenceOk.value ? 'tone-success' : 'tone-warning' },
+  { key: 'updated', label: 'Last update', value: fiwareContext.value.timestamp ? formatDate(fiwareContext.value.timestamp) : '-', detail: fiwareCoherenceOk.value ? t('Context coherence confirmed') : t('Context review recommended'), tone: fiwareCoherenceOk.value ? 'tone-success' : 'tone-warning' },
+])
+const userStatusCards = computed(() => [
+  { key: 'total', label: 'Existing users', value: users.value.length, detail: 'Local dashboard users', tone: 'tone-info' },
+  { key: 'active', label: 'Active profiles', value: activeUserCount.value, detail: 'Profiles allowed to access the dashboard', tone: 'tone-success' },
+  { key: 'admins', label: 'Administrators', value: administratorCount.value, detail: 'Profiles with management permissions', tone: 'tone-warning' },
+  { key: 'operators', label: 'Operators', value: operatorCount.value, detail: 'Operational profiles', tone: 'tone-muted' },
+])
+const analyticsOperationalData = computed(() => ({
+  summary: summary.value,
+  orders: orders.value,
+  units: units.value,
+  supports: supports.value,
+  racks: racks.value,
+  rackSupportAssignments: rackSupportAssignments.value,
+  quality: quality.value,
+  nonconformities: nonconformities.value,
+  reworkRecords: reworkRecords.value,
+  supportHistory: supportHistory.value,
+}))
 
 function statusClass(status: string | undefined) {
   const value = (status || '').toLowerCase()
@@ -648,6 +746,26 @@ function setTheme(newTheme: string) {
 // bar. Toggled when the avatar/button is clicked. The menu is hidden when
 // navigating to another view or when logging out.
 const showUserMenu = ref(false)
+const mobileSidebarOpen = ref(false)
+let desktopMediaQuery: MediaQueryList | null = null
+
+function closeMobileSidebar() {
+  mobileSidebarOpen.value = false
+}
+
+function toggleMobileSidebar() {
+  mobileSidebarOpen.value = !mobileSidebarOpen.value
+}
+
+function navigateTo(view: ViewKey) {
+  activeView.value = view
+  showUserMenu.value = false
+  closeMobileSidebar()
+}
+
+watch(activeView, () => {
+  showUserMenu.value = false
+})
 
 function sectionName(sectionId?: number) {
   return sectionId ? translateSectionName(sectionsById.value.get(sectionId)?.name || `Section ${sectionId}`) : t('Not assigned')
@@ -1688,7 +1806,24 @@ async function publishFiware() {
   }
 }
 
-onMounted(loadData)
+function handleDesktopMediaChange(event: MediaQueryListEvent | MediaQueryList) {
+  if (event.matches) closeMobileSidebar()
+}
+
+onMounted(() => {
+  void loadData()
+  if (typeof window !== 'undefined' && 'matchMedia' in window) {
+    desktopMediaQuery = window.matchMedia('(min-width: 1024px)')
+    handleDesktopMediaChange(desktopMediaQuery)
+    desktopMediaQuery.addEventListener('change', handleDesktopMediaChange)
+  }
+})
+
+onBeforeUnmount(() => {
+  if (desktopMediaQuery) {
+    desktopMediaQuery.removeEventListener('change', handleDesktopMediaChange)
+  }
+})
 </script>
 
 <template>
@@ -1701,7 +1836,7 @@ onMounted(loadData)
       <div class="w-full max-w-md card p-8">
         <div class="mb-6 text-center">
           <img :src="logoUrl" alt="DRIVOLUTION logo" class="mx-auto h-20 w-auto object-contain" />
-          <h1 class="mt-4 text-2xl font-black tracking-tight">{{ isRegistering ? t('Register new user') : t('Login') }}</h1>
+          <h1 class="mt-4 text-2xl font-black tracking-normal">{{ isRegistering ? t('Register new user') : t('Login') }}</h1>
           <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">DriveTrace Core · DRIVOLUTION WP3</p>
         </div>
         <form v-if="!isRegistering" @submit.prevent="login" class="space-y-4">
@@ -1736,31 +1871,34 @@ onMounted(loadData)
     <!-- MAIN APPLICATION -->
     <div v-else class="app-shell">
       <!-- SIDEBAR -->
-      <aside class="app-sidebar">
+      <aside class="app-sidebar" :class="{ 'app-sidebar-open': mobileSidebarOpen }">
         <div class="app-sidebar-brand">
-          <img :src="logoUrl" alt="DRIVOLUTION logo" class="mx-auto h-12 w-auto max-w-full object-contain" />
+          <button class="app-sidebar-close lg:hidden" type="button" @click="closeMobileSidebar" :aria-label="t('Close navigation')">×</button>
+          <img :src="logoUrl" alt="DRIVOLUTION logo" class="h-11 w-auto max-w-full object-contain" />
           <h1>DriveTrace Core</h1>
+          <p>{{ t('Industrial WIP command center') }}</p>
         </div>
         <div class="app-sidebar-nav">
           <nav>
-          <button
-            v-for="item in nav"
-            v-show="canShowNav(item.key)"
-            :key="item.key"
-            class="nav-item"
-            :class="activeView === item.key ? 'nav-item-active' : ''"
-            @click="activeView = item.key; showUserMenu = false"
-          >
-            <span class="nav-icon">{{ navIcon(item.key, item.icon) }}</span>
-            <span class="nav-label">{{ t(item.label) }}</span>
-          </button>
+            <div v-for="group in navGroups" :key="group.key" v-show="navByGroup(group.key).length" class="nav-group">
+              <p class="nav-group-title">{{ t(group.key) }}</p>
+              <button
+                v-for="item in navByGroup(group.key)"
+                :key="item.key"
+                class="nav-item"
+                :class="activeView === item.key ? 'nav-item-active' : ''"
+                @click="navigateTo(item.key)"
+              >
+                <span class="nav-icon">{{ navIcon(item.key, item.icon) }}</span>
+                <span class="nav-label">{{ t(item.label) }}</span>
+              </button>
+            </div>
           </nav>
         </div>
         <!-- Quick settings / user info section replacing the academic scope block -->
         <div class="app-sidebar-profile">
-          <p class="font-semibold text-slate-950 dark:text-slate-50">{{ t('Active profile') }}: {{ user?.name }}</p>
-          <p class="mt-1">{{ t('Language') }}: {{ locale === 'pt-PT' ? t('Portuguese') : t('English') }}</p>
-          <p class="mt-1">{{ t('Theme') }}: {{ theme === 'dark' ? t('Dark') : t('Light') }}</p>
+          <p class="font-black text-slate-950 dark:text-slate-50">{{ user?.name }}</p>
+          <p class="mt-1 text-xs font-semibold">{{ user ? getRoleLabel(user.roleKey) : '' }} · {{ locale === 'pt-PT' ? t('Portuguese') : t('English') }}</p>
           <div class="app-sidebar-profile-meta">
             <p>{{ t('WIP automóvel') }}</p>
             <p>{{ t('Suporte como âncora intra-linha') }}</p>
@@ -1768,11 +1906,12 @@ onMounted(loadData)
           </div>
           <div class="app-sidebar-profile-actions">
             <button class="btn-secondary flex-1" @click="openProfileView">{{ t('Profile') }}</button>
-            <button class="btn-secondary flex-1" @click="activeView = 'settings'">{{ t('Settings') }}</button>
+            <button class="btn-secondary flex-1" @click="navigateTo('settings')">{{ t('Settings') }}</button>
           </div>
           <button class="btn-secondary mt-2 w-full" @click="logout">{{ t('Logout') }}</button>
         </div>
       </aside>
+      <button v-if="mobileSidebarOpen" type="button" class="app-sidebar-overlay lg:hidden" @click="closeMobileSidebar" :aria-label="t('Close navigation')"></button>
 
       <main class="app-main">
         <!-- TOP BAR -->
@@ -1782,36 +1921,45 @@ onMounted(loadData)
               <div class="flex min-w-0 flex-1 items-start gap-3 sm:gap-4">
                 <img :src="logoUrl" alt="DRIVOLUTION logo" class="h-10 w-10 shrink-0 rounded-xl object-contain lg:hidden" />
                 <div class="min-w-0">
-                  <p class="text-xs font-bold uppercase tracking-[0.16em] text-drivolution-700 dark:text-drivolution-300">{{ t('WIP Traceability and Monitoring Platform') }}</p>
-                  <h2 class="mt-1 max-w-3xl text-xl font-black leading-tight tracking-tight sm:text-2xl">{{ t(activeViewTitle) }}</h2>
+                  <p class="text-xs font-bold uppercase tracking-normal text-drivolution-700 dark:text-drivolution-300">{{ t('WIP Traceability and Monitoring Platform') }}</p>
+                  <h2 class="mt-1 max-w-3xl text-xl font-black leading-tight tracking-normal sm:text-2xl">{{ t(activeViewTitle) }}</h2>
+                  <p class="mt-1 max-w-3xl text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">{{ t(activeViewSubtitle) }}</p>
                 </div>
               </div>
-              <div class="relative flex w-full flex-wrap items-center gap-2 sm:gap-3 2xl:w-auto 2xl:justify-end">
-                <span class="w-full rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-200 sm:w-auto">{{ t(apiStatus) }}</span>
-                <button class="btn-secondary" @click="() => loadData()">{{ t('Refresh') }}</button>
-                <select v-model="locale" class="min-w-[8.5rem] rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200">
-                  <option value="pt-PT">{{ t('Portuguese') }}</option>
-                  <option value="en">{{ t('English') }}</option>
-                </select>
-                <button class="btn-secondary" @click="toggleTheme">
-                  {{ theme === 'dark' ? t('Light mode') : t('Dark mode') }}
-                </button>
-                <div class="relative sm:ml-auto 2xl:ml-0">
-                  <button @click="showUserMenu = !showUserMenu" class="flex items-center gap-2 rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm dark:bg-slate-700 dark:text-slate-200">
+              <div class="min-w-0 space-y-3 2xl:w-[43rem]">
+                <div class="topbar-status-grid">
+                  <div class="system-pill"><span>{{ t('API status') }}</span><strong>{{ t(apiStatus) }}</strong></div>
+                  <div class="system-pill"><span>{{ t('Last update') }}</span><strong>{{ latestDataUpdate }}</strong></div>
+                  <div class="system-pill"><span>{{ t('Mode') }}</span><strong>{{ theme === 'dark' ? t('Dark') : t('Light') }}</strong></div>
+                  <div class="system-pill"><span>{{ t('Profile') }}</span><strong>{{ user?.username }}</strong></div>
+                </div>
+                <div class="relative flex min-w-0 w-full flex-wrap items-center gap-2 sm:gap-3 2xl:justify-end">
+                  <button class="btn-secondary lg:hidden" type="button" @click="toggleMobileSidebar">{{ mobileSidebarOpen ? t('Close navigation') : t('Open navigation') }}</button>
+                  <button class="btn-primary" @click="() => loadData()">{{ t('Refresh') }}</button>
+                  <select v-model="locale" class="min-w-[8.5rem] rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
+                    <option value="pt-PT">{{ t('Portuguese') }}</option>
+                    <option value="en">{{ t('English') }}</option>
+                  </select>
+                  <button class="btn-secondary" @click="toggleTheme">
+                    {{ theme === 'dark' ? t('Light mode') : t('Dark mode') }}
+                  </button>
+                  <div class="relative sm:ml-auto 2xl:ml-0">
+                    <button @click="showUserMenu = !showUserMenu" class="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200">
                     <span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-drivolution-500 text-xs font-black text-white">{{ user?.name.charAt(0) }}</span>
                     <span class="hidden sm:inline-block">{{ user?.name }}</span>
-                  </button>
-                  <div v-if="showUserMenu" class="absolute right-0 z-30 mt-2 w-44 rounded-2xl border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-600 dark:bg-slate-700">
-                    <button class="w-full rounded-xl px-4 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-600" @click="openProfileView">{{ t('Profile') }}</button>
-                    <button class="w-full rounded-xl px-4 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-600" @click="activeView = 'settings'; showUserMenu = false">{{ t('Settings') }}</button>
-                    <button class="w-full rounded-xl px-4 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-600" @click="logout(); showUserMenu = false">{{ t('Logout') }}</button>
+                    </button>
+                    <div v-if="showUserMenu" class="absolute right-0 z-30 mt-2 w-44 rounded-lg border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                      <button class="w-full rounded-lg px-4 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800" @click="openProfileView">{{ t('Profile') }}</button>
+                      <button class="w-full rounded-lg px-4 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800" @click="navigateTo('settings')">{{ t('Settings') }}</button>
+                      <button class="w-full rounded-lg px-4 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800" @click="logout(); showUserMenu = false">{{ t('Logout') }}</button>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
             <!-- Mobile tab navigation -->
             <div class="mt-4 flex gap-2 overflow-x-auto pb-1 lg:hidden">
-              <button v-for="item in nav" v-show="canShowNav(item.key)" :key="item.key" class="mobile-tab" :class="activeView === item.key ? 'mobile-tab-active' : ''" @click="activeView = item.key; showUserMenu = false">
+              <button v-for="item in nav" v-show="canShowNav(item.key)" :key="item.key" class="mobile-tab" :class="activeView === item.key ? 'mobile-tab-active' : ''" @click="navigateTo(item.key)">
                 {{ t(item.label) }}
               </button>
             </div>
@@ -1829,7 +1977,7 @@ onMounted(loadData)
                     <div class="flex items-center gap-4">
                       <span class="inline-flex h-14 w-14 items-center justify-center rounded-full bg-drivolution-500 text-xl font-black text-white">{{ user?.name?.charAt(0)?.toUpperCase() || 'U' }}</span>
                       <div>
-                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-drivolution-700 dark:text-drivolution-300">{{ t('Profile') }}</p>
+                        <p class="text-xs font-bold uppercase tracking-normal text-drivolution-700 dark:text-drivolution-300">{{ t('Profile') }}</p>
                         <h3 class="mt-1 text-2xl font-black text-slate-950 dark:text-white">{{ user?.name }}</h3>
                         <p class="mt-1 text-sm font-semibold text-slate-600 dark:text-slate-300">{{ user ? getRoleLabel(user.roleKey) : '' }}</p>
                       </div>
@@ -1838,8 +1986,8 @@ onMounted(loadData)
                   </div>
 
                   <div class="mt-5">
-                    <h4 class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{{ t('Account information') }}</h4>
-                    <div class="mt-3 divide-y divide-slate-200 overflow-hidden rounded-2xl border border-slate-200 dark:divide-slate-700 dark:border-slate-700">
+                    <h4 class="text-xs font-bold uppercase tracking-normal text-slate-500 dark:text-slate-400">{{ t('Account information') }}</h4>
+                    <div class="mt-3 divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200 dark:divide-slate-700 dark:border-slate-700">
                       <div class="grid gap-3 px-4 py-4 sm:grid-cols-[10rem_minmax(0,1fr)_auto] sm:items-center">
                         <p class="text-sm font-bold text-slate-600 dark:text-slate-300">{{ t('Name') }}</p>
                         <div>
@@ -1902,8 +2050,8 @@ onMounted(loadData)
                     </div>
                   </div>
 
-                  <p v-if="profileError" class="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 dark:border-red-700/60 dark:bg-red-900/30 dark:text-red-100">{{ profileError }}</p>
-                  <p v-if="profileSuccess" class="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 dark:border-emerald-700/60 dark:bg-emerald-900/30 dark:text-emerald-100">{{ profileSuccess }}</p>
+                  <p v-if="profileError" class="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 dark:border-red-700/60 dark:bg-red-900/30 dark:text-red-100">{{ profileError }}</p>
+                  <p v-if="profileSuccess" class="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 dark:border-emerald-700/60 dark:bg-emerald-900/30 dark:text-emerald-100">{{ profileSuccess }}</p>
 
                   <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
                     <button v-if="isEditingProfile" class="btn-primary sm:order-2" @click="saveProfileChanges">{{ t('Save changes') }}</button>
@@ -1936,17 +2084,17 @@ onMounted(loadData)
                 <p class="text-sm text-slate-600 dark:text-slate-300">{{ t('Clear mode is the default. Dark mode, language and session preferences are persisted locally.') }}</p>
               </div>
               <div class="grid gap-4 md:grid-cols-2">
-                <div class="rounded-2xl border border-slate-200 p-4 dark:border-slate-700">
+                <div class="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
                   <h4 class="font-bold">{{ t('Application information') }}</h4>
                   <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">DriveTrace Core</p>
                   <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">{{ t('Active profile') }}: {{ user?.username }} · {{ user ? getRoleLabel(user.roleKey) : '' }}</p>
                 </div>
-                <div class="rounded-2xl border border-slate-200 p-4 dark:border-slate-700">
+                <div class="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
                   <h4 class="font-bold">{{ t('API URL') }}</h4>
                   <p class="mt-2 break-all text-sm font-semibold text-slate-600 dark:text-slate-300">{{ apiBaseUrl }}</p>
                 </div>
               </div>
-              <div class="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-900 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-100">
+              <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-900 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-100">
                 <p>{{ t('Demo/local authentication') }}</p>
                 <p class="mt-1 font-medium">{{ t('The API is not protected by JWT yet. Access control is local to the dashboard for this V1.') }}</p>
               </div>
@@ -1963,7 +2111,7 @@ onMounted(loadData)
 
               <section v-if="activeView === 'supports'" class="card overflow-hidden p-5 sm:p-6">
                 <div class="section-heading"><div><p>{{ t('Physical tracking') }}</p><h3>{{ t('Support is the intra-line anchor') }}</h3></div></div>
-                <img :src="lineDoorUrl" alt="Support-based line" class="mt-5 w-full max-w-full rounded-3xl border border-slate-200 object-contain dark:border-slate-700" />
+                <img :src="lineDoorUrl" alt="Support-based line" class="mt-5 max-h-[22rem] w-full max-w-full rounded-lg border border-slate-200 bg-slate-50 object-contain p-2 dark:border-slate-700 dark:bg-slate-900/30" />
               </section>
 
               <section v-if="activeView === 'quality'" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -1972,14 +2120,53 @@ onMounted(loadData)
                 <div class="metric-card"><span>{{ t('FAIL') }}</span><strong>{{ quality.filter((item) => item.result === 'FAIL').length }}</strong></div>
               </section>
 
-              <section v-if="activeView === 'racks'" class="grid gap-5 2xl:grid-cols-[0.95fr_1.05fr]">
-                <div class="card p-5 sm:p-6">
-                  <div class="section-heading"><div><p>{{ t('Post-line logistics') }}</p><h3>{{ t('Racks are not the WIP anchor') }}</h3></div></div>
-                  <p class="mt-4 text-slate-600 dark:text-slate-300">{{ t('Racks only aggregate supports after the controlled line. The support remains the traceability reference for intra-line WIP.') }}</p>
+              <section v-if="activeView === 'racks'" class="space-y-5 lg:space-y-6">
+                <div class="ops-hero">
+                  <div class="grid gap-6 xl:grid-cols-[1fr_0.9fr] xl:items-center">
+                    <div class="min-w-0">
+                      <p class="text-sm font-bold uppercase tracking-normal text-drivolution-700">{{ t('Post-line logistics') }}</p>
+                      <h3 class="mt-2 text-3xl font-black leading-tight tracking-normal text-slate-950 dark:text-white sm:text-4xl">{{ t('Racks / Post-line Logistics') }}</h3>
+                      <p class="mt-3 max-w-3xl text-sm leading-7 text-slate-600 dark:text-slate-300 sm:text-base">
+                        {{ t('Racks only aggregate supports after the controlled line. The support remains the traceability reference for intra-line WIP.') }}
+                      </p>
+                      <div class="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                        <article v-for="metric in rackKpis" :key="metric.key" class="kpi-card" :class="metric.tone">
+                          <span>{{ t(metric.label) }}</span>
+                          <strong>{{ metric.value }}</strong>
+                          <p>{{ t(metric.detail) }}</p>
+                        </article>
+                      </div>
+                    </div>
+                    <div class="ops-hero-visual">
+                      <img :src="lineCarUrl" alt="Automotive production line" class="max-h-[19rem] w-full rounded-lg bg-white object-contain p-2 dark:bg-slate-900" />
+                      <p class="mt-3 text-xs font-bold uppercase tracking-normal text-slate-500 dark:text-slate-400">{{ t('Rack as post-line logistics') }}</p>
+                    </div>
+                  </div>
                 </div>
-                <div class="card overflow-hidden p-5 sm:p-6">
-                  <div class="section-heading"><div><p>{{ t('Extended view') }}</p><h3>{{ t('Subproduct to final assembly concept') }}</h3></div></div>
-                  <img :src="lineCarUrl" alt="Automotive production line" class="mt-5 w-full max-w-full rounded-3xl border border-slate-200 object-contain dark:border-slate-700" />
+                <div class="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
+                  <section class="industrial-panel">
+                    <div class="section-heading"><div><p>{{ t('Operational meaning') }}</p><h3>{{ t('What this page controls') }}</h3></div></div>
+                    <ul class="technical-list">
+                      <li>{{ t('Racks aggregate supports after the controlled line.') }}</li>
+                      <li>{{ t('Primary traceability remains attached to support and product unit.') }}</li>
+                      <li>{{ t('Rack-support association is logistical, temporal and auditable.') }}</li>
+                    </ul>
+                  </section>
+                  <section class="industrial-panel">
+                    <div class="section-heading"><div><p>{{ t('Operational decision') }}</p><h3>{{ t('Post-line capacity reading') }}</h3></div></div>
+                    <div class="decision-grid mt-4">
+                      <article class="decision-card" :class="rackUtilization > 75 ? 'tone-warning' : 'tone-success'">
+                        <span>{{ t('Capacity') }}</span>
+                        <strong>{{ rackUtilization }}%</strong>
+                        <p>{{ rackUtilization > 75 ? t('Rack occupation is high; validate outbound logistics.') : t('Post-line rack capacity remains available.') }}</p>
+                      </article>
+                      <article class="decision-card tone-info">
+                        <span>{{ t('Active assignments') }}</span>
+                        <strong>{{ activeRackAssignments.length }}</strong>
+                        <p>{{ t('Use the assignment table to audit rack entry and exit timestamps.') }}</p>
+                      </article>
+                    </div>
+                  </section>
                 </div>
               </section>
 
@@ -2024,13 +2211,13 @@ onMounted(loadData)
 
             <!-- OVERVIEW (DASHBOARD) VIEW -->
             <div v-if="activeView === 'overview'" class="space-y-5 lg:space-y-6">
-              <section class="hero-card overflow-hidden">
-                <div class="grid gap-6 2xl:grid-cols-[1.1fr_0.9fr] 2xl:items-center">
+              <section class="ops-hero">
+                <div class="grid gap-6 xl:grid-cols-[1.1fr_0.9fr] xl:items-center">
                   <div class="min-w-0">
-                    <p class="text-sm font-bold uppercase tracking-[0.18em] text-drivolution-700">{{ t('Automotive WIP traceability') }}</p>
-                    <h3 class="mt-3 max-w-3xl text-3xl font-black leading-tight tracking-tight sm:text-4xl">{{ t('DriveTrace Core monitors product units through their physical supports.') }}</h3>
+                    <p class="text-sm font-bold uppercase tracking-normal text-drivolution-700">{{ t('Automotive WIP traceability') }}</p>
+                    <h3 class="mt-3 max-w-3xl text-3xl font-black leading-tight tracking-normal sm:text-4xl">{{ t('Line state command overview') }}</h3>
                     <p class="mt-4 max-w-2xl text-sm leading-7 text-slate-600 dark:text-slate-300 sm:text-base">
-                      {{ t('The V1 uses a controlled door production line: raw materials, support assignment, stamping, welding, painting, quality control and post-line rack storage.') }}
+                      {{ t('Line state command overview description') }}
                     </p>
                     <div class="mt-6 flex flex-wrap gap-3">
                       <span class="domain-pill">{{ t('ProductUnit-centred traceability') }}</span>
@@ -2039,18 +2226,42 @@ onMounted(loadData)
                       <span class="domain-pill">{{ t('Material lot genealogy') }}</span>
                     </div>
                   </div>
-                  <img :src="lineDoorUrl" alt="Door production line" class="w-full max-w-xl justify-self-center rounded-3xl border border-slate-200 bg-white object-contain shadow-sm dark:border-slate-700 dark:bg-slate-800" />
+                  <div class="ops-hero-visual">
+                    <img :src="lineDoorUrl" alt="Door production line" class="max-h-[20rem] w-full max-w-xl justify-self-center rounded-lg bg-white object-contain p-2 dark:bg-slate-900" />
+                    <div class="mt-3 grid gap-2 sm:grid-cols-3">
+                      <span class="system-pill"><span>{{ t('Highest WIP') }}</span><strong>{{ topWipSection ? translateSectionName(topWipSection.section) : '-' }}</strong></span>
+                      <span class="system-pill"><span>{{ t('PASS rate') }}</span><strong>{{ passRate === null ? '-' : `${passRate}%` }}</strong></span>
+                      <span class="system-pill"><span>{{ t('Loaded supports') }}</span><strong>{{ loadedSupports.length }}</strong></span>
+                    </div>
+                  </div>
                 </div>
               </section>
-              <section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
-                <div class="metric-card"><span>{{ t('Open orders') }}</span><strong>{{ summary.counts.openOrders }}</strong></div>
-                <div class="metric-card"><span>{{ t('Active units') }}</span><strong>{{ summary.counts.activeUnits }}</strong></div>
-                <div class="metric-card"><span>{{ t('Active supports') }}</span><strong>{{ summary.counts.activeSupports }}</strong></div>
-                <div class="metric-card"><span>{{ t('Quality issues') }}</span><strong>{{ summary.counts.qualityIssues }}</strong></div>
-                <div class="metric-card"><span>{{ t('Rack assignments') }}</span><strong>{{ summary.counts.rackAssignments }}</strong></div>
+              <section class="kpi-grid">
+                <article v-for="metric in overviewKpis" :key="metric.key" class="kpi-card" :class="metric.tone">
+                  <span>{{ t(metric.label) }}</span>
+                  <strong>{{ metric.value }}</strong>
+                  <p>{{ t(metric.detail) }}</p>
+                </article>
+              </section>
+              <section class="decision-grid">
+                <article class="decision-card" :class="blockedUnits.length ? 'tone-warning' : 'tone-success'">
+                  <span>{{ t('Immediate attention') }}</span>
+                  <strong>{{ blockedUnits.length ? `${blockedUnits.length} ${t('units requiring attention')}` : t('No blocked units right now.') }}</strong>
+                  <p>{{ blockedUnits.length ? t('Prioritize containment before releasing more WIP.') : t('No immediate containment action is required from current data.') }}</p>
+                </article>
+                <article class="decision-card tone-info">
+                  <span>{{ t('Flow WIP') }}</span>
+                  <strong>{{ topWipSection ? `${translateSectionName(topWipSection.section)} · ${topWipSection.productUnits}` : t('No data available') }}</strong>
+                  <p>{{ t('Validate capacity and exit rhythm at the highest WIP section.') }}</p>
+                </article>
+                <article class="decision-card" :class="fiwareCoherenceOk ? 'tone-success' : 'tone-warning'">
+                  <span>{{ t('Context coherence') }}</span>
+                  <strong>{{ fiwareCoherenceOk ? t('Context coherence confirmed') : t('Context review recommended') }}</strong>
+                  <p>{{ t('Compare relational snapshot and Orion-LD hot context before demonstrations.') }}</p>
+                </article>
               </section>
               <section class="grid gap-5 2xl:grid-cols-[1.1fr_0.9fr]">
-                <div class="card p-5 sm:p-6">
+                <div class="industrial-panel">
                   <div class="section-heading">
                     <div>
                       <p>{{ t('Line state') }}</p>
@@ -2059,9 +2270,9 @@ onMounted(loadData)
                   </div>
                   <div class="mt-5 space-y-4">
                     <div v-for="section in summary.wipBySection" :key="section.sectionCode" class="line-step">
-                      <div>
+                      <div class="min-w-0">
                         <p class="font-bold text-slate-950 dark:text-slate-50">{{ translateSectionName(section.section) }}</p>
-                        <p class="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">{{ translateSectionName(section.sectionType) }}</p>
+                        <p class="text-xs uppercase tracking-normal text-slate-500 dark:text-slate-400">{{ translateSectionName(section.sectionType) }}</p>
                       </div>
                       <div class="flex w-full items-center gap-3 sm:min-w-40">
                         <div class="h-2 flex-1 rounded-full bg-slate-200 dark:bg-slate-700">
@@ -2072,7 +2283,7 @@ onMounted(loadData)
                     </div>
                   </div>
                 </div>
-                <div class="card p-5 sm:p-6">
+                <div class="industrial-panel">
                   <div class="section-heading">
                     <div>
                       <p>{{ t('Quality') }}</p>
@@ -2085,13 +2296,14 @@ onMounted(loadData)
                         <strong>{{ alert.unitCode }}</strong>
                         <span :class="statusClass(alert.status)">{{ translateStatus(alert.status) }}</span>
                       </div>
-                      <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">{{ alert.description }}</p>
-                        <p class="mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">{{ translateStatus(alert.severity) }}</p>
+                      <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">{{ t(alert.description) }}</p>
+                        <p class="mt-2 text-xs font-semibold uppercase tracking-normal text-slate-400 dark:text-slate-500">{{ translateStatus(alert.severity) }}</p>
                     </div>
+                    <p v-if="!summary.qualityAlerts.length" class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800 dark:border-emerald-700/70 dark:bg-emerald-900/30 dark:text-emerald-100">{{ t('No blocked units right now.') }}</p>
                   </div>
                 </div>
               </section>
-              <section class="card p-5 sm:p-6">
+              <section class="industrial-panel">
                 <div class="section-heading">
                   <div>
                     <p>{{ t('Recent events') }}</p>
@@ -2164,12 +2376,12 @@ onMounted(loadData)
             <div v-if="false && activeView === 'supports'" class="space-y-6">
               <section class="card overflow-hidden p-6">
                 <div class="section-heading"><div><p>{{ t('Physical tracking') }}</p><h3>{{ t('Support is the intra-line anchor') }}</h3></div></div>
-                <img :src="lineDoorUrl" alt="Support-based line" class="mt-5 rounded-3xl border border-slate-200 dark:border-slate-700" />
+                <img :src="lineDoorUrl" alt="Support-based line" class="mt-5 rounded-lg border border-slate-200 dark:border-slate-700" />
               </section>
               <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <div v-for="support in supports" :key="support.id" class="card p-5">
                   <div class="flex items-start justify-between gap-4">
-                    <div><p class="text-sm font-bold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">{{ t('Support') }}</p><h3 class="mt-1 text-xl font-black">{{ support.supportCode }}</h3></div>
+                    <div><p class="text-sm font-bold uppercase tracking-normal text-slate-500 dark:text-slate-400">{{ t('Support') }}</p><h3 class="mt-1 text-xl font-black">{{ support.supportCode }}</h3></div>
                     <span :class="statusClass(support.status)">{{ translateStatus(support.status) }}</span>
                   </div>
                   <p class="mt-4 text-sm text-slate-600 dark:text-slate-300">{{ t('Current section') }}</p>
@@ -2246,12 +2458,12 @@ onMounted(loadData)
               </section>
               <section class="card overflow-hidden p-6">
                 <div class="section-heading"><div><p>{{ t('Extended view') }}</p><h3>{{ t('Subproduct to final assembly concept') }}</h3></div></div>
-                <img :src="lineCarUrl" alt="Automotive production line" class="mt-5 rounded-3xl border border-slate-200 dark:border-slate-700" />
+                <img :src="lineCarUrl" alt="Automotive production line" class="mt-5 rounded-lg border border-slate-200 dark:border-slate-700" />
               </section>
             </div>
 
             <!-- EVENTS VIEW -->
-            <div v-if="activeView === 'events'" class="grid gap-5 2xl:grid-cols-2">
+            <div v-if="activeView === 'events'" class="grid gap-5 xl:grid-cols-2">
               <section class="card p-5 sm:p-6">
                 <div class="section-heading"><div><p>{{ t('Simulation') }}</p><h3>{{ t('Execute event playback') }}</h3></div></div>
                 <p class="mt-3 text-slate-600 dark:text-slate-300">{{ t('Advances supports across the nominal door production line and updates the audit trail.') }}</p>
@@ -2269,7 +2481,7 @@ onMounted(loadData)
                 </div>
                 <button class="btn-primary mt-5" @click="injectManualEvent">{{ t('Inject manual event') }}</button>
               </section>
-              <p v-if="eventStatus" class="2xl:col-span-2 rounded-2xl border border-slate-200 bg-white p-4 font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">{{ eventStatus }}</p>
+              <p v-if="eventStatus" class="2xl:col-span-2 rounded-lg border border-slate-200 bg-white p-4 font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">{{ eventStatus }}</p>
               <section class="2xl:col-span-2 card p-5 sm:p-6">
                 <div class="section-heading"><div><p>{{ t('Audit trail') }}</p><h3>{{ t('Support localization history') }}</h3></div></div>
                 <p class="mt-3 text-sm text-slate-600 dark:text-slate-300">{{ t('Support localization history is generated by movements and is read-only in this interface.') }}</p>
@@ -2288,6 +2500,18 @@ onMounted(loadData)
                   </table>
                 </div>
               </section>
+            </div>
+
+            <!-- GRAFANA ANALYTICS VIEW -->
+            <div v-if="activeView === 'analytics'">
+              <GrafanaAnalyticsView
+                :theme="theme"
+                :current-locale="locale"
+                :api-status="apiStatus"
+                :api-base-url="apiBaseUrl"
+                :operational-data="analyticsOperationalData"
+                @refresh="loadData(false)"
+              />
             </div>
 
             <!-- PREDICTIONS VIEW -->
@@ -2316,8 +2540,24 @@ onMounted(loadData)
 
             <!-- USERS VIEW -->
             <div v-if="activeView === 'users' && canManageUsers" class="space-y-5 lg:space-y-6">
-              <section class="card p-5 sm:p-6">
-                <div class="section-heading"><div><p>{{ t('Users') }}</p><h3>{{ editingUsername ? t('Editing user') : t('User Management') }}</h3></div></div>
+              <section class="ops-hero">
+                <div class="section-heading">
+                  <div class="min-w-0">
+                    <p>{{ t('Admin') }}</p>
+                    <h3>{{ t('User Management') }}</h3>
+                    <p class="section-description">{{ t('Local user management keeps demo access explicit without changing backend authentication.') }}</p>
+                  </div>
+                </div>
+                <div class="kpi-grid mt-5">
+                  <article v-for="metric in userStatusCards" :key="metric.key" class="kpi-card" :class="metric.tone">
+                    <span>{{ t(metric.label) }}</span>
+                    <strong>{{ metric.value }}</strong>
+                    <p>{{ t(metric.detail) }}</p>
+                  </article>
+                </div>
+              </section>
+              <section class="industrial-panel">
+                <div class="section-heading"><div><p>{{ t('Access control') }}</p><h3>{{ editingUsername ? t('Editing user') : t('Create or update user') }}</h3></div></div>
                 <form @submit.prevent="registerUser(false)" class="mt-5 grid gap-4 lg:grid-cols-2">
                   <label class="form-label">{{ t('Name / full name') }}<input v-model="registerForm.name" class="form-input" /></label>
                   <label class="form-label">{{ t('Username') }}<input v-model="registerForm.username" class="form-input disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:disabled:bg-slate-800" :disabled="editingUsername !== null" /></label>
@@ -2335,12 +2575,12 @@ onMounted(loadData)
                   <div class="lg:col-span-2 flex flex-wrap items-center gap-3">
                     <button class="btn-primary" type="submit">{{ editingUsername ? t('Update user') : t('Create user') }}</button>
                     <button v-if="editingUsername" class="btn-secondary" type="button" @click="resetUserForm()">{{ t('Cancel') }}</button>
-                    <span v-if="registerError" class="text-sm font-semibold text-red-600">{{ registerError }}</span>
-                    <span v-if="registerSuccess" class="text-sm font-semibold text-green-600">{{ registerSuccess }}</span>
+                    <span v-if="registerError" class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-100">{{ registerError }}</span>
+                    <span v-if="registerSuccess" class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-100">{{ registerSuccess }}</span>
                   </div>
                 </form>
               </section>
-              <section class="card p-5 sm:p-6">
+              <section class="industrial-panel">
                 <div class="section-heading"><div><p>{{ t('Users') }}</p><h3>{{ t('Existing users') }}</h3></div></div>
                 <div class="table-shell">
                   <table class="data-table">
@@ -2355,10 +2595,15 @@ onMounted(loadData)
                         <td>{{ formatDate(profile.lastLogin) }}</td>
                         <td>
                           <div class="flex flex-wrap gap-2">
-                            <button class="btn-secondary" @click="startEditUser(profile)">{{ t('Edit') }}</button>
-                            <button v-if="profile.username !== 'admin'" class="btn-secondary" @click="toggleUserActive(profile)">{{ profile.active ? t('Block') : t('Unblock') }}</button>
-                            <button v-if="profile.username !== 'admin'" class="btn-secondary" @click="removeUser(profile.username)">{{ t('Delete') }}</button>
+                            <button class="btn-secondary btn-compact" @click="startEditUser(profile)">{{ t('Edit') }}</button>
+                            <button v-if="profile.username !== 'admin'" class="btn-secondary btn-compact" @click="toggleUserActive(profile)">{{ profile.active ? t('Block') : t('Unblock') }}</button>
+                            <button v-if="profile.username !== 'admin'" class="btn-danger btn-compact" @click="removeUser(profile.username)">{{ t('Delete') }}</button>
                           </div>
+                        </td>
+                      </tr>
+                      <tr v-if="!users.length">
+                        <td colspan="7">
+                          <div class="empty-state"><strong>{{ t('No users found') }}</strong><p>{{ t('Create an operator profile to start local dashboard access.') }}</p></div>
                         </td>
                       </tr>
                     </tbody>
@@ -2369,75 +2614,77 @@ onMounted(loadData)
 
             <!-- FIWARE VIEW -->
             <div v-if="activeView === 'fiware'" class="space-y-5 lg:space-y-6">
-              <section class="card p-5 sm:p-6">
-                <div class="section-heading"><div><p>{{ t('Context broker boundary') }}</p><h3>{{ t('Current NGSI-LD-style context') }}</h3></div></div>
-                <p class="mt-3 max-w-3xl text-slate-600 dark:text-slate-300">{{ t('The relational backend remains the business source of truth. Orion-LD is used for current/hot context of supports, product units and racks.') }}</p>
-                <div class="mt-5 flex flex-wrap gap-3">
-                  <button class="btn-secondary" :disabled="fiwareLoading" @click="refreshFiwareContext()">{{ t('Refresh context') }}</button>
-                  <button class="btn-primary" :disabled="fiwareLoading" @click="publishFiware">{{ t('Publish current context to Orion-LD') }}</button>
-                </div>
-                <div class="mt-5 grid gap-3 md:grid-cols-4">
-                  <div class="rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900/40">
-                    <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">{{ t('Connection status') }}</p>
-                    <p class="mt-2 text-sm font-black">{{ fiwareConnectionText() }}</p>
+              <section class="ops-hero">
+                <div class="section-heading">
+                  <div class="min-w-0">
+                    <p>{{ t('Context broker boundary') }}</p>
+                    <h3>{{ t('Current NGSI-LD-style context') }}</h3>
+                    <p class="section-description">{{ t('The relational backend remains the business source of truth. Orion-LD is used for current/hot context of supports, product units and racks.') }}</p>
                   </div>
-                  <div class="rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900/40">
-                    <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">{{ t('Source') }}</p>
-                    <p class="mt-2 text-sm font-black">{{ fiwareSourceText() }}</p>
-                  </div>
-                  <div class="rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900/40">
-                    <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">{{ t('Entities') }}</p>
-                    <p class="mt-2 text-sm font-black">{{ fiwareContext.entityCount }}</p>
-                  </div>
-                  <div class="rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900/40">
-                    <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">{{ t('Last update') }}</p>
-                    <p class="mt-2 text-sm font-black">{{ fiwareContext.timestamp ? formatDate(fiwareContext.timestamp) : '-' }}</p>
+                  <div class="flex w-full flex-wrap gap-2 sm:w-auto">
+                    <button class="btn-secondary w-full sm:w-auto" :disabled="fiwareLoading" @click="refreshFiwareContext()">{{ t('Refresh context') }}</button>
+                    <button class="btn-primary w-full sm:w-auto" :disabled="fiwareLoading" @click="publishFiware">{{ t('Publish current context to Orion-LD') }}</button>
                   </div>
                 </div>
-                <p v-if="fiwareActionStatus" class="mt-4 rounded-2xl border border-slate-200 bg-white p-4 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">{{ fiwareActionStatus }}</p>
-                <p class="mt-3 text-sm text-slate-600 dark:text-slate-300">{{ fiwareSummaryMessage() }}</p>
-                <p v-if="fiwareContext.errors.length" class="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700 dark:border-red-700/70 dark:bg-red-900/30 dark:text-red-100">{{ fiwareContext.errors.join(' | ') }}</p>
+                <div class="kpi-grid mt-5">
+                  <article v-for="card in fiwareStatusCards" :key="card.key" class="kpi-card" :class="card.tone">
+                    <span>{{ t(card.label) }}</span>
+                    <strong>{{ card.value }}</strong>
+                    <p>{{ t(card.detail) }}</p>
+                  </article>
+                </div>
+                <p v-if="fiwareActionStatus" class="mt-4 rounded-lg border border-slate-200 bg-white p-4 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">{{ fiwareActionStatus }}</p>
+                <div class="mt-4 decision-card" :class="fiwareCoherenceOk ? 'tone-success' : 'tone-warning'">
+                  <span>{{ t('Context coherence') }}</span>
+                  <strong>{{ fiwareCoherenceOk ? t('Context coherence confirmed') : t('Context review recommended') }}</strong>
+                  <p>{{ fiwareSummaryMessage() }}</p>
+                </div>
+                <p v-if="fiwareContext.errors.length" class="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700 dark:border-red-700/70 dark:bg-red-900/30 dark:text-red-100">{{ fiwareContext.errors.join(' | ') }}</p>
               </section>
 
-              <section class="card p-5 sm:p-6">
+              <section class="industrial-panel">
                 <div class="section-heading"><div><p>{{ t('FIWARE entities') }}</p><h3>{{ t('Published context entities') }}</h3></div></div>
                 <div class="table-shell">
                   <table class="data-table">
                     <thead><tr><th>{{ t('Type') }}</th><th>{{ t('ID') }}</th><th>{{ t('Main attributes') }}</th></tr></thead>
                     <tbody>
                       <tr v-for="entity in fiwareContext.entities" :key="entity.id">
-                        <td>{{ entity.type }}</td>
+                        <td><span class="badge-blue">{{ entity.type }}</span></td>
                         <td class="font-mono text-xs">{{ entity.id }}</td>
                         <td>{{ fiwareAttributesPreview(entity.attributes) }}</td>
                       </tr>
-                      <tr v-if="!fiwareContext.entities.length"><td colspan="3" class="text-center">{{ t('No FIWARE entities available.') }}</td></tr>
+                      <tr v-if="!fiwareContext.entities.length">
+                        <td colspan="3">
+                          <div class="empty-state"><strong>{{ t('No FIWARE entities available.') }}</strong><p>{{ t('Publish current context or refresh Orion-LD to validate hot context.') }}</p></div>
+                        </td>
+                      </tr>
                     </tbody>
                   </table>
                 </div>
               </section>
 
-              <section v-if="fiwareLastPublish" class="card p-5 sm:p-6">
+              <section v-if="fiwareLastPublish" class="industrial-panel">
                 <div class="section-heading"><div><p>{{ t('Publish summary') }}</p><h3>{{ t('Last publish result') }}</h3></div></div>
-                <div class="mt-4 grid gap-3 md:grid-cols-4">
-                  <div class="rounded-2xl border border-slate-200 p-3 dark:border-slate-700">
-                    <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">{{ t('Attempted') }}</p>
+                <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <div class="kpi-card tone-muted">
+                    <p class="text-xs font-bold uppercase tracking-normal text-slate-500 dark:text-slate-400">{{ t('Attempted') }}</p>
                     <p class="mt-2 text-sm font-black">{{ fiwareLastPublish.attemptedCount }}</p>
                   </div>
-                  <div class="rounded-2xl border border-slate-200 p-3 dark:border-slate-700">
-                    <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">{{ t('Published') }}</p>
+                  <div class="kpi-card tone-success">
+                    <p class="text-xs font-bold uppercase tracking-normal text-slate-500 dark:text-slate-400">{{ t('Published') }}</p>
                     <p class="mt-2 text-sm font-black">{{ fiwareLastPublish.publishedCount }}</p>
                   </div>
-                  <div class="rounded-2xl border border-slate-200 p-3 dark:border-slate-700">
-                    <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">{{ t('Failed') }}</p>
+                  <div class="kpi-card" :class="fiwareLastPublish.failedCount ? 'tone-danger' : 'tone-success'">
+                    <p class="text-xs font-bold uppercase tracking-normal text-slate-500 dark:text-slate-400">{{ t('Failed') }}</p>
                     <p class="mt-2 text-sm font-black">{{ fiwareLastPublish.failedCount }}</p>
                   </div>
-                  <div class="rounded-2xl border border-slate-200 p-3 dark:border-slate-700">
-                    <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">{{ t('Stale removed') }}</p>
+                  <div class="kpi-card tone-info">
+                    <p class="text-xs font-bold uppercase tracking-normal text-slate-500 dark:text-slate-400">{{ t('Stale removed') }}</p>
                     <p class="mt-2 text-sm font-black">{{ fiwareLastPublish.staleDeletedCount }}</p>
                   </div>
                 </div>
-                <p v-if="fiwareLastPublish.staleEntityIds.length" class="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"><span class="font-black">{{ t('Stale entity IDs') }}:</span> {{ fiwareLastPublish.staleEntityIds.join(' | ') }}</p>
-                <p v-if="fiwareLastPublish.errors.length" class="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700 dark:border-red-700/70 dark:bg-red-900/30 dark:text-red-100"><span class="font-black">{{ t('Synchronization errors') }}:</span> {{ fiwareLastPublish.errors.join(' | ') }}</p>
+                <p v-if="fiwareLastPublish.staleEntityIds.length" class="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"><span class="font-black">{{ t('Stale entity IDs') }}:</span> {{ fiwareLastPublish.staleEntityIds.join(' | ') }}</p>
+                <p v-if="fiwareLastPublish.errors.length" class="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700 dark:border-red-700/70 dark:bg-red-900/30 dark:text-red-100"><span class="font-black">{{ t('Synchronization errors') }}:</span> {{ fiwareLastPublish.errors.join(' | ') }}</p>
               </section>
             </div>
             </template>

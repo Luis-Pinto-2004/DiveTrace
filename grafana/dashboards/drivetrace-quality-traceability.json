@@ -66,7 +66,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT \"Result\" AS result, COUNT(*) AS total FROM \"QualityResults\" GROUP BY \"Result\" ORDER BY \"Result\";"
+          "rawSql": "SELECT COALESCE(\"Result\", 'Unknown') AS result, COUNT(*) AS total FROM \"QualityResults\" GROUP BY COALESCE(\"Result\", 'Unknown') ORDER BY result;"
         }
       ]
     },
@@ -115,7 +115,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT \"Severity\" AS severity, COUNT(*) AS total FROM \"Nonconformities\" GROUP BY \"Severity\" ORDER BY \"Severity\";"
+          "rawSql": "SELECT COALESCE(\"Severity\", 'Unknown') AS severity, COUNT(*) AS total FROM \"Nonconformities\" GROUP BY COALESCE(\"Severity\", 'Unknown') ORDER BY severity;"
         }
       ]
     },
@@ -164,7 +164,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT \"Status\" AS status, COUNT(*) AS total FROM \"Nonconformities\" GROUP BY \"Status\" ORDER BY \"Status\";"
+          "rawSql": "SELECT COALESCE(\"Status\", 'Unknown') AS status, COUNT(*) AS total FROM \"Nonconformities\" GROUP BY COALESCE(\"Status\", 'Unknown') ORDER BY status;"
         }
       ]
     },
@@ -345,14 +345,14 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT \"UnitCode\", \"Status\", \"QualityStatus\" FROM \"ProductUnits\" WHERE \"QualityStatus\" = 'FAIL' ORDER BY \"Id\";"
+          "rawSql": "SELECT \"UnitCode\", COALESCE(\"Status\", 'Unknown') AS status, COALESCE(\"QualityStatus\", 'Unknown') AS quality_status FROM \"ProductUnits\" WHERE COALESCE(\"QualityStatus\", '') = 'FAIL' ORDER BY \"Id\";"
         }
       ]
     },
     {
       "id": 7,
       "type": "table",
-      "title": "Latest quality results table",
+      "title": "Recent quality events table",
       "description": "Most recent 20 quality results with notes.",
       "datasource": {
         "type": "postgres",
@@ -390,7 +390,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT q.\"RecordedAt\", pu.\"UnitCode\", q.\"Result\", q.\"Notes\" FROM \"QualityResults\" q LEFT JOIN \"ProductUnits\" pu ON pu.\"Id\" = q.\"ProductUnitId\" ORDER BY q.\"RecordedAt\" DESC LIMIT 20;"
+          "rawSql": "SELECT q.\"RecordedAt\", pu.\"UnitCode\", COALESCE(pls.\"Name\", '-') AS section, COALESCE(cp.\"Name\", '-') AS checkpoint, q.\"Result\", COALESCE(q.\"Notes\", '-') AS notes FROM \"QualityResults\" q LEFT JOIN \"ProductUnits\" pu ON pu.\"Id\" = q.\"ProductUnitId\" LEFT JOIN \"Checkpoints\" cp ON cp.\"Id\" = q.\"CheckpointId\" LEFT JOIN \"ProductionLineSections\" pls ON pls.\"Id\" = cp.\"SectionId\" ORDER BY q.\"RecordedAt\" DESC LIMIT 30;"
         }
       ]
     },
@@ -487,6 +487,100 @@
           "rawSql": "SELECT pu.\"UnitCode\", lrm.\"LotNumber\", rm.\"Name\" AS material, umlu.\"Quantity\", umlu.\"AssociationType\" FROM \"UnitMaterialLotUsages\" umlu LEFT JOIN \"ProductUnits\" pu ON pu.\"Id\" = umlu.\"ProductUnitId\" LEFT JOIN \"LotRawMaterials\" lrm ON lrm.\"Id\" = umlu.\"LotId\" LEFT JOIN \"RawMaterials\" rm ON rm.\"Id\" = lrm.\"RawMaterialId\" ORDER BY pu.\"UnitCode\", lrm.\"LotNumber\";"
         }
       ]
+    },
+    {
+      "id": 10,
+      "type": "table",
+      "title": "Traceability table: unit-support-section-quality",
+      "description": "Current traceability state for product units.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 36
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": "",
+          "countRows": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT pu.\"UnitCode\" AS \"ProductUnit\", COALESCE(s.\"SupportCode\", '-') AS \"CurrentSupport\", COALESCE(pls.\"Name\", '-') AS \"CurrentSection\", COALESCE(pu.\"QualityStatus\", 'Pending') AS \"QualityStatus\", COALESCE(pu.\"Status\", 'Unknown') AS \"Status\" FROM \"ProductUnits\" pu LEFT JOIN \"Supports\" s ON s.\"Id\" = pu.\"CurrentSupportId\" LEFT JOIN \"ProductionLineSections\" pls ON pls.\"Id\" = pu.\"CurrentSectionId\" ORDER BY pu.\"UnitCode\";"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "barchart",
+      "title": "Quality issues by checkpoint section",
+      "description": "FAIL outcomes by checkpoint section.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 46
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0,
+        "showValue": "auto",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.9,
+        "barRadius": 0,
+        "fullHighlight": false,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(pls.\"Name\", 'Unknown section') AS section, COUNT(q.\"Id\") FILTER (WHERE COALESCE(q.\"Result\", '') = 'FAIL') AS fail_results, COUNT(q.\"Id\") AS total_results FROM \"QualityResults\" q LEFT JOIN \"Checkpoints\" cp ON cp.\"Id\" = q.\"CheckpointId\" LEFT JOIN \"ProductionLineSections\" pls ON pls.\"Id\" = cp.\"SectionId\" GROUP BY COALESCE(pls.\"Name\", 'Unknown section') ORDER BY fail_results DESC, total_results DESC;"
+        }
+      ]
     }
   ],
   "refresh": "30s",
@@ -507,6 +601,6 @@
   "timezone": "browser",
   "title": "DriveTrace Core - Quality & Traceability",
   "uid": "drivetrace-quality-traceability",
-  "version": 1,
+  "version": 10,
   "weekStart": ""
 }

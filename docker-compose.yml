@@ -39,6 +39,7 @@ services:
       context: ./dashboard
       args:
         VITE_API_URL: http://localhost:5181/api
+        VITE_GRAFANA_BASE_URL: ${VITE_GRAFANA_BASE_URL:-http://localhost:33010}
     container_name: drivetrace-dashboard
     depends_on:
       - api
@@ -131,6 +132,9 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ALLOW_EMBEDDING: "true"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
       GF_ANALYTICS_REPORTING_ENABLED: "false"

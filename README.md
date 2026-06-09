@@ -1,7 +1,7 @@
 ﻿# DriveTrace Core
-DRIVOLUTION WP3 â€” WIP Traceability and Monitoring Platform
+DRIVOLUTION WP3 — WIP Traceability and Monitoring Platform
 
-DriveTrace Core Ã© uma plataforma acadÃ©mica para rastreabilidade e monitorizaÃ§Ã£o WIP em contexto automÃ³vel. A unidade rastreÃ¡vel Ã© a `ProductUnit`, o `Support` Ã© a Ã¢ncora fÃ­sica intra-linha e a `Rack` representa logÃ­stica pÃ³s-linha. A stack combina FIWARE/Orion-LD, ASP.NET Core/.NET 8 API, PostgreSQL/TimescaleDB, MongoDB, QuantumLeap e uma dashboard Vue 3.
+DriveTrace Core é uma plataforma académica para rastreabilidade e monitorização WIP em contexto automóvel. A unidade rastreável é a `ProductUnit`, o `Support` é a âncora física intra-linha e a `Rack` representa logística pós-linha. A stack combina FIWARE/Orion-LD, ASP.NET Core/.NET 8 API, PostgreSQL/TimescaleDB, MongoDB, QuantumLeap e uma dashboard Vue 3.
 
 ## Requisitos
 
@@ -12,7 +12,7 @@ DriveTrace Core Ã© uma plataforma acadÃ©mica para rastreabilidade e monitori
 - PowerShell
 - VS Code recomendado
 
-## Primeira execuÃ§Ã£o principal
+## Primeira execução principal
 
 ```powershell
 docker compose config
@@ -46,11 +46,11 @@ Este comando arranca a stack principal completa, incluindo `db`, `mongo-db`, `or
 
 ## Guia FIWARE
 
-Para testes detalhados, troubleshooting e validaÃ§Ã£o ponta-a-ponta da integraÃ§Ã£o FIWARE, consultar:
+Para testes detalhados, troubleshooting e validação ponta-a-ponta da integração FIWARE, consultar:
 
 - `docs/FIWARE_TESTING.md`
 
-## ExecuÃ§Ãµes seguintes
+## Execuções seguintes
 
 ```powershell
 docker compose up -d
@@ -69,7 +69,7 @@ ou:
 docker compose down
 ```
 
-Ambos mantÃªm os volumes Docker.
+Ambos mantêm os volumes Docker.
 
 ## Recriar dados do zero
 
@@ -78,7 +78,7 @@ docker compose down -v
 docker compose up -d --build
 ```
 
-A opÃ§Ã£o `-v` apaga volumes e recria os dados demo. Use isto se ainda existirem dados antigos nos volumes Docker.
+A opção `-v` apaga volumes e recria os dados demo. Use isto se ainda existirem dados antigos nos volumes Docker.
 
 ## Grafana Monitoring
 
@@ -94,38 +94,55 @@ Credenciais:
 admin/admin
 ```
 
-O Grafana arranca por defeito com `docker compose up -d --build` e e provisionado automaticamente:
+O Grafana arranca por defeito com `docker compose up -d --build` e é provisionado automaticamente:
 
 - datasource PostgreSQL/TimescaleDB: `DriveTrace TimescaleDB` (UID `drivetrace-timescaledb`)
 - dashboards provisionados:
+  - `DriveTrace Core - Executive Overview` (UID `drivetrace-executive-overview`)
+  - `DriveTrace Core - FIWARE / Infrastructure Status` (UID `drivetrace-fiware-infra-status`)
+  - `DriveTrace Core - Quality & Traceability` (UID `drivetrace-quality-traceability`)
+  - `DriveTrace Core - WIP Operations` (UID `drivetrace-wip-operations`)
   - `DriveTrace Core - WIP Overview` (UID `drivetrace-wip-overview`)
-  - `DriveTrace Core - Executive Overview`
-  - `DriveTrace Core - WIP Operations`
-  - `DriveTrace Core - Quality & Traceability`
-  - `DriveTrace Core - FIWARE / Infrastructure Status`
 
-O Grafana monitoriza dados operacionais e historicos diretamente da base de dados PostgreSQL/TimescaleDB da plataforma (WIP, suportes, qualidade, rastreabilidade e estado de infraestrutura relacional).
+Na dashboard Vue existe agora uma secção dedicada no menu lateral: `Grafana Analytics` (`AN`), com:
 
-Se existir conflito de porta no Windows, crie ou edite `.env` na raiz:
+- seleção por dashboard (`Executive Overview`, `WIP Operations`, `Quality & Traceability`, `FIWARE / Infrastructure Status`, `WIP Overview`)
+- cartões de objetivo/apoio à decisão para cada dashboard
+- cartões de insight operacional (visão executiva, WIP, qualidade e FIWARE)
+- embeds reais via iframe e opção `Open in Grafana`
+
+Variáveis de ambiente relevantes:
 
 ```env
 GRAFANA_PORT=33010
+VITE_GRAFANA_BASE_URL=http://localhost:33010
 ```
 
-Pode usar outra porta livre, por exemplo `33011`, `33012` ou `34010`.
+- `GRAFANA_PORT` controla a porta externa do Grafana no Docker Compose.
+- `VITE_GRAFANA_BASE_URL` define a base URL usada pelo frontend para embedding (com fallback para `http://localhost:33010`).
 
-Comandos de validacao:
+Para desenvolvimento/demo local, o serviço Grafana está configurado com:
+
+- `GF_SECURITY_ALLOW_EMBEDDING=true`
+- `GF_AUTH_ANONYMOUS_ENABLED=true`
+- `GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer`
+
+Isto é adequado para demonstração académica local, mas não é uma configuração segura para produção.
+Em produção, use autenticação, reverse proxy/SSO e controlo de acesso de rede.
+
+Comandos de validação:
 
 ```powershell
 docker compose up -d --build
 docker compose restart grafana
 docker compose ps
-docker compose logs --tail=150 grafana
+docker compose logs --tail=200 grafana
 ```
 
 Guia detalhado:
 
 - `docs/GRAFANA_MONITORING.md`
+
 ## Desenvolvimento local
 
 API:
@@ -147,23 +164,23 @@ npm install
 npm run dev
 ```
 
-## OperaÃ§Ãµes CRUD na interface
+## Operações CRUD na interface
 
-O admin pode gerir pela dashboard ordens de fabrico, unidades de produto, suportes, materiais e lotes, qualidade, racks, previsÃµes e parÃ¢metros do sistema. As operaÃ§Ãµes de eliminaÃ§Ã£o tÃªm confirmaÃ§Ã£o na interface e podem ser recusadas pela API quando existirem associaÃ§Ãµes histÃ³ricas ou regras de chave estrangeira.
+O admin pode gerir pela dashboard ordens de fabrico, unidades de produto, suportes, materiais e lotes, qualidade, racks, previsões e parâmetros do sistema. As operações de eliminação têm confirmação na interface e podem ser recusadas pela API quando existirem associações históricas ou regras de chave estrangeira.
 
-A autenticaÃ§Ã£o continua a ser demo/local no frontend e o backend ainda nÃ£o aplica RBAC real. O histÃ³rico de localizaÃ§Ã£o de suportes Ã© apresentado apenas para consulta, porque deve ser gerado por eventos/movimentos e nÃ£o editado manualmente.
+A autenticação continua a ser demo/local no frontend e o backend ainda não aplica RBAC real. O histórico de localização de suportes é apresentado apenas para consulta, porque deve ser gerado por eventos/movimentos e não editado manualmente.
 
-## AutenticaÃ§Ã£o demo
+## Autenticação demo
 
 - `admin/admin`
-- AutenticaÃ§Ã£o local/demo no frontend
-- SessÃ£o e utilizadores guardados em `localStorage`
-- A API ainda nÃ£o estÃ¡ protegida por JWT
-- Preparado para evoluÃ§Ã£o futura com autenticaÃ§Ã£o real e RBAC
+- Autenticação local/demo no frontend
+- Sessão e utilizadores guardados em `localStorage`
+- A API ainda não está protegida por JWT
+- Preparado para evolução futura com autenticação real e RBAC
 
 ## Dados demo
 
-O cenÃ¡rio demo representa uma linha automÃ³vel de portas em PT-PT: `ProductUnit` como unidade rastreÃ¡vel, `Support` como Ã¢ncora intra-linha, `Rack` para logÃ­stica pÃ³s-linha, materiais/lotes de matÃ©ria-prima, qualidade, nÃ£o conformidades, retrabalho, sucata e previsÃµes demonstrativas.
+O cenário demo representa uma linha automóvel de portas em PT-PT: `ProductUnit` como unidade rastreável, `Support` como âncora intra-linha, `Rack` para logística pós-linha, materiais/lotes de matéria-prima, qualidade, não conformidades, retrabalho, sucata e previsões demonstrativas.
 
 Se os dados antigos persistirem em volumes Docker, usar:
 
@@ -172,11 +189,10 @@ docker compose down -v
 docker compose up -d --build
 ```
 
-## LimitaÃ§Ãµes conhecidas
+## Limitações conhecidas
 
 - Auth local/demo no frontend
-- API ainda nÃ£o protegida por JWT
-- Grafana local provisionado para demonstraÃ§Ã£o acadÃ©mica
-- FIWARE opcional para demonstraÃ§Ã£o
-- PrevisÃµes demonstrativas, sem IA real nesta V1
-
+- API ainda não protegida por JWT
+- Grafana local provisionado para demonstração académica
+- FIWARE opcional para demonstração
+- Previsões demonstrativas, sem IA real nesta V1

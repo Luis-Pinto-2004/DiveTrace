@@ -24,8 +24,8 @@
     {
       "id": 1,
       "type": "barchart",
-      "title": "Quality results PASS/FAIL",
-      "description": "Quality outcomes from inspection results.",
+      "title": "Resultados de qualidade",
+      "description": "Resultados dos pontos de inspeção.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -66,15 +66,15 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT COALESCE(\"Result\", 'Unknown') AS result, COUNT(*) AS total FROM \"QualityResults\" GROUP BY COALESCE(\"Result\", 'Unknown') ORDER BY result;"
+          "rawSql": "SELECT CASE COALESCE(\"Result\", 'Desconhecido') WHEN 'PASS' THEN 'Aprovado' WHEN 'FAIL' THEN 'Reprovado' ELSE COALESCE(\"Result\", 'Desconhecido') END AS resultado, COUNT(*) AS total FROM \"QualityResults\" GROUP BY COALESCE(\"Result\", 'Desconhecido') ORDER BY resultado;"
         }
       ]
     },
     {
       "id": 2,
       "type": "barchart",
-      "title": "Nonconformities by severity",
-      "description": "Nonconformities grouped by severity level.",
+      "title": "Não conformidades por severidade",
+      "description": "Não conformidades agrupadas por nível de severidade.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -115,15 +115,15 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT COALESCE(\"Severity\", 'Unknown') AS severity, COUNT(*) AS total FROM \"Nonconformities\" GROUP BY COALESCE(\"Severity\", 'Unknown') ORDER BY severity;"
+          "rawSql": "SELECT CASE COALESCE(\"Severity\", 'Desconhecido') WHEN 'Minor' THEN 'Menor' WHEN 'Medium' THEN 'Média' WHEN 'Major' THEN 'Maior' WHEN 'Critical' THEN 'Crítica' ELSE COALESCE(\"Severity\", 'Desconhecida') END AS severidade, COUNT(*) AS total FROM \"Nonconformities\" GROUP BY COALESCE(\"Severity\", 'Desconhecido') ORDER BY severidade;"
         }
       ]
     },
     {
       "id": 3,
       "type": "barchart",
-      "title": "Nonconformities by status",
-      "description": "Lifecycle status for nonconformities.",
+      "title": "Não conformidades por estado",
+      "description": "Estado do ciclo de vida das não conformidades.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -164,15 +164,15 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT COALESCE(\"Status\", 'Unknown') AS status, COUNT(*) AS total FROM \"Nonconformities\" GROUP BY COALESCE(\"Status\", 'Unknown') ORDER BY status;"
+          "rawSql": "SELECT CASE COALESCE(\"Status\", 'Desconhecido') WHEN 'Active' THEN 'Em produção' WHEN 'In Progress' THEN 'Em progresso' WHEN 'Completed' THEN 'Concluída' WHEN 'Blocked' THEN 'Bloqueada' WHEN 'Rework' THEN 'Em retrabalho' WHEN 'Scrap' THEN 'Sucata' WHEN 'Stored' THEN 'Armazenado' WHEN 'Loaded' THEN 'Carregado' WHEN 'Available' THEN 'Disponível' WHEN 'Pending' THEN 'Pendente' WHEN 'Planned' THEN 'Planeada' WHEN 'Cancelled' THEN 'Cancelada' WHEN 'Open' THEN 'Aberto' WHEN 'Closed' THEN 'Fechado' ELSE COALESCE(\"Status\", 'Desconhecido') END AS estado, COUNT(*) AS total FROM \"Nonconformities\" GROUP BY COALESCE(\"Status\", 'Desconhecido') ORDER BY estado;"
         }
       ]
     },
     {
       "id": 4,
       "type": "stat",
-      "title": "Open rework records",
-      "description": "Rework records that are not closed.",
+      "title": "Registos de retrabalho em aberto",
+      "description": "Registos de retrabalho ainda não fechados.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -239,8 +239,8 @@
     {
       "id": 5,
       "type": "stat",
-      "title": "Scrap records count",
-      "description": "Total registered scrap records.",
+      "title": "Número de registos de sucata",
+      "description": "Total de registos de sucata.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -307,8 +307,8 @@
     {
       "id": 6,
       "type": "table",
-      "title": "Units with FAIL quality status",
-      "description": "Units currently flagged with FAIL quality status.",
+      "title": "Unidades com qualidade reprovada",
+      "description": "Unidades atualmente marcadas com qualidade reprovada.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -345,15 +345,15 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT \"UnitCode\", COALESCE(\"Status\", 'Unknown') AS status, COALESCE(\"QualityStatus\", 'Unknown') AS quality_status FROM \"ProductUnits\" WHERE COALESCE(\"QualityStatus\", '') = 'FAIL' ORDER BY \"Id\";"
+          "rawSql": "SELECT \"UnitCode\" AS \"Unidade\", CASE COALESCE(pu.\"Status\", 'Unknown') WHEN 'Active' THEN 'Em produção' WHEN 'In Progress' THEN 'Em progresso' WHEN 'Completed' THEN 'Concluída' WHEN 'Blocked' THEN 'Bloqueada' WHEN 'Rework' THEN 'Em retrabalho' WHEN 'Scrap' THEN 'Sucata' WHEN 'Planned' THEN 'Planeada' ELSE COALESCE(pu.\"Status\", 'Desconhecido') END AS \"Estado\", CASE COALESCE(pu.\"QualityStatus\", 'Pending') WHEN 'PASS' THEN 'Aprovado' WHEN 'FAIL' THEN 'Reprovado' WHEN 'Pending' THEN 'Pendente' ELSE COALESCE(pu.\"QualityStatus\", 'Pendente') END AS \"Qualidade\" FROM \"ProductUnits\" pu WHERE COALESCE(pu.\"QualityStatus\", '') = 'FAIL' ORDER BY pu.\"Id\";"
         }
       ]
     },
     {
       "id": 7,
       "type": "table",
-      "title": "Recent quality events table",
-      "description": "Most recent 20 quality results with notes.",
+      "title": "Tabela de eventos recentes de qualidade",
+      "description": "Resultados de qualidade mais recentes com notas.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -390,15 +390,15 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT q.\"RecordedAt\", pu.\"UnitCode\", COALESCE(pls.\"Name\", '-') AS section, COALESCE(cp.\"Name\", '-') AS checkpoint, q.\"Result\", COALESCE(q.\"Notes\", '-') AS notes FROM \"QualityResults\" q LEFT JOIN \"ProductUnits\" pu ON pu.\"Id\" = q.\"ProductUnitId\" LEFT JOIN \"Checkpoints\" cp ON cp.\"Id\" = q.\"CheckpointId\" LEFT JOIN \"ProductionLineSections\" pls ON pls.\"Id\" = cp.\"SectionId\" ORDER BY q.\"RecordedAt\" DESC LIMIT 30;"
+          "rawSql": "SELECT q.\"RecordedAt\" AS \"Registado em\", pu.\"UnitCode\" AS \"Unidade\", COALESCE(pls.\"Name\", '-') AS \"Secção\", COALESCE(cp.\"Name\", '-') AS \"Ponto de controlo\", CASE COALESCE(q.\"Result\", 'Unknown') WHEN 'PASS' THEN 'Aprovado' WHEN 'FAIL' THEN 'Reprovado' ELSE COALESCE(q.\"Result\", 'Desconhecido') END AS \"Resultado\", COALESCE(q.\"Notes\", '-') AS \"Notas\" FROM \"QualityResults\" q LEFT JOIN \"ProductUnits\" pu ON pu.\"Id\" = q.\"ProductUnitId\" LEFT JOIN \"Checkpoints\" cp ON cp.\"Id\" = q.\"CheckpointId\" LEFT JOIN \"ProductionLineSections\" pls ON pls.\"Id\" = cp.\"SectionId\" ORDER BY q.\"RecordedAt\" DESC LIMIT 30;"
         }
       ]
     },
     {
       "id": 8,
       "type": "barchart",
-      "title": "Material lot usage by raw material or lot",
-      "description": "Aggregated lot usage by material and lot number.",
+      "title": "Consumo de lotes por material",
+      "description": "Consumo agregado por material e número de lote.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -446,8 +446,8 @@
     {
       "id": 9,
       "type": "table",
-      "title": "Unit genealogy/material lot usage table",
-      "description": "Traceability table linking units to consumed material lots.",
+      "title": "Genealogia da unidade e consumo de lotes",
+      "description": "Tabela de rastreabilidade entre unidades e lotes consumidos.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -484,15 +484,15 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT pu.\"UnitCode\", lrm.\"LotNumber\", rm.\"Name\" AS material, umlu.\"Quantity\", umlu.\"AssociationType\" FROM \"UnitMaterialLotUsages\" umlu LEFT JOIN \"ProductUnits\" pu ON pu.\"Id\" = umlu.\"ProductUnitId\" LEFT JOIN \"LotRawMaterials\" lrm ON lrm.\"Id\" = umlu.\"LotId\" LEFT JOIN \"RawMaterials\" rm ON rm.\"Id\" = lrm.\"RawMaterialId\" ORDER BY pu.\"UnitCode\", lrm.\"LotNumber\";"
+          "rawSql": "SELECT pu.\"UnitCode\" AS \"Unidade\", lrm.\"LotNumber\" AS \"Lote\", rm.\"Name\" AS \"Material\", umlu.\"Quantity\" AS \"Quantidade\", umlu.\"AssociationType\" AS \"Tipo de associação\" FROM \"UnitMaterialLotUsages\" umlu LEFT JOIN \"ProductUnits\" pu ON pu.\"Id\" = umlu.\"ProductUnitId\" LEFT JOIN \"LotRawMaterials\" lrm ON lrm.\"Id\" = umlu.\"LotId\" LEFT JOIN \"RawMaterials\" rm ON rm.\"Id\" = lrm.\"RawMaterialId\" ORDER BY pu.\"UnitCode\", lrm.\"LotNumber\";"
         }
       ]
     },
     {
       "id": 10,
       "type": "table",
-      "title": "Traceability table: unit-support-section-quality",
-      "description": "Current traceability state for product units.",
+      "title": "Rastreabilidade: unidade, suporte, secção e qualidade",
+      "description": "Estado atual de rastreabilidade das unidades de produto.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -529,15 +529,15 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT pu.\"UnitCode\" AS \"ProductUnit\", COALESCE(s.\"SupportCode\", '-') AS \"CurrentSupport\", COALESCE(pls.\"Name\", '-') AS \"CurrentSection\", COALESCE(pu.\"QualityStatus\", 'Pending') AS \"QualityStatus\", COALESCE(pu.\"Status\", 'Unknown') AS \"Status\" FROM \"ProductUnits\" pu LEFT JOIN \"Supports\" s ON s.\"Id\" = pu.\"CurrentSupportId\" LEFT JOIN \"ProductionLineSections\" pls ON pls.\"Id\" = pu.\"CurrentSectionId\" ORDER BY pu.\"UnitCode\";"
+          "rawSql": "SELECT pu.\"UnitCode\" AS \"Unidade\", COALESCE(s.\"SupportCode\", '-') AS \"Suporte atual\", COALESCE(pls.\"Name\", '-') AS \"Secção atual\", CASE COALESCE(pu.\"QualityStatus\", 'Pending') WHEN 'PASS' THEN 'Aprovado' WHEN 'FAIL' THEN 'Reprovado' WHEN 'Pending' THEN 'Pendente' ELSE COALESCE(pu.\"QualityStatus\", 'Pendente') END AS \"Qualidade\", CASE COALESCE(pu.\"Status\", 'Desconhecido') WHEN 'Active' THEN 'Em produção' WHEN 'Completed' THEN 'Concluída' WHEN 'Blocked' THEN 'Bloqueada' WHEN 'Rework' THEN 'Em retrabalho' WHEN 'Planned' THEN 'Planeada' ELSE COALESCE(pu.\"Status\", 'Desconhecido') END AS \"Estado\" FROM \"ProductUnits\" pu LEFT JOIN \"Supports\" s ON s.\"Id\" = pu.\"CurrentSupportId\" LEFT JOIN \"ProductionLineSections\" pls ON pls.\"Id\" = pu.\"CurrentSectionId\" ORDER BY pu.\"UnitCode\";"
         }
       ]
     },
     {
       "id": 11,
       "type": "barchart",
-      "title": "Quality issues by checkpoint section",
-      "description": "FAIL outcomes by checkpoint section.",
+      "title": "Problemas de qualidade por secção de controlo",
+      "description": "Resultados reprovados por secção de ponto de controlo.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -578,7 +578,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT COALESCE(pls.\"Name\", 'Unknown section') AS section, COUNT(q.\"Id\") FILTER (WHERE COALESCE(q.\"Result\", '') = 'FAIL') AS fail_results, COUNT(q.\"Id\") AS total_results FROM \"QualityResults\" q LEFT JOIN \"Checkpoints\" cp ON cp.\"Id\" = q.\"CheckpointId\" LEFT JOIN \"ProductionLineSections\" pls ON pls.\"Id\" = cp.\"SectionId\" GROUP BY COALESCE(pls.\"Name\", 'Unknown section') ORDER BY fail_results DESC, total_results DESC;"
+          "rawSql": "SELECT COALESCE(pls.\"Name\", 'Secção desconhecida') AS section, COUNT(q.\"Id\") FILTER (WHERE COALESCE(q.\"Result\", '') = 'FAIL') AS resultados_reprovados, COUNT(q.\"Id\") AS total_resultados FROM \"QualityResults\" q LEFT JOIN \"Checkpoints\" cp ON cp.\"Id\" = q.\"CheckpointId\" LEFT JOIN \"ProductionLineSections\" pls ON pls.\"Id\" = cp.\"SectionId\" GROUP BY COALESCE(pls.\"Name\", 'Secção desconhecida') ORDER BY resultados_reprovados DESC, total_resultados DESC;"
         }
       ]
     }
@@ -599,7 +599,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "DriveTrace Core - Quality & Traceability",
+  "title": "DriveTrace Core - Qualidade e rastreabilidade",
   "uid": "drivetrace-quality-traceability",
   "version": 10,
   "weekStart": ""

@@ -29,6 +29,7 @@ builder.Services.AddDbContext<DriveTraceDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddScoped<DemoEventService>();
+builder.Services.AddScoped<ProductionFlowService>();
 builder.Services.AddHttpClient<IFiwareContextService, FiwareContextService>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(12);
@@ -55,6 +56,8 @@ using (var scope = app.Services.CreateScope())
     {
         await db.Database.EnsureCreatedAsync();
     }
+
+    await SchemaEvolution.EnsurePhase34Async(db);
 
     if (configuration.GetValue("Database:SeedDemoData", true))
     {

@@ -26,20 +26,34 @@ public sealed class Variant : IEntity
     [JsonIgnore] public Product? Product { get; set; }
 }
 
+public sealed class Customer : IEntity
+{
+    public int Id { get; set; }
+    [MaxLength(80)] public string CustomerCode { get; set; } = string.Empty;
+    [MaxLength(160)] public string Name { get; set; } = string.Empty;
+    [MaxLength(180)] public string? ContactEmail { get; set; }
+    public bool IsActive { get; set; } = true;
+    [JsonIgnore] public ICollection<ManufacturingOrder> ManufacturingOrders { get; set; } = new List<ManufacturingOrder>();
+}
+
 public sealed class ManufacturingOrder : IEntity
 {
     public int Id { get; set; }
     [MaxLength(80)] public string OrderNumber { get; set; } = string.Empty;
     public int ProductId { get; set; }
     public int? VariantId { get; set; }
+    public int? CustomerId { get; set; }
     public int ManufacturingProcessId { get; set; }
     public int ProductionLineId { get; set; }
     public int PlannedQty { get; set; }
     public DateTime ScheduledUntil { get; set; }
     [MaxLength(40)] public string Status { get; set; } = "Planned";
+    [MaxLength(120)] public string? CustomerReference { get; set; }
+    [MaxLength(80)] public string? PublicTrackingCode { get; set; }
     public string? Observations { get; set; }
     [JsonIgnore] public Product? Product { get; set; }
     [JsonIgnore] public Variant? Variant { get; set; }
+    [JsonIgnore] public Customer? Customer { get; set; }
     [JsonIgnore] public ManufacturingProcess? ManufacturingProcess { get; set; }
     [JsonIgnore] public ProductionLine? ProductionLine { get; set; }
     [JsonIgnore] public ICollection<ProductUnit> ProductUnits { get; set; } = new List<ProductUnit>();
@@ -50,6 +64,8 @@ public sealed class ProductionLine : IEntity
     public int Id { get; set; }
     [MaxLength(80)] public string LineCode { get; set; } = string.Empty;
     [MaxLength(140)] public string Name { get; set; } = string.Empty;
+    public int DisplayOrder { get; set; }
+    [MaxLength(80)] public string? VisualGroup { get; set; }
     [JsonIgnore] public ICollection<ProductionLineSection> Sections { get; set; } = new List<ProductionLineSection>();
 }
 
@@ -60,6 +76,13 @@ public sealed class ProductionLineSection : IEntity
     [MaxLength(140)] public string Name { get; set; } = string.Empty;
     [MaxLength(80)] public string SectionType { get; set; } = string.Empty;
     public int? LineId { get; set; }
+    public int DisplayOrder { get; set; }
+    public int? LayoutColumn { get; set; }
+    public int? LayoutRow { get; set; }
+    [MaxLength(80)] public string? VisualZone { get; set; }
+    public bool IsTransferPoint { get; set; }
+    public bool AllowsLineTransferIn { get; set; }
+    public bool AllowsLineTransferOut { get; set; }
     [JsonIgnore] public ProductionLine? Line { get; set; }
     [JsonIgnore] public ICollection<Checkpoint> Checkpoints { get; set; } = new List<Checkpoint>();
     [JsonIgnore] public ICollection<SupportLocalizationHistory> SupportLocalizationHistory { get; set; } = new List<SupportLocalizationHistory>();
@@ -134,6 +157,33 @@ public sealed class ProductUnit : IEntity
     [JsonIgnore] public Support? CurrentSupport { get; set; }
     [JsonIgnore] public ProductionLineSection? CurrentSection { get; set; }
     [JsonIgnore] public ICollection<ProductUnit> ChildUnits { get; set; } = new List<ProductUnit>();
+    [JsonIgnore] public ICollection<ProductUnitLocationHistory> LocationHistory { get; set; } = new List<ProductUnitLocationHistory>();
+}
+
+public sealed class ProductUnitLocationHistory : IEntity
+{
+    public int Id { get; set; }
+    public int ProductUnitId { get; set; }
+    public int? FromProductionLineId { get; set; }
+    public int? ToProductionLineId { get; set; }
+    public int? FromSectionId { get; set; }
+    public int ToSectionId { get; set; }
+    public int? FromSupportId { get; set; }
+    public int? ToSupportId { get; set; }
+    [MaxLength(80)] public string EventType { get; set; } = "Transfer";
+    [MaxLength(160)] public string Reason { get; set; } = "Operational movement";
+    public string? Notes { get; set; }
+    [MaxLength(120)] public string? OperatorUserId { get; set; }
+    public DateTime OccurredAt { get; set; } = DateTime.UtcNow;
+    [MaxLength(80)] public string Source { get; set; } = "api";
+    [MaxLength(80)] public string? CorrelationId { get; set; }
+    [JsonIgnore] public ProductUnit? ProductUnit { get; set; }
+    [JsonIgnore] public ProductionLine? FromProductionLine { get; set; }
+    [JsonIgnore] public ProductionLine? ToProductionLine { get; set; }
+    [JsonIgnore] public ProductionLineSection? FromSection { get; set; }
+    [JsonIgnore] public ProductionLineSection? ToSection { get; set; }
+    [JsonIgnore] public Support? FromSupport { get; set; }
+    [JsonIgnore] public Support? ToSupport { get; set; }
 }
 
 public sealed class Support : IEntity

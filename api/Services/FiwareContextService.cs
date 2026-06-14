@@ -57,6 +57,7 @@ public sealed class FiwareContextService : IFiwareContextService
         "urn:ngsi-ld:Support:.*",
         "urn:ngsi-ld:ProductUnit:.*",
         "urn:ngsi-ld:Rack:.*",
+        "urn:ngsi-ld:ProductionLine:.*",
         "urn:ngsi-ld:ProductionLineSection:.*",
         "urn:ngsi-ld:Checkpoint:.*"
     ];
@@ -66,10 +67,12 @@ public sealed class FiwareContextService : IFiwareContextService
         ["Support"] = "https://uri.drivolution.local/ns/Support",
         ["ProductUnit"] = "https://uri.drivolution.local/ns/ProductUnit",
         ["Rack"] = "https://uri.drivolution.local/ns/Rack",
+        ["ProductionLine"] = "https://uri.drivolution.local/ns/ProductionLine",
         ["ProductionLineSection"] = "https://uri.drivolution.local/ns/ProductionLineSection",
         ["Checkpoint"] = "https://uri.drivolution.local/ns/Checkpoint",
         ["supportCode"] = "https://uri.drivolution.local/ns/supportCode",
         ["unitCode"] = "https://uri.drivolution.local/ns/unitCode",
+        ["lineCode"] = "https://uri.drivolution.local/ns/lineCode",
         ["rackCode"] = "https://uri.drivolution.local/ns/rackCode",
         ["checkpointCode"] = "https://uri.drivolution.local/ns/checkpointCode",
         ["unitType"] = "https://uri.drivolution.local/ns/unitType",
@@ -77,6 +80,9 @@ public sealed class FiwareContextService : IFiwareContextService
         ["qualityStatus"] = "https://uri.drivolution.local/ns/qualityStatus",
         ["currentSupport"] = "https://uri.drivolution.local/ns/currentSupport",
         ["currentSection"] = "https://uri.drivolution.local/ns/currentSection",
+        ["currentProductionLine"] = "https://uri.drivolution.local/ns/currentProductionLine",
+        ["lastMovementAt"] = "https://uri.drivolution.local/ns/lastMovementAt",
+        ["routeState"] = "https://uri.drivolution.local/ns/routeState",
         ["sectionCode"] = "https://uri.drivolution.local/ns/sectionCode",
         ["sectionType"] = "https://uri.drivolution.local/ns/sectionType",
         ["lineId"] = "https://uri.drivolution.local/ns/lineId",
@@ -112,8 +118,8 @@ public sealed class FiwareContextService : IFiwareContextService
         if (brokerEntities is not null)
         {
             var message = brokerEntities.Count == 0
-                ? "Orion-LD is reachable but no FIWARE entities are currently published."
-                : $"Retrieved {brokerEntities.Count} FIWARE entities from Orion-LD.";
+                ? "Orion-LD acessível, mas ainda sem entidades FIWARE publicadas."
+                : $"Foram obtidas {brokerEntities.Count} entidades FIWARE do Orion-LD.";
 
             return new FiwareContextResponse
             {
@@ -136,7 +142,7 @@ public sealed class FiwareContextService : IFiwareContextService
             Timestamp = DateTime.UtcNow,
             BrokerReachable = false,
             Source = "relational-fallback",
-            Message = "Orion-LD is unavailable. Returning relational snapshot so the dashboard remains usable.",
+            Message = "Orion-LD indisponível. A devolver snapshot relacional para manter a dashboard utilizável.",
             EntityCount = localSummaries.Count,
             RelationalSnapshotCount = localSummaries.Count,
             OrionLdBaseUrl = baseUrl,
@@ -181,8 +187,8 @@ public sealed class FiwareContextService : IFiwareContextService
                     staleDeletedCount);
 
                 var summaryMessage = staleDeletedCount > 0
-                    ? $"Published {entityIds.Count} entities to Orion-LD and removed {staleDeletedCount} stale entities."
-                    : $"Published {entityIds.Count} entities to Orion-LD.";
+                    ? $"Publicadas {entityIds.Count} entidades no Orion-LD e removidas {staleDeletedCount} entidades órfãs."
+                    : $"Publicadas {entityIds.Count} entidades no Orion-LD.";
 
                 return new FiwarePublishResponse
                 {
@@ -209,7 +215,7 @@ public sealed class FiwareContextService : IFiwareContextService
             {
                 Timestamp = DateTime.UtcNow,
                 BrokerReachable = response.StatusCode != HttpStatusCode.ServiceUnavailable,
-                Message = "Unable to publish context to Orion-LD. The relational mode remains available.",
+                Message = "Não foi possível publicar contexto no Orion-LD. O modo relacional mantém-se disponível.",
                 AttemptedCount = entityIds.Count,
                 PublishedCount = 0,
                 FailedCount = entityIds.Count,
@@ -222,7 +228,7 @@ public sealed class FiwareContextService : IFiwareContextService
         }
         catch (Exception ex)
         {
-            var error = $"Could not reach Orion-LD publish endpoint: {ex.Message}";
+            var error = $"Não foi possível contactar o endpoint de publicação Orion-LD: {ex.Message}";
             errors.Add(error);
             _logger.LogWarning(ex, "FIWARE publish endpoint is unreachable.");
 
@@ -230,7 +236,7 @@ public sealed class FiwareContextService : IFiwareContextService
             {
                 Timestamp = DateTime.UtcNow,
                 BrokerReachable = false,
-                Message = "Could not reach Orion-LD publish endpoint. The relational mode remains available.",
+                Message = "Não foi possível contactar o endpoint de publicação Orion-LD. O modo relacional mantém-se disponível.",
                 AttemptedCount = entityIds.Count,
                 PublishedCount = 0,
                 FailedCount = entityIds.Count,
@@ -305,51 +311,61 @@ public sealed class FiwareContextService : IFiwareContextService
     {
         if (staleCandidates.Count == 0) return 0;
 
-        var deletedCount = 0;
-        foreach (var staleId in staleCandidates)
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/entityOperations/delete");
+        request.Content = new StringContent(JsonSerializer.Serialize(staleCandidates), Encoding.UTF8, "application/json");
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+        HttpResponseMessage response;
+        try
         {
-            var encodedId = Uri.EscapeDataString(staleId);
-            using var request = new HttpRequestMessage(HttpMethod.Delete, $"{baseUrl}/entities/{encodedId}");
-            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
-            HttpResponseMessage response;
-            try
-            {
-                response = await _httpClient.SendAsync(request, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                errors.Add($"Failed to delete stale entity '{staleId}': {ex.Message}");
-                continue;
-            }
-
-            if (response.IsSuccessStatusCode || response.StatusCode == HttpStatusCode.NotFound)
-            {
-                deletedCount++;
-                deletedStaleEntityIds.Add(staleId);
-                continue;
-            }
-
-            var body = await SafeReadBodyAsync(response);
-            errors.Add(
-                $"Orion-LD HTTP {(int)response.StatusCode} while deleting stale entity '{staleId}'."
-                + (string.IsNullOrWhiteSpace(body) ? string.Empty : $" Body: {body}"));
+            response = await _httpClient.SendAsync(request, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            errors.Add($"Falha ao remover entidades órfãs no Orion-LD: {ex.Message}");
+            return 0;
         }
 
-        return deletedCount;
+        if (response.IsSuccessStatusCode)
+        {
+            deletedStaleEntityIds.AddRange(staleCandidates);
+            return staleCandidates.Count;
+        }
+
+        var body = await SafeReadBodyAsync(response);
+        errors.Add(
+            $"Orion-LD HTTP {(int)response.StatusCode} ao remover entidades órfãs."
+            + (string.IsNullOrWhiteSpace(body) ? string.Empty : $" Body: {body}"));
+        return 0;
     }
 
     private async Task<List<Dictionary<string, object?>>> BuildCurrentContextEntitiesAsync(CancellationToken cancellationToken)
     {
         var supports = await _db.Supports.AsNoTracking().ToListAsync(cancellationToken);
         var units = await _db.ProductUnits.AsNoTracking().ToListAsync(cancellationToken);
+        var lines = await _db.ProductionLines.AsNoTracking().ToListAsync(cancellationToken);
         var sections = await _db.ProductionLineSections.AsNoTracking().ToListAsync(cancellationToken);
         var checkpoints = await _db.Checkpoints.AsNoTracking().ToListAsync(cancellationToken);
         var racks = await _db.Racks.AsNoTracking().ToListAsync(cancellationToken);
+        var movements = await _db.ProductUnitLocationHistory.AsNoTracking().ToListAsync(cancellationToken);
 
+        var linesById = lines.ToDictionary(item => item.Id);
         var sectionsById = sections.ToDictionary(item => item.Id);
         var supportsById = supports.ToDictionary(item => item.Id);
+        var latestMovementByUnit = movements
+            .GroupBy(item => item.ProductUnitId)
+            .ToDictionary(group => group.Key, group => group.Max(item => item.OccurredAt));
         var entities = new List<Dictionary<string, object?>>();
+
+        foreach (var line in lines)
+        {
+            if (string.IsNullOrWhiteSpace(line.LineCode)) continue;
+            var entity = CreateEntity($"urn:ngsi-ld:ProductionLine:{line.LineCode}", "ProductionLine");
+            AddProperty(entity, "lineCode", line.LineCode);
+            AddProperty(entity, "name", line.Name);
+            AddProperty(entity, "status", DisplayStatus("Active"));
+            entities.Add(entity);
+        }
 
         foreach (var section in sections)
         {
@@ -367,7 +383,7 @@ public sealed class FiwareContextService : IFiwareContextService
             if (string.IsNullOrWhiteSpace(support.SupportCode)) continue;
             var entity = CreateEntity($"urn:ngsi-ld:Support:{support.SupportCode}", "Support");
             AddProperty(entity, "supportCode", support.SupportCode);
-            AddProperty(entity, "status", support.Status);
+            AddProperty(entity, "status", DisplayStatus(support.Status));
             AddRelationship(entity, "currentSection", SectionUrn(sectionsById, support.CurrentSectionId));
             entities.Add(entity);
         }
@@ -377,11 +393,22 @@ public sealed class FiwareContextService : IFiwareContextService
             if (string.IsNullOrWhiteSpace(unit.UnitCode)) continue;
             var entity = CreateEntity($"urn:ngsi-ld:ProductUnit:{unit.UnitCode}", "ProductUnit");
             AddProperty(entity, "unitCode", unit.UnitCode);
-            AddProperty(entity, "unitType", unit.UnitType);
-            AddProperty(entity, "status", unit.Status);
-            AddProperty(entity, "qualityStatus", unit.QualityStatus);
+            AddProperty(entity, "unitType", DisplayUnitType(unit.UnitType));
+            AddProperty(entity, "status", DisplayStatus(unit.Status));
+            AddProperty(entity, "qualityStatus", DisplayQualityStatus(unit.QualityStatus));
+            var currentSection = unit.CurrentSectionId.HasValue && sectionsById.TryGetValue(unit.CurrentSectionId.Value, out var sectionValue)
+                ? sectionValue
+                : null;
+            var currentLineId = currentSection?.LineId;
+            if (latestMovementByUnit.TryGetValue(unit.Id, out var lastMovementAt))
+            {
+                AddProperty(entity, "lastMovementAt", lastMovementAt);
+            }
+
+            AddProperty(entity, "routeState", DisplayRouteState(RouteState(unit.Status, unit.QualityStatus, currentSection)));
             AddRelationship(entity, "currentSupport", SupportUrn(supportsById, unit.CurrentSupportId));
             AddRelationship(entity, "currentSection", SectionUrn(sectionsById, unit.CurrentSectionId));
+            AddRelationship(entity, "currentProductionLine", LineUrn(linesById, currentLineId));
             entities.Add(entity);
         }
 
@@ -390,7 +417,7 @@ public sealed class FiwareContextService : IFiwareContextService
             if (string.IsNullOrWhiteSpace(rack.RackCode)) continue;
             var entity = CreateEntity($"urn:ngsi-ld:Rack:{rack.RackCode}", "Rack");
             AddProperty(entity, "rackCode", rack.RackCode);
-            AddProperty(entity, "status", rack.Status);
+            AddProperty(entity, "status", DisplayStatus(rack.Status));
             AddRelationship(entity, "currentSection", SectionUrn(sectionsById, rack.SectionId));
             entities.Add(entity);
         }
@@ -401,7 +428,7 @@ public sealed class FiwareContextService : IFiwareContextService
             var entity = CreateEntity($"urn:ngsi-ld:Checkpoint:{checkpoint.CheckpointCode}", "Checkpoint");
             AddProperty(entity, "checkpointCode", checkpoint.CheckpointCode);
             AddProperty(entity, "name", checkpoint.Name);
-            AddProperty(entity, "status", checkpoint.Status);
+            AddProperty(entity, "status", DisplayStatus(checkpoint.Status));
             AddRelationship(entity, "currentSection", SectionUrn(sectionsById, checkpoint.SectionId));
             entities.Add(entity);
         }
@@ -491,6 +518,93 @@ public sealed class FiwareContextService : IFiwareContextService
         return sectionsById.TryGetValue(sectionId.Value, out var section) && !string.IsNullOrWhiteSpace(section.SectionCode)
             ? $"urn:ngsi-ld:ProductionLineSection:{section.SectionCode}"
             : null;
+    }
+
+    private static string? LineUrn(IReadOnlyDictionary<int, DriveTraceCore.Api.Models.ProductionLine> linesById, int? lineId)
+    {
+        if (!lineId.HasValue) return null;
+        return linesById.TryGetValue(lineId.Value, out var line) && !string.IsNullOrWhiteSpace(line.LineCode)
+            ? $"urn:ngsi-ld:ProductionLine:{line.LineCode}"
+            : null;
+    }
+
+    private static string RouteState(string status, string qualityStatus, DriveTraceCore.Api.Models.ProductionLineSection? section)
+    {
+        if (status.Equals("Completed", StringComparison.OrdinalIgnoreCase)) return "Completed";
+        if (status.Equals("Scrap", StringComparison.OrdinalIgnoreCase)) return "Scrap";
+        if (status.Equals("Blocked", StringComparison.OrdinalIgnoreCase)
+            || status.Equals("Rework", StringComparison.OrdinalIgnoreCase)
+            || qualityStatus.Equals("FAIL", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Attention";
+        }
+
+        if (section is null) return "Unassigned";
+        var sectionText = $"{section.SectionType} {section.Name}".ToLowerInvariant();
+        if (sectionText.Contains("post-line") || sectionText.Contains("log") || sectionText.Contains("rack") || sectionText.Contains("expedition"))
+        {
+            return "PostLine";
+        }
+
+        return section.IsTransferPoint ? "TransferPoint" : "InLine";
+    }
+
+    private static string DisplayStatus(string status)
+    {
+        return status switch
+        {
+            "Active" => "Em produção",
+            "In Progress" => "Em progresso",
+            "Completed" => "Concluída",
+            "Blocked" => "Bloqueada",
+            "Rework" => "Em retrabalho",
+            "Scrap" => "Sucata",
+            "Stored" => "Armazenado",
+            "Loaded" => "Carregado",
+            "Available" => "Disponível",
+            "Pending" => "Pendente",
+            "Planned" => "Planeada",
+            "Cancelled" => "Cancelada",
+            "Open" => "Aberto",
+            "Closed" => "Fechado",
+            _ => status
+        };
+    }
+
+    private static string DisplayQualityStatus(string qualityStatus)
+    {
+        return qualityStatus switch
+        {
+            "PASS" => "Aprovado",
+            "FAIL" => "Reprovado",
+            "Pending" => "Pendente",
+            _ => DisplayStatus(qualityStatus)
+        };
+    }
+
+    private static string DisplayUnitType(string unitType)
+    {
+        return unitType switch
+        {
+            "Subproduct" => "Subproduto",
+            "Final" => "Final",
+            _ => unitType
+        };
+    }
+
+    private static string DisplayRouteState(string routeState)
+    {
+        return routeState switch
+        {
+            "Completed" => "Concluída",
+            "Scrap" => "Sucata",
+            "Attention" => "Atenção",
+            "Unassigned" => "Sem atribuição",
+            "PostLine" => "Pós-linha",
+            "TransferPoint" => "Ponto de transferência",
+            "InLine" => "Em linha",
+            _ => routeState
+        };
     }
 
     private static object[] EmbeddedContext()

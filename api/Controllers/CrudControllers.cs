@@ -83,6 +83,12 @@ public sealed class VariantsController : CrudController<Variant>
     public VariantsController(DriveTraceDbContext db) : base(db) { }
 }
 
+[Route("api/customers")]
+public sealed class CustomersController : CrudController<Customer>
+{
+    public CustomersController(DriveTraceDbContext db) : base(db) { }
+}
+
 [Route("api/manufacturing-orders")]
 public sealed class ManufacturingOrdersController : CrudController<ManufacturingOrder>
 {
@@ -135,6 +141,12 @@ public sealed class CheckpointsController : CrudController<Checkpoint>
 public sealed class ProductUnitsController : CrudController<ProductUnit>
 {
     public ProductUnitsController(DriveTraceDbContext db) : base(db) { }
+}
+
+[Route("api/product-unit-location-history")]
+public sealed class ProductUnitLocationHistoryController : CrudController<ProductUnitLocationHistory>
+{
+    public ProductUnitLocationHistoryController(DriveTraceDbContext db) : base(db) { }
 }
 
 [Route("api/supports")]

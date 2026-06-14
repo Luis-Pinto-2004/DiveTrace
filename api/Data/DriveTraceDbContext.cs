@@ -9,6 +9,7 @@ public sealed class DriveTraceDbContext : DbContext
 
     public DbSet<Product> Products => Set<Product>();
     public DbSet<Variant> Variants => Set<Variant>();
+    public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<ManufacturingOrder> ManufacturingOrders => Set<ManufacturingOrder>();
     public DbSet<ProductionLine> ProductionLines => Set<ProductionLine>();
     public DbSet<ProductionLineSection> ProductionLineSections => Set<ProductionLineSection>();
@@ -18,6 +19,7 @@ public sealed class DriveTraceDbContext : DbContext
     public DbSet<ManufacturingProcessPhase> ManufacturingProcessPhases => Set<ManufacturingProcessPhase>();
     public DbSet<Checkpoint> Checkpoints => Set<Checkpoint>();
     public DbSet<ProductUnit> ProductUnits => Set<ProductUnit>();
+    public DbSet<ProductUnitLocationHistory> ProductUnitLocationHistory => Set<ProductUnitLocationHistory>();
     public DbSet<Support> Supports => Set<Support>();
     public DbSet<UnitSupportAssignment> UnitSupportAssignments => Set<UnitSupportAssignment>();
     public DbSet<SupportLocalizationHistory> SupportLocalizationHistory => Set<SupportLocalizationHistory>();
@@ -38,7 +40,9 @@ public sealed class DriveTraceDbContext : DbContext
 
         modelBuilder.Entity<Product>().HasIndex(x => x.Name).IsUnique();
         modelBuilder.Entity<Variant>().HasIndex(x => new { x.ProductId, x.VariantCode }).IsUnique();
+        modelBuilder.Entity<Customer>().HasIndex(x => x.CustomerCode).IsUnique();
         modelBuilder.Entity<ManufacturingOrder>().HasIndex(x => x.OrderNumber).IsUnique();
+        modelBuilder.Entity<ManufacturingOrder>().HasIndex(x => x.PublicTrackingCode).IsUnique();
         modelBuilder.Entity<ProductionLine>().HasIndex(x => x.LineCode).IsUnique();
         modelBuilder.Entity<ProductionLineSection>().HasIndex(x => x.SectionCode).IsUnique();
         modelBuilder.Entity<Checkpoint>().HasIndex(x => x.CheckpointCode).IsUnique();
@@ -47,6 +51,12 @@ public sealed class DriveTraceDbContext : DbContext
         modelBuilder.Entity<Rack>().HasIndex(x => x.RackCode).IsUnique();
         modelBuilder.Entity<RawMaterial>().HasIndex(x => x.Name).IsUnique();
         modelBuilder.Entity<LotRawMaterial>().HasIndex(x => x.LotNumber).IsUnique();
+
+        modelBuilder.Entity<ManufacturingOrder>()
+            .HasOne(x => x.Customer)
+            .WithMany(x => x.ManufacturingOrders)
+            .HasForeignKey(x => x.CustomerId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         modelBuilder.Entity<ProductUnit>()
             .HasOne(x => x.ParentUnit)
@@ -64,6 +74,54 @@ public sealed class DriveTraceDbContext : DbContext
             .HasOne(x => x.CurrentSection)
             .WithMany()
             .HasForeignKey(x => x.CurrentSectionId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<ProductUnitLocationHistory>()
+            .HasIndex(x => new { x.ProductUnitId, x.OccurredAt });
+
+        modelBuilder.Entity<ProductUnitLocationHistory>()
+            .HasIndex(x => new { x.ToProductionLineId, x.OccurredAt });
+
+        modelBuilder.Entity<ProductUnitLocationHistory>()
+            .HasOne(x => x.ProductUnit)
+            .WithMany(x => x.LocationHistory)
+            .HasForeignKey(x => x.ProductUnitId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ProductUnitLocationHistory>()
+            .HasOne(x => x.FromProductionLine)
+            .WithMany()
+            .HasForeignKey(x => x.FromProductionLineId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<ProductUnitLocationHistory>()
+            .HasOne(x => x.ToProductionLine)
+            .WithMany()
+            .HasForeignKey(x => x.ToProductionLineId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<ProductUnitLocationHistory>()
+            .HasOne(x => x.FromSection)
+            .WithMany()
+            .HasForeignKey(x => x.FromSectionId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<ProductUnitLocationHistory>()
+            .HasOne(x => x.ToSection)
+            .WithMany()
+            .HasForeignKey(x => x.ToSectionId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<ProductUnitLocationHistory>()
+            .HasOne(x => x.FromSupport)
+            .WithMany()
+            .HasForeignKey(x => x.FromSupportId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<ProductUnitLocationHistory>()
+            .HasOne(x => x.ToSupport)
+            .WithMany()
+            .HasForeignKey(x => x.ToSupportId)
             .OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<Support>()

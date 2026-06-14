@@ -39,6 +39,9 @@ Este comando arranca a stack principal completa, incluindo `db`, `mongo-db`, `or
 - Dashboard: http://localhost:8088
 - Swagger: http://localhost:5181/swagger
 - Dashboard summary: http://localhost:5181/api/dashboard/summary
+- Flow summary: http://localhost:5181/api/operations/flow-summary
+- Operator workbench: http://localhost:5181/api/operator/workbench
+- Acompanhamento público do cliente: http://localhost:5181/api/customer/orders/TRC-PORTA-001
 - Orion-LD: http://localhost:1026/version
 - IoT Agent: http://localhost:4041/iot/about
 - QuantumLeap: http://localhost:8668/version
@@ -49,6 +52,7 @@ Este comando arranca a stack principal completa, incluindo `db`, `mongo-db`, `or
 Para testes detalhados, troubleshooting e validação ponta-a-ponta da integração FIWARE, consultar:
 
 - `docs/FIWARE_TESTING.md`
+- `docs/PRODUCTION_FLOW.md`
 
 ## Execuções seguintes
 
@@ -98,15 +102,15 @@ O Grafana arranca por defeito com `docker compose up -d --build` e é provisiona
 
 - datasource PostgreSQL/TimescaleDB: `DriveTrace TimescaleDB` (UID `drivetrace-timescaledb`)
 - dashboards provisionados:
-  - `DriveTrace Core - Executive Overview` (UID `drivetrace-executive-overview`)
-  - `DriveTrace Core - FIWARE / Infrastructure Status` (UID `drivetrace-fiware-infra-status`)
-  - `DriveTrace Core - Quality & Traceability` (UID `drivetrace-quality-traceability`)
-  - `DriveTrace Core - WIP Operations` (UID `drivetrace-wip-operations`)
-  - `DriveTrace Core - WIP Overview` (UID `drivetrace-wip-overview`)
+  - `DriveTrace Core - Visão executiva` (UID `drivetrace-executive-overview`)
+  - `DriveTrace Core - Estado FIWARE / infraestrutura` (UID `drivetrace-fiware-infra-status`)
+  - `DriveTrace Core - Qualidade e rastreabilidade` (UID `drivetrace-quality-traceability`)
+  - `DriveTrace Core - Operações WIP` (UID `drivetrace-wip-operations`)
+  - `DriveTrace Core - Visão geral WIP` (UID `drivetrace-wip-overview`)
 
-Na dashboard Vue existe agora uma secção dedicada no menu lateral: `Grafana Analytics` (`AN`), com:
+Na dashboard Vue existe agora uma secção dedicada no menu lateral: `Analítica operacional` (`AN`), com:
 
-- seleção por dashboard (`Executive Overview`, `WIP Operations`, `Quality & Traceability`, `FIWARE / Infrastructure Status`, `WIP Overview`)
+- seleção por dashboard (`Visão executiva`, `Operações WIP`, `Qualidade e rastreabilidade`, `Estado FIWARE / infraestrutura`, `Visão geral WIP`)
 - cartões de objetivo/apoio à decisão para cada dashboard
 - cartões de insight operacional (visão executiva, WIP, qualidade e FIWARE)
 - embeds reais via iframe e opção `Open in Grafana`
@@ -180,7 +184,24 @@ A autenticação continua a ser demo/local no frontend e o backend ainda não ap
 
 ## Dados demo
 
-O cenário demo representa uma linha automóvel de portas em PT-PT: `ProductUnit` como unidade rastreável, `Support` como âncora intra-linha, `Rack` para logística pós-linha, materiais/lotes de matéria-prima, qualidade, não conformidades, retrabalho, sucata e previsões demonstrativas.
+O cenário demo representa um fluxo automóvel de portas em PT-PT com várias linhas: `ProductUnit` como unidade rastreável, `Support` como transporte/âncora física, `Rack` para logística pós-linha, materiais/lotes de matéria-prima, qualidade, não conformidades, retrabalho, sucata e previsões demonstrativas.
+
+## Dados demonstrativos PT-PT
+
+- Idioma predefinido: `pt-PT`; inglês continua disponível no seletor de idioma.
+- Ordens de fabrico: `OF-PORTA-001` a `OF-PORTA-004`.
+- Unidades de produto: `UP-PORTA-001` a `UP-PORTA-010`.
+- Pontos de controlo: `PC-ESTAMP-001`, `PC-SOLD-001`, `PC-PINT-001`, `PC-CQ-001`.
+- Linhas demo: `LINHA-01` a `LINHA-04`.
+- Secções demo: `SEC-MP`, `SEC-ATRIB-SUP`, `SEC-CORTE-ESTAMP`, `SEC-SOLD`, `SEC-PINT-A`, `SEC-PINT-B`, `SEC-CQ`, `SEC-RETRAB`, `SEC-RACK`.
+- Consulta pública de cliente: `TRC-PORTA-001`.
+- Utilizadores locais demo: `admin/admin`, `operador/operador`, `cliente/cliente`.
+
+Validação rápida do fluxo multi-linha:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\test-production-flow.ps1 -PublishFiware
+```
 
 Se os dados antigos persistirem em volumes Docker, usar:
 

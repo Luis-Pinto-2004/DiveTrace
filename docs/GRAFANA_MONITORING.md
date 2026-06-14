@@ -23,30 +23,32 @@ DriveTrace Core uses Grafana as the analytical and monitoring layer on top of Po
 - Provisioning folder: `grafana/provisioning/`
 - Dashboard JSON folder: `grafana/dashboards/`
 
-Provisioned dashboards:
+Dashboards provisionados:
 
-1. `DriveTrace Core - Executive Overview` (`drivetrace-executive-overview`)
-2. `DriveTrace Core - FIWARE / Infrastructure Status` (`drivetrace-fiware-infra-status`)
-3. `DriveTrace Core - Quality & Traceability` (`drivetrace-quality-traceability`)
-4. `DriveTrace Core - WIP Operations` (`drivetrace-wip-operations`)
-5. `DriveTrace Core - WIP Overview` (`drivetrace-wip-overview`)
+1. `DriveTrace Core - Visão executiva` (`drivetrace-executive-overview`)
+2. `DriveTrace Core - Estado FIWARE / infraestrutura` (`drivetrace-fiware-infra-status`)
+3. `DriveTrace Core - Qualidade e rastreabilidade` (`drivetrace-quality-traceability`)
+4. `DriveTrace Core - Operações WIP` (`drivetrace-wip-operations`)
+5. `DriveTrace Core - Visão geral WIP` (`drivetrace-wip-overview`)
 
 ## Analytical Coverage
 
-- `DriveTrace Core - Executive Overview`
-  - Open manufacturing orders, active units/supports, open quality issues, active rack assignments
-  - Product/support status distributions, WIP by section, recent support movements, recent nonconformities
-- `DriveTrace Core - WIP Operations`
-  - WIP by section, supports by section and by status, manufacturing orders by status
-  - Current unit-support assignments, bottleneck indication, throughput proxy by day, recent movement history
-- `DriveTrace Core - Quality & Traceability`
-  - PASS/FAIL distribution, nonconformities by severity/status, rework and scrap metrics
-  - Recent quality events, product-unit traceability table, genealogy/material lot usage context
-- `DriveTrace Core - FIWARE / Infrastructure Status`
-  - Estimated publishable entities, supports/units/racks counts, candidate entities by type
-  - Recent movement events and explicit note about datasource scope versus FIWARE API validation
-- `DriveTrace Core - WIP Overview`
-  - Simplified baseline view with core stats, status distributions, WIP section distribution and recent events
+- `DriveTrace Core - Visão executiva`
+  - Ordens de fabrico abertas, unidades em curso, suportes ativos, problemas de qualidade em aberto e atribuições a racks.
+  - Distribuições de estados traduzidas por `CASE`, WIP por secção, movimentos recentes e não conformidades.
+- `DriveTrace Core - Operações WIP`
+  - WIP por linha/secção, suportes por secção e estado, ordens por estado e histórico de movimentos.
+  - A tabela recente combina transferências `ProductUnitLocationHistory` e movimentos `SupportLocalizationHistory`.
+- `DriveTrace Core - Qualidade e rastreabilidade`
+  - Resultados `Aprovado/Reprovado`, não conformidades por severidade/estado, retrabalho, sucata e genealogia de lotes.
+- `DriveTrace Core - Estado FIWARE / infraestrutura`
+  - Entidades publicáveis estimadas, contagens de suportes/unidades/racks, tipos FIWARE apresentados em PT.
+- `DriveTrace Core - Visão geral WIP`
+  - Vista compacta com KPIs principais, estados traduzidos, WIP por secção e eventos recentes.
+
+## Dados demonstrativos PT-PT
+
+Os dashboards usam os novos códigos demo `OF-PORTA-*`, `UP-PORTA-*`, `PC-*`, `LINHA-*` e `SEC-*`. Os valores internos de estado permanecem em inglês na base de dados para preservar filtros e serviços, mas os painéis Grafana apresentam labels em PT-PT com expressões `CASE`.
 
 ## Phase 2 Operational Analytics Hub
 
@@ -226,6 +228,12 @@ FIWARE validation:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\test-fiware.ps1 -PublishCurrent
+```
+
+Production flow validation:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\test-production-flow.ps1 -PublishFiware
 ```
 
 ## Realistic Limitations

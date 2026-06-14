@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { t } from '../prefs'
 
 type CrudOption = {
@@ -35,6 +36,8 @@ type CrudConfig = {
   fields: CrudField[]
   columns: CrudColumn[]
   items: () => Record<string, unknown>[]
+  maxVisibleRows?: number
+  maxTableHeight?: string
   allowDelete?: boolean
   canDelete?: (item: Record<string, unknown>) => true | string
 }
@@ -69,6 +72,14 @@ function inputValue(key: string) {
   if (value === null || value === undefined) return ''
   return String(value)
 }
+
+const tableShellStyle = computed(() => {
+  if (props.config.maxTableHeight) return { '--table-shell-max-height': props.config.maxTableHeight }
+  if (props.config.maxVisibleRows) {
+    return { '--table-shell-max-height': `calc(${props.config.maxVisibleRows} * 2.55rem + 2.75rem)` }
+  }
+  return undefined
+})
 </script>
 
 <template>
@@ -129,7 +140,7 @@ function inputValue(key: string) {
       </form>
     </div>
 
-    <div class="table-shell">
+    <div class="table-shell" :style="tableShellStyle">
       <table class="data-table">
         <thead>
           <tr>
@@ -140,8 +151,8 @@ function inputValue(key: string) {
         <tbody>
           <tr v-for="item in config.items()" :key="String(item.id)">
             <td v-for="column in config.columns" :key="column.key">
-              <span v-if="column.badge" :class="statusClass(String(item[column.key] || ''))">{{ cellValue(column, item) }}</span>
-              <span v-else>{{ cellValue(column, item) }}</span>
+              <span v-if="column.badge" :class="statusClass(String(item[column.key] || ''))" :title="cellValue(column, item)">{{ cellValue(column, item) }}</span>
+              <span v-else class="cell-clamp" :title="cellValue(column, item)">{{ cellValue(column, item) }}</span>
             </td>
             <td>
               <div class="flex flex-wrap gap-2">

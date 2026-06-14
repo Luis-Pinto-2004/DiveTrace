@@ -75,7 +75,53 @@ import {
 // ===== Authentication and user management =====
 const isAuthenticated = ref(false)
 
-type RoleKey = 'admin' | 'operator' | 'client'
+type RoleKey = 'admin' | 'supervisor' | 'operator' | 'quality' | 'logistics' | 'client' | 'demoViewer'
+
+type PermissionCatalog = {
+  roles: Array<{ key: string; label: string; permissions: string[] }>
+  permissions: Array<{ key: string; label: string }>
+  activeRole: string
+  activePermissions: string[]
+}
+
+const roleProfiles: Record<RoleKey, { label: string; backendRole: string; jobTitle: string }> = {
+  admin: { label: 'Administrador', backendRole: 'Administrator', jobTitle: 'Administrador do sistema' },
+  supervisor: { label: 'Supervisor', backendRole: 'Supervisor', jobTitle: 'Supervisor de produção' },
+  operator: { label: 'Operador', backendRole: 'Operator', jobTitle: 'Operador de produção' },
+  quality: { label: 'Técnico de qualidade', backendRole: 'QualityTechnician', jobTitle: 'Técnico de qualidade' },
+  logistics: { label: 'Logística', backendRole: 'Logistics', jobTitle: 'Técnico de logística' },
+  client: { label: 'Cliente', backendRole: 'Customer', jobTitle: 'Cliente' },
+  demoViewer: { label: 'Visualizador demo', backendRole: 'DemoViewer', jobTitle: 'Visualizador demo' },
+}
+
+const fallbackPermissionCatalog: PermissionCatalog = {
+  roles: Object.entries(roleProfiles).map(([key, value]) => ({ key: value.backendRole, label: value.label, permissions: [] })),
+  permissions: [],
+  activeRole: 'Administrator',
+  activePermissions: [
+    'Users.Manage',
+    'MasterData.Manage',
+    'Orders.View',
+    'Orders.Manage',
+    'ProductUnits.View',
+    'ProductUnits.Transfer',
+    'ProductUnits.Trace',
+    'Supports.Manage',
+    'Quality.View',
+    'Quality.Record',
+    'Quality.Decide',
+    'Racks.View',
+    'Racks.Manage',
+    'Materials.View',
+    'Materials.Manage',
+    'Grafana.View',
+    'Fiware.View',
+    'Fiware.Manage',
+    'Simulation.Manage',
+    'CustomerPortal.View',
+    'OperationalEvents.View',
+  ],
+}
 
 type UserProfile = {
   id: string
@@ -121,6 +167,45 @@ const defaultDemoUsers: UserProfile[] = [
     active: true,
   },
   {
+    id: 'supervisor',
+    name: 'Supervisor de produção',
+    username: 'supervisor',
+    email: 'supervisor@drivetrace.local',
+    role: 'Supervisor',
+    roleKey: 'supervisor',
+    organization: 'DRIVOLUTION WP3',
+    project: 'DriveTrace Core',
+    jobTitle: 'Supervisor de produção',
+    password: 'supervisor',
+    active: true,
+  },
+  {
+    id: 'qualidade',
+    name: 'Técnico de qualidade',
+    username: 'qualidade',
+    email: 'qualidade@drivetrace.local',
+    role: 'Técnico de qualidade',
+    roleKey: 'quality',
+    organization: 'DRIVOLUTION WP3',
+    project: 'DriveTrace Core',
+    jobTitle: 'Técnico de qualidade',
+    password: 'qualidade',
+    active: true,
+  },
+  {
+    id: 'logistica',
+    name: 'Técnico de logística',
+    username: 'logistica',
+    email: 'logistica@drivetrace.local',
+    role: 'Logística',
+    roleKey: 'logistics',
+    organization: 'DRIVOLUTION WP3',
+    project: 'DriveTrace Core',
+    jobTitle: 'Técnico de logística',
+    password: 'logistica',
+    active: true,
+  },
+  {
     id: 'cliente',
     name: 'Cliente industrial',
     username: 'cliente',
@@ -131,6 +216,19 @@ const defaultDemoUsers: UserProfile[] = [
     project: 'DriveTrace Core',
     jobTitle: 'Consulta de cliente',
     password: 'cliente',
+    active: true,
+  },
+  {
+    id: 'demo',
+    name: 'Visualizador demo',
+    username: 'demo',
+    email: 'demo@drivetrace.local',
+    role: 'Visualizador demo',
+    roleKey: 'demoViewer',
+    organization: 'DRIVOLUTION WP3',
+    project: 'DriveTrace Core',
+    jobTitle: 'Visualizador demo',
+    password: 'demo',
     active: true,
   },
 ]
@@ -160,18 +258,18 @@ function buildProfileForm(profile: UserProfile | null) {
 }
 
 function getRoleLabel(roleKey: RoleKey) {
-  if (roleKey === 'admin') return t('Administrator')
-  if (roleKey === 'client') return t('Client')
-  return t('Operator')
+  return t(roleProfiles[roleKey]?.label ?? roleKey)
 }
 
 function buildUserRole(roleKey: RoleKey) {
+  return roleProfiles[roleKey]?.label ?? roleKey
   if (roleKey === 'admin') return 'Administrador'
   if (roleKey === 'client') return 'Cliente'
   return 'Funcionário/Operador'
 }
 
 function defaultJobTitle(roleKey: RoleKey) {
+  return roleProfiles[roleKey]?.jobTitle ?? 'Operador'
   if (roleKey === 'admin') return 'Administrador do sistema'
   if (roleKey === 'client') return 'Cliente'
   return 'Operador'
@@ -291,7 +389,18 @@ function isAdmin(profile = user.value) {
   return profile?.roleKey === 'admin' || profile?.username === 'admin'
 }
 
-const canManageUsers = computed(() => isAdmin())
+const permissionCatalog = ref<PermissionCatalog>({ ...fallbackPermissionCatalog })
+const activePermissions = computed(() => new Set(permissionCatalog.value.activePermissions))
+
+function backendRoleFor(roleKey?: RoleKey) {
+  return roleProfiles[roleKey || 'admin']?.backendRole ?? 'DemoViewer'
+}
+
+function can(permission: string) {
+  return isAdmin() || activePermissions.value.has(permission)
+}
+
+const canManageUsers = computed(() => can('Users.Manage'))
 
 function activeAdminCount(nextUsers = users.value) {
   return nextUsers.filter((candidate) => candidate.roleKey === 'admin' && candidate.active !== false).length
@@ -332,6 +441,7 @@ function login() {
     loginForm.value.username = ''
     loginForm.value.password = ''
     isRegistering.value = false
+    void loadData(false)
   } else {
     loginError.value = t('Invalid credentials')
   }
@@ -603,6 +713,28 @@ type ReferenceRecord = {
   lineId?: number
 }
 
+type OperationalEventRecord = {
+  id: number
+  eventCode: string
+  eventType: string
+  productUnit?: ReferenceRecord
+  support?: ReferenceRecord
+  manufacturingOrder?: ReferenceRecord
+  fromProductionLine?: ReferenceRecord
+  toProductionLine?: ReferenceRecord
+  fromSection?: ReferenceRecord
+  toSection?: ReferenceRecord
+  rack?: ReferenceRecord
+  reasonCode?: string
+  severity?: string
+  source: string
+  performedByUserId?: string
+  occurredAt: string
+  notes?: string
+  isDemo: boolean
+  label: string
+}
+
 type FlowSectionSummary = {
   sectionId: number
   sectionCode: string
@@ -637,6 +769,8 @@ type FlowSummary = {
     transferPoints: number
     transfers: number
     transfersLast24h: number
+    operationalEvents?: number
+    operationalEventsLast24h?: number
   }
   routeStates: Array<{ routeState: string; count: number }>
   lineSummaries: FlowLineSummary[]
@@ -652,6 +786,7 @@ type FlowSummary = {
     toSection?: ReferenceRecord
     toSupport?: ReferenceRecord
   }>
+  recentOperationalEvents?: OperationalEventRecord[]
 }
 
 type OperatorWorkbench = {
@@ -686,6 +821,7 @@ type ProductUnitTrace = {
     routeState?: string
   }
   locationHistory?: FlowSummary['recentTransfers']
+  operationalEvents?: OperationalEventRecord[]
   timeline?: Array<{ eventType: string; occurredAt: string; source: string; label: string; lineCode?: string; sectionCode?: string; supportCode?: string; result?: string }>
 }
 
@@ -724,10 +860,11 @@ function emptyFiwareContext(): FiwareContextSnapshot {
 function emptyFlowSummary(): FlowSummary {
   return {
     generatedAt: '',
-    totals: { productionLines: 0, sections: 0, activeUnits: 0, activeSupports: 0, transferPoints: 0, transfers: 0, transfersLast24h: 0 },
+    totals: { productionLines: 0, sections: 0, activeUnits: 0, activeSupports: 0, transferPoints: 0, transfers: 0, transfersLast24h: 0, operationalEvents: 0, operationalEventsLast24h: 0 },
     routeStates: [],
     lineSummaries: [],
     recentTransfers: [],
+    recentOperationalEvents: [],
   }
 }
 
@@ -747,6 +884,7 @@ const fiwareActionStatus = ref('')
 const fiwareLastPublish = ref<FiwarePublishResult | null>(null)
 const flowSummary = ref<FlowSummary>(emptyFlowSummary())
 const operatorWorkbench = ref<OperatorWorkbench>(emptyOperatorWorkbench())
+const operationalEvents = ref<OperationalEventRecord[]>([])
 const selectedUnitTrace = ref<ProductUnitTrace | null>(null)
 const traceLoading = ref(false)
 const transferStatus = ref('')
@@ -794,7 +932,22 @@ const nav = [
   { key: 'users', label: 'Users', icon: 'USR' },
 ] as const
 
-const adminOnlyViews = new Set<ViewKey>(['users', 'parameters'])
+const viewPermissions: Partial<Record<ViewKey, string>> = {
+  orders: 'Orders.View',
+  units: 'ProductUnits.View',
+  supports: 'ProductUnits.View',
+  materials: 'Materials.View',
+  quality: 'Quality.View',
+  racks: 'Racks.View',
+  events: 'OperationalEvents.View',
+  fiware: 'Fiware.View',
+  analytics: 'Grafana.View',
+  predictions: 'Orders.View',
+  users: 'Users.Manage',
+  parameters: 'MasterData.Manage',
+  operator: 'ProductUnits.Transfer',
+  customer: 'CustomerPortal.View',
+}
 const navGroups = [
   { key: 'Operation', items: ['overview', 'operator', 'orders', 'racks'] },
   { key: 'Traceability', items: ['units', 'supports', 'materials', 'quality', 'customer'] },
@@ -808,7 +961,8 @@ function navByGroup(groupKey: typeof navGroups[number]['key']) {
 }
 
 function canShowNav(key: ViewKey) {
-  return !adminOnlyViews.has(key) || canManageUsers.value
+  const permission = viewPermissions[key]
+  return !permission || can(permission)
 }
 
 const viewTitles: Record<ViewKey, string> = {
@@ -907,6 +1061,14 @@ const flowKpis = computed(() => [
   { key: 'lines', label: 'Production lines', value: flowSummary.value.totals.productionLines || productionLines.value.length, detail: 'Lines in the current route model', tone: 'tone-info' },
   { key: 'transfer-points', label: 'Transfer points', value: flowSummary.value.totals.transferPoints, detail: 'Sections allowing controlled line transfer', tone: 'tone-muted' },
   { key: 'transfers', label: 'Transfers today', value: flowSummary.value.totals.transfersLast24h, detail: `${flowSummary.value.totals.transfers} ${t('total product-unit movements')}`, tone: 'tone-info' },
+])
+const recentOperationalEvents = computed(() => {
+  return (flowSummary.value.recentOperationalEvents?.length ? flowSummary.value.recentOperationalEvents : operationalEvents.value).slice(0, 12)
+})
+const eventKpis = computed(() => [
+  { key: 'events-total', label: 'Operational events', value: flowSummary.value.totals.operationalEvents ?? operationalEvents.value.length, detail: 'Centralized event log', tone: 'tone-info' },
+  { key: 'events-today', label: 'Events today', value: flowSummary.value.totals.operationalEventsLast24h ?? 0, detail: 'Events registered in the last 24 hours', tone: 'tone-muted' },
+  { key: 'event-types', label: 'Event types', value: new Set(operationalEvents.value.map((event) => event.eventType)).size, detail: 'Current recent sample', tone: 'tone-success' },
 ])
 const transferTargetSections = computed(() => {
   const targets = productionLineSections.value.filter((section) => section.allowsLineTransferIn || section.isTransferPoint)
@@ -1371,6 +1533,18 @@ function movementTitle(movement: FlowSummary['recentTransfers'][number]) {
   const from = `${referenceLabel(movement.fromProductionLine)} / ${referenceLabel(movement.fromSection)}`
   const to = `${referenceLabel(movement.toProductionLine)} / ${referenceLabel(movement.toSection)}`
   return `${movement.unit?.code || '-'}: ${from} -> ${to}`
+}
+
+function operationalEventTarget(event: OperationalEventRecord) {
+  return event.productUnit?.code || event.support?.code || event.rack?.code || event.manufacturingOrder?.code || '-'
+}
+
+function operationalEventLocation(event: OperationalEventRecord) {
+  return referenceLabel(event.toSection) !== '-' ? referenceLabel(event.toSection) : referenceLabel(event.toProductionLine)
+}
+
+function operationalEventDetail(event: OperationalEventRecord) {
+  return event.notes || event.label || translateStatus(event.eventType)
 }
 
 function checkpointLabel(id: unknown) {
@@ -2079,6 +2253,8 @@ async function loadData(showSpinner = true) {
     contextData,
     flowSummaryData,
     operatorWorkbenchData,
+    permissionCatalogData,
+    operationalEventsData,
   ] = await Promise.all([
     apiGet('/dashboard/summary', demoDashboard),
     apiGet('/products', demoProducts),
@@ -2108,6 +2284,8 @@ async function loadData(showSpinner = true) {
     apiGet('/fiware/context', emptyFiwareContext()),
     apiGet('/operations/flow-summary', emptyFlowSummary()),
     apiGet('/operator/workbench', emptyOperatorWorkbench()),
+    apiGet(`/permissions/catalog?role=${encodeURIComponent(backendRoleFor(user.value?.roleKey))}`, fallbackPermissionCatalog),
+    apiGet('/operational-events/recent?limit=20', [] as OperationalEventRecord[]),
   ])
 
   summary.value = dashboardData
@@ -2138,6 +2316,8 @@ async function loadData(showSpinner = true) {
   fiwareContext.value = normalizeFiwareContextPayload(contextData)
   flowSummary.value = flowSummaryData
   operatorWorkbench.value = operatorWorkbenchData
+  permissionCatalog.value = permissionCatalogData
+  operationalEvents.value = operationalEventsData
   apiStatus.value = dashboardData === demoDashboard ? 'Offline demo data loaded' : 'Connected to DriveTrace Core API'
   if (showSpinner) loading.value = false
 }
@@ -2611,7 +2791,7 @@ onBeforeUnmount(() => {
                     </label>
                     <div class="flex flex-wrap gap-2">
                       <button class="btn-secondary" type="button" :disabled="!selectedTransferUnit" @click="selectedTransferUnit && prepareTransfer(selectedTransferUnit)">{{ t('Load trace') }}</button>
-                      <button class="btn-primary" type="button" @click="submitUnitTransfer">{{ t('Register transfer') }}</button>
+                      <button class="btn-primary" type="button" :disabled="!can('ProductUnits.Transfer')" @click="submitUnitTransfer">{{ t('Register transfer') }}</button>
                     </div>
                     <p v-if="transferStatus" class="rounded-lg border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">{{ transferStatus }}</p>
                   </div>
@@ -2922,19 +3102,20 @@ onBeforeUnmount(() => {
                 <div class="section-heading">
                   <div>
                     <p>{{ t('Recent events') }}</p>
-                    <h3>{{ t('Support movement and audit trail') }}</h3>
+                    <h3>{{ t('Operational event log') }}</h3>
                   </div>
                 </div>
                 <div class="table-shell">
                   <table class="data-table">
-                    <thead><tr><th>{{ t('Support') }}</th><th>{{ t('Section') }}</th><th>{{ t('Event') }}</th><th>{{ t('Timestamp') }}</th></tr></thead>
+                    <thead><tr><th>{{ t('Event') }}</th><th>{{ t('Target') }}</th><th>{{ t('Location') }}</th><th>{{ t('Timestamp') }}</th></tr></thead>
                     <tbody>
-                      <tr v-for="event in summary.recentEvents" :key="`${event.supportCode}-${event.dateTime}`">
-                        <td>{{ event.supportCode }}</td>
-                        <td>{{ translateSectionName(event.section) }}</td>
-                        <td>{{ translateStatus(event.eventType) }}</td>
-                        <td>{{ formatDate(event.dateTime) }}</td>
+                      <tr v-for="event in recentOperationalEvents.slice(0, 8)" :key="event.eventCode">
+                        <td><span :class="statusClass(event.eventType)">{{ translateStatus(event.eventType) }}</span></td>
+                        <td>{{ operationalEventTarget(event) }}</td>
+                        <td>{{ operationalEventLocation(event) }}</td>
+                        <td>{{ formatDate(event.occurredAt) }}</td>
                       </tr>
+                      <tr v-if="!recentOperationalEvents.length"><td colspan="4" class="text-center">{{ t('No records found') }}</td></tr>
                     </tbody>
                   </table>
                 </div>
@@ -3218,10 +3399,17 @@ onBeforeUnmount(() => {
 
             <!-- EVENTS VIEW -->
             <div v-if="activeView === 'events'" class="grid gap-5 xl:grid-cols-2">
+              <section class="xl:col-span-2 kpi-grid">
+                <article v-for="metric in eventKpis" :key="metric.key" class="kpi-card" :class="metric.tone">
+                  <span>{{ t(metric.label) }}</span>
+                  <strong>{{ metric.value }}</strong>
+                  <p>{{ t(metric.detail) }}</p>
+                </article>
+              </section>
               <section class="card p-5 sm:p-6">
                 <div class="section-heading"><div><p>{{ t('Simulation') }}</p><h3>{{ t('Execute event playback') }}</h3></div></div>
                 <p class="mt-3 text-slate-600 dark:text-slate-300">{{ t('Advances supports across the nominal door production line and updates the audit trail.') }}</p>
-                <button class="btn-primary mt-5" @click="executePlayback">{{ t('Execute playback scenario') }}</button>
+                <button class="btn-primary mt-5" :disabled="!can('Simulation.Manage')" @click="executePlayback">{{ t('Execute playback scenario') }}</button>
               </section>
               <section class="card p-5 sm:p-6">
                 <div class="section-heading"><div><p>{{ t('Controlled event') }}</p><h3>{{ t('Inject manual factory event') }}</h3></div></div>
@@ -3233,9 +3421,28 @@ onBeforeUnmount(() => {
                   <label class="form-label">{{ t('Result') }}<input v-model="manualEvent.result" class="form-input" /></label>
                   <label class="form-label">{{ t('Notes') }}<textarea v-model="manualEvent.notes" class="form-input min-h-24"></textarea></label>
                 </div>
-                <button class="btn-primary mt-5" @click="injectManualEvent">{{ t('Inject manual event') }}</button>
+                <button class="btn-primary mt-5" :disabled="!can('ProductUnits.Transfer') && !can('Quality.Record') && !can('Racks.Manage')" @click="injectManualEvent">{{ t('Inject manual event') }}</button>
               </section>
               <p v-if="eventStatus" class="2xl:col-span-2 rounded-lg border border-slate-200 bg-white p-4 font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">{{ eventStatus }}</p>
+              <section class="2xl:col-span-2 card p-5 sm:p-6">
+                <div class="section-heading"><div><p>{{ t('Operational events') }}</p><h3>{{ t('Recent event stream') }}</h3></div></div>
+                <div class="table-shell">
+                  <table class="data-table">
+                    <thead><tr><th>{{ t('Event') }}</th><th>{{ t('Target') }}</th><th>{{ t('Location') }}</th><th>{{ t('Source') }}</th><th>{{ t('Detail') }}</th><th>{{ t('Timestamp') }}</th></tr></thead>
+                    <tbody>
+                      <tr v-for="event in recentOperationalEvents" :key="event.eventCode">
+                        <td><span :class="statusClass(event.eventType)">{{ translateStatus(event.eventType) }}</span></td>
+                        <td>{{ operationalEventTarget(event) }}</td>
+                        <td>{{ operationalEventLocation(event) }}</td>
+                        <td>{{ t(event.source) }}</td>
+                        <td class="max-w-[22rem] truncate" :title="operationalEventDetail(event)">{{ operationalEventDetail(event) }}</td>
+                        <td>{{ formatDate(event.occurredAt) }}</td>
+                      </tr>
+                      <tr v-if="!recentOperationalEvents.length"><td colspan="6" class="text-center">{{ t('No records found') }}</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
               <section class="2xl:col-span-2 card p-5 sm:p-6">
                 <div class="section-heading"><div><p>{{ t('Audit trail') }}</p><h3>{{ t('Support localization history') }}</h3></div></div>
                 <p class="mt-3 text-sm text-slate-600 dark:text-slate-300">{{ t('Support localization history is generated by movements and is read-only in this interface.') }}</p>
@@ -3319,8 +3526,12 @@ onBeforeUnmount(() => {
                   <label class="form-label">{{ t('Role') }}
                     <select v-model="registerForm.roleKey" class="form-input disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:disabled:bg-slate-800" :disabled="editingUsername === defaultUser.username">
                       <option value="admin">{{ t('Administrator') }}</option>
+                      <option value="supervisor">{{ t('Supervisor') }}</option>
                       <option value="operator">{{ t('Operator') }}</option>
+                      <option value="quality">{{ t('Quality technician') }}</option>
+                      <option value="logistics">{{ t('Logistics') }}</option>
                       <option value="client">{{ t('Client') }}</option>
+                      <option value="demoViewer">{{ t('Demo viewer') }}</option>
                     </select>
                   </label>
                   <label class="form-label">{{ t('Password') }}<input v-model="registerForm.password" type="password" class="form-input" /></label>
@@ -3377,7 +3588,7 @@ onBeforeUnmount(() => {
                   </div>
                   <div class="flex w-full flex-wrap gap-2 sm:w-auto">
                     <button class="btn-secondary w-full sm:w-auto" :disabled="fiwareLoading" @click="refreshFiwareContext()">{{ t('Refresh context') }}</button>
-                    <button class="btn-primary w-full sm:w-auto" :disabled="fiwareLoading" @click="publishFiware">{{ t('Publish current context to Orion-LD') }}</button>
+                    <button class="btn-primary w-full sm:w-auto" :disabled="fiwareLoading || !can('Fiware.Manage')" @click="publishFiware">{{ t('Publish current context to Orion-LD') }}</button>
                   </div>
                 </div>
                 <div class="kpi-grid mt-5">

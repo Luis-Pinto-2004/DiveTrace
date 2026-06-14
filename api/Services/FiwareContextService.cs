@@ -93,17 +93,20 @@ public sealed class FiwareContextService : IFiwareContextService
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
     private readonly ILogger<FiwareContextService> _logger;
+    private readonly OperationalEventService _operationalEvents;
 
     public FiwareContextService(
         DriveTraceDbContext db,
         HttpClient httpClient,
         IConfiguration configuration,
-        ILogger<FiwareContextService> logger)
+        ILogger<FiwareContextService> logger,
+        OperationalEventService operationalEvents)
     {
         _db = db;
         _httpClient = httpClient;
         _configuration = configuration;
         _logger = logger;
+        _operationalEvents = operationalEvents;
     }
 
     public async Task<FiwareContextResponse> GetContextAsync(CancellationToken cancellationToken = default)
@@ -189,6 +192,24 @@ public sealed class FiwareContextService : IFiwareContextService
                 var summaryMessage = staleDeletedCount > 0
                     ? $"Publicadas {entityIds.Count} entidades no Orion-LD e removidas {staleDeletedCount} entidades órfãs."
                     : $"Publicadas {entityIds.Count} entidades no Orion-LD.";
+
+                var publishedAt = DateTime.UtcNow;
+                await _operationalEvents.RecordAsync(new OperationalEventCreateRequest
+                {
+                    EventCode = $"FIWARE-PUBLISH-{publishedAt:yyyyMMddHHmmssfff}",
+                    EventType = OperationalEventTypes.FiwarePublished,
+                    Source = OperationalEventSources.FiwareSync,
+                    OccurredAt = publishedAt,
+                    Notes = summaryMessage,
+                    IsDemo = true,
+                    Metadata = new Dictionary<string, object?>
+                    {
+                        ["attemptedCount"] = entityIds.Count,
+                        ["publishedCount"] = entityIds.Count,
+                        ["staleDeletedCount"] = staleDeletedCount,
+                        ["orionLdBaseUrl"] = baseUrl
+                    }
+                }, cancellationToken: cancellationToken);
 
                 return new FiwarePublishResponse
                 {

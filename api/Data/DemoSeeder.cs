@@ -1,5 +1,7 @@
 using DriveTraceCore.Api.Models;
+using DriveTraceCore.Api.Services;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 using Resource = DriveTraceCore.Api.Models.Resource;
 
 namespace DriveTraceCore.Api.Data;
@@ -8,6 +10,7 @@ public static class DemoSeeder
 {
     private const string SeedSource = "demo-seed-pt-pt-v2";
     private const string PublicTrackingCode = "TRC-PORTA-001";
+    private static readonly JsonSerializerOptions OperationalEventJsonOptions = new(JsonSerializerDefaults.Web);
 
     public static async Task SeedAsync(DriveTraceDbContext db)
     {
@@ -75,6 +78,9 @@ public static class DemoSeeder
         await db.SaveChangesAsync();
 
         await SeedReworkAndScrapAsync(db, now, units, nonconformities);
+        await db.SaveChangesAsync();
+
+        await SeedOperationalEventsAsync(db, now, orders, units, supports, racks, sections, quality, nonconformities);
         await SeedPredictionsAsync(db, now, orders);
         await NormalizeAdHocLegacyDemoRowsAsync(db, now, customers, products, variants, process, lines, sections);
 
@@ -456,6 +462,180 @@ public static class DemoSeeder
         await EnsureReworkRecordAsync(db, units["u3"], nonconformities["nc1"], now.AddMinutes(-45), "Open", "Rever espessura de pintura, corrigir camada e repetir ponto de controlo.");
         await EnsureReworkRecordAsync(db, units["u4"], nonconformities["nc2"], now.AddMinutes(-40), "Open", "Validar desalinhamento estrutural antes de decidir recuperação ou sucata.");
         await EnsureScrapRecordAsync(db, units["u4"], nonconformities["nc2"], now.AddMinutes(-20), "Cenário demonstrativo de decisão de sucata por desalinhamento estrutural.");
+    }
+
+    private static async Task SeedOperationalEventsAsync(
+        DriveTraceDbContext db,
+        DateTime now,
+        IReadOnlyDictionary<string, ManufacturingOrder> orders,
+        IReadOnlyDictionary<string, ProductUnit> units,
+        IReadOnlyDictionary<string, Support> supports,
+        IReadOnlyDictionary<string, Rack> racks,
+        IReadOnlyDictionary<string, ProductionLineSection> sections,
+        IReadOnlyDictionary<string, QualityResult> quality,
+        IReadOnlyDictionary<string, Nonconformity> nonconformities)
+    {
+        await EnsureOperationalEventAsync(db, new OperationalEvent
+        {
+            EventCode = "SEED-DEMO-PT-PT-V2",
+            EventType = OperationalEventTypes.DemoSeeded,
+            Source = OperationalEventSources.Seed,
+            OccurredAt = now.AddHours(-8).AddMinutes(-10),
+            Notes = "Dados demonstrativos PT-PT inicializados para a Fase A.",
+            IsDemo = true,
+            MetadataJson = SerializeMetadata(new Dictionary<string, object?>
+            {
+                ["orders"] = orders.Count,
+                ["units"] = units.Count,
+                ["supports"] = supports.Count,
+                ["racks"] = racks.Count,
+                ["sections"] = sections.Count
+            })
+        });
+
+        foreach (var unit in units.Values)
+        {
+            await EnsureOperationalEventAsync(db, new OperationalEvent
+            {
+                EventCode = $"SEED-UNIT-CREATED-{unit.Id}",
+                EventType = OperationalEventTypes.ProductUnitCreated,
+                ProductUnitId = unit.Id,
+                ManufacturingOrderId = unit.ManufacturingOrderId,
+                ToSectionId = unit.CurrentSectionId,
+                SupportId = unit.CurrentSupportId,
+                Source = OperationalEventSources.Seed,
+                OccurredAt = unit.CreatedAt,
+                Notes = $"Unidade {unit.UnitCode} criada nos dados demonstrativos.",
+                IsDemo = true
+            });
+
+            if (unit.CurrentSupportId.HasValue)
+            {
+                await EnsureOperationalEventAsync(db, new OperationalEvent
+                {
+                    EventCode = $"SEED-SUPPORT-ASSIGNED-{unit.Id}-{unit.CurrentSupportId.Value}",
+                    EventType = OperationalEventTypes.SupportAssigned,
+                    ProductUnitId = unit.Id,
+                    SupportId = unit.CurrentSupportId,
+                    ManufacturingOrderId = unit.ManufacturingOrderId,
+                    ToSectionId = unit.CurrentSectionId,
+                    Source = OperationalEventSources.Seed,
+                    OccurredAt = unit.CreatedAt.AddMinutes(5),
+                    Notes = "Suporte associado à unidade demonstrativa.",
+                    IsDemo = true
+                });
+            }
+        }
+
+        var seedMovements = await db.ProductUnitLocationHistory
+            .AsNoTracking()
+            .Where(x => x.Source == SeedSource)
+            .OrderBy(x => x.OccurredAt)
+            .ToListAsync();
+        foreach (var movement in seedMovements)
+        {
+            await EnsureOperationalEventAsync(db, new OperationalEvent
+            {
+                EventCode = $"SEED-MOVEMENT-{movement.Id}",
+                EventType = MapMovementEventType(movement.EventType),
+                ProductUnitId = movement.ProductUnitId,
+                SupportId = movement.ToSupportId ?? movement.FromSupportId,
+                ManufacturingOrderId = units.Values.FirstOrDefault(x => x.Id == movement.ProductUnitId)?.ManufacturingOrderId,
+                FromProductionLineId = movement.FromProductionLineId,
+                ToProductionLineId = movement.ToProductionLineId,
+                FromSectionId = movement.FromSectionId,
+                ToSectionId = movement.ToSectionId,
+                RackId = movement.EventType.Equals("TransferToRack", StringComparison.OrdinalIgnoreCase) ? racks.Values.FirstOrDefault(x => x.SectionId == movement.ToSectionId)?.Id : null,
+                ReasonCode = movement.EventType,
+                Source = OperationalEventSources.Seed,
+                OccurredAt = movement.OccurredAt,
+                Notes = movement.Reason,
+                IsDemo = true,
+                MetadataJson = SerializeMetadata(new Dictionary<string, object?>
+                {
+                    ["movementCorrelationId"] = movement.CorrelationId,
+                    ["source"] = movement.Source
+                })
+            });
+        }
+
+        foreach (var item in quality.Values)
+        {
+            var unit = units.Values.First(x => x.Id == item.ProductUnitId);
+            await EnsureOperationalEventAsync(db, new OperationalEvent
+            {
+                EventCode = $"SEED-QUALITY-{item.Id}",
+                EventType = OperationalEventTypes.QualityRecorded,
+                ProductUnitId = item.ProductUnitId,
+                ManufacturingOrderId = unit.ManufacturingOrderId,
+                CheckpointId = item.CheckpointId,
+                QualityResultId = item.Id,
+                ReasonCode = item.Result,
+                Severity = item.Result.Equals("FAIL", StringComparison.OrdinalIgnoreCase) ? "Maior" : null,
+                Source = OperationalEventSources.Seed,
+                OccurredAt = item.RecordedAt,
+                Notes = item.Notes,
+                IsDemo = true
+            });
+        }
+
+        foreach (var item in nonconformities.Values)
+        {
+            var unit = units.Values.First(x => x.Id == item.ProductUnitId);
+            await EnsureOperationalEventAsync(db, new OperationalEvent
+            {
+                EventCode = $"SEED-NC-{item.Id}",
+                EventType = OperationalEventTypes.NonconformityOpened,
+                ProductUnitId = item.ProductUnitId,
+                ManufacturingOrderId = unit.ManufacturingOrderId,
+                QualityResultId = item.QualityResultId,
+                NonconformityId = item.Id,
+                Severity = item.Severity,
+                Source = OperationalEventSources.Seed,
+                OccurredAt = item.CreatedAt,
+                Notes = item.Description,
+                IsDemo = true
+            });
+        }
+
+        var unitIds = units.Values.Select(x => x.Id).ToArray();
+        var reworkRecords = await db.ReworkRecords.AsNoTracking().Where(x => unitIds.Contains(x.ProductUnitId)).ToListAsync();
+        foreach (var item in reworkRecords)
+        {
+            var unit = units.Values.First(x => x.Id == item.ProductUnitId);
+            await EnsureOperationalEventAsync(db, new OperationalEvent
+            {
+                EventCode = $"SEED-REWORK-{item.Id}",
+                EventType = item.EndedAt.HasValue ? OperationalEventTypes.ReworkCompleted : OperationalEventTypes.ReworkStarted,
+                ProductUnitId = item.ProductUnitId,
+                ManufacturingOrderId = unit.ManufacturingOrderId,
+                NonconformityId = item.NonconformityId,
+                ReworkRecordId = item.Id,
+                Source = OperationalEventSources.Seed,
+                OccurredAt = item.EndedAt ?? item.StartedAt,
+                Notes = item.Notes,
+                IsDemo = true
+            });
+        }
+
+        var scrapRecords = await db.ScrapRecords.AsNoTracking().Where(x => unitIds.Contains(x.ProductUnitId)).ToListAsync();
+        foreach (var item in scrapRecords)
+        {
+            var unit = units.Values.First(x => x.Id == item.ProductUnitId);
+            await EnsureOperationalEventAsync(db, new OperationalEvent
+            {
+                EventCode = $"SEED-SCRAP-{item.Id}",
+                EventType = OperationalEventTypes.ScrapRecorded,
+                ProductUnitId = item.ProductUnitId,
+                ManufacturingOrderId = unit.ManufacturingOrderId,
+                NonconformityId = item.NonconformityId,
+                ScrapRecordId = item.Id,
+                Source = OperationalEventSources.Seed,
+                OccurredAt = item.ScrappedAt,
+                Notes = item.Reason,
+                IsDemo = true
+            });
+        }
     }
 
     private static async Task SeedPredictionsAsync(
@@ -1148,6 +1328,55 @@ public static class DemoSeeder
             Source = SeedSource,
             CorrelationId = correlationId
         });
+    }
+
+    private static async Task EnsureOperationalEventAsync(DriveTraceDbContext db, OperationalEvent value)
+    {
+        var item = await db.OperationalEvents.FirstOrDefaultAsync(x => x.EventCode == value.EventCode);
+        if (item is null)
+        {
+            item = new OperationalEvent { EventCode = value.EventCode };
+            db.OperationalEvents.Add(item);
+        }
+
+        item.EventType = value.EventType;
+        item.ProductUnitId = value.ProductUnitId;
+        item.SupportId = value.SupportId;
+        item.ManufacturingOrderId = value.ManufacturingOrderId;
+        item.FromProductionLineId = value.FromProductionLineId;
+        item.ToProductionLineId = value.ToProductionLineId;
+        item.FromSectionId = value.FromSectionId;
+        item.ToSectionId = value.ToSectionId;
+        item.CheckpointId = value.CheckpointId;
+        item.QualityResultId = value.QualityResultId;
+        item.NonconformityId = value.NonconformityId;
+        item.ReworkRecordId = value.ReworkRecordId;
+        item.ScrapRecordId = value.ScrapRecordId;
+        item.RackId = value.RackId;
+        item.ReasonCode = value.ReasonCode;
+        item.Severity = value.Severity;
+        item.Source = value.Source;
+        item.PerformedByUserId = value.PerformedByUserId;
+        item.OccurredAt = value.OccurredAt;
+        item.Notes = value.Notes;
+        item.IsDemo = value.IsDemo;
+        item.MetadataJson = value.MetadataJson;
+    }
+
+    private static string MapMovementEventType(string movementEventType)
+    {
+        return movementEventType switch
+        {
+            "SupportAssigned" => OperationalEventTypes.SupportAssigned,
+            "LineTransfer" => OperationalEventTypes.LineTransfer,
+            "TransferToRack" => OperationalEventTypes.RackAssigned,
+            _ => OperationalEventTypes.SectionMovement
+        };
+    }
+
+    private static string? SerializeMetadata(IReadOnlyDictionary<string, object?>? metadata)
+    {
+        return metadata is null ? null : JsonSerializer.Serialize(metadata, OperationalEventJsonOptions);
     }
 
     private static async Task EnsureRackAssignmentAsync(

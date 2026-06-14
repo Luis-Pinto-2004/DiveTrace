@@ -17,6 +17,11 @@ public sealed class ProductionFlowController : ControllerBase
     [HttpPost("product-units/{id:int}/transfer")]
     public async Task<IActionResult> TransferProductUnit(int id, [FromBody] ProductUnitTransferRequest request, CancellationToken cancellationToken)
     {
+        if (!PermissionCatalogService.HasPermission(HttpContext, PermissionNames.ProductUnitsTransfer))
+        {
+            return PermissionCatalogService.Forbidden(PermissionNames.ProductUnitsTransfer);
+        }
+
         try
         {
             return Ok(await _flow.TransferAsync(id, request, cancellationToken));
@@ -34,6 +39,11 @@ public sealed class ProductionFlowController : ControllerBase
     [HttpGet("product-units/{id:int}/trace")]
     public async Task<IActionResult> ProductUnitTrace(int id, CancellationToken cancellationToken)
     {
+        if (!PermissionCatalogService.HasPermission(HttpContext, PermissionNames.ProductUnitsTrace))
+        {
+            return PermissionCatalogService.Forbidden(PermissionNames.ProductUnitsTrace);
+        }
+
         var trace = await _flow.GetTraceAsync(id, cancellationToken);
         return trace is null ? NotFound() : Ok(trace);
     }

@@ -30,10 +30,12 @@ public sealed class ProductionTimelineItem
 public sealed class ProductionFlowService
 {
     private readonly DriveTraceDbContext _db;
+    private readonly OperationalEventService _operationalEvents;
 
-    public ProductionFlowService(DriveTraceDbContext db)
+    public ProductionFlowService(DriveTraceDbContext db, OperationalEventService operationalEvents)
     {
         _db = db;
+        _operationalEvents = operationalEvents;
     }
 
     public async Task<object> TransferAsync(int productUnitId, ProductUnitTransferRequest request, CancellationToken cancellationToken = default)
@@ -151,6 +153,31 @@ public sealed class ProductionFlowService
         };
         _db.ProductUnitLocationHistory.Add(movement);
 
+        await _operationalEvents.RecordAsync(new OperationalEventCreateRequest
+        {
+            EventCode = $"TRANSFER-{movement.CorrelationId}",
+            EventType = fromSection?.LineId != toSection.LineId ? OperationalEventTypes.LineTransfer : OperationalEventTypes.SectionMovement,
+            ProductUnitId = unit.Id,
+            SupportId = toSupport?.Id ?? unit.CurrentSupportId,
+            ManufacturingOrderId = unit.ManufacturingOrderId,
+            FromProductionLineId = fromSection?.LineId,
+            ToProductionLineId = toSection.LineId,
+            FromSectionId = fromSection?.Id,
+            ToSectionId = toSection.Id,
+            ReasonCode = movement.EventType,
+            Source = OperationalEventSources.Api,
+            PerformedByUserId = request.OperatorUserId,
+            OccurredAt = now,
+            Notes = movement.Notes ?? movement.Reason,
+            Metadata = new Dictionary<string, object?>
+            {
+                ["movementCorrelationId"] = movement.CorrelationId,
+                ["moveCurrentSupport"] = request.MoveCurrentSupport,
+                ["fromSupportId"] = fromSupportId,
+                ["toSupportId"] = toSupport?.Id ?? unit.CurrentSupportId
+            }
+        }, saveChanges: false, cancellationToken);
+
         await _db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
@@ -221,8 +248,9 @@ public sealed class ProductionFlowService
         var nonconformities = await _db.Nonconformities.AsNoTracking().Where(x => x.ProductUnitId == productUnitId).OrderBy(x => x.CreatedAt).ToListAsync(cancellationToken);
         var rework = await _db.ReworkRecords.AsNoTracking().Where(x => x.ProductUnitId == productUnitId).OrderBy(x => x.StartedAt).ToListAsync(cancellationToken);
         var scrap = await _db.ScrapRecords.AsNoTracking().Where(x => x.ProductUnitId == productUnitId).OrderBy(x => x.ScrappedAt).ToListAsync(cancellationToken);
+        var operationalEvents = await _operationalEvents.GetForProductUnitAsync(productUnitId, cancellationToken: cancellationToken);
 
-        var timeline = BuildTimeline(locationHistory, supportMovements, quality, sectionById, lineById, supportById);
+        var timeline = BuildTimeline(locationHistory, supportMovements, quality, operationalEvents, sectionById, lineById, supportById);
 
         return new
         {
@@ -289,6 +317,7 @@ public sealed class ProductionFlowService
             nonconformities,
             rework,
             scrap,
+            operationalEvents,
             timeline
         };
     }
@@ -300,6 +329,7 @@ public sealed class ProductionFlowService
         var units = await _db.ProductUnits.AsNoTracking().ToListAsync(cancellationToken);
         var supports = await _db.Supports.AsNoTracking().ToListAsync(cancellationToken);
         var histories = await _db.ProductUnitLocationHistory.AsNoTracking().OrderByDescending(x => x.OccurredAt).Take(50).ToListAsync(cancellationToken);
+        var recentOperationalEvents = await _operationalEvents.GetRecentAsync(12, cancellationToken);
 
         var sectionById = sections.ToDictionary(x => x.Id);
         var lineById = lines.ToDictionary(x => x.Id);
@@ -380,7 +410,9 @@ public sealed class ProductionFlowService
                 activeSupports = supports.Count(support => !support.Status.Equals("Available", StringComparison.OrdinalIgnoreCase)),
                 transferPoints = sections.Count(section => section.IsTransferPoint),
                 transfers = await _db.ProductUnitLocationHistory.CountAsync(cancellationToken),
-                transfersLast24h = await _db.ProductUnitLocationHistory.CountAsync(x => x.OccurredAt >= DateTime.UtcNow.AddHours(-24), cancellationToken)
+                transfersLast24h = await _db.ProductUnitLocationHistory.CountAsync(x => x.OccurredAt >= DateTime.UtcNow.AddHours(-24), cancellationToken),
+                operationalEvents = await _db.OperationalEvents.CountAsync(cancellationToken),
+                operationalEventsLast24h = await _db.OperationalEvents.CountAsync(x => x.OccurredAt >= DateTime.UtcNow.AddHours(-24), cancellationToken)
             },
             routeStates = activeUnits
                 .Select(unit => new { state = RouteState(unit, unit.CurrentSectionId.HasValue ? Find(sectionById, unit.CurrentSectionId.Value) : null) })
@@ -388,7 +420,8 @@ public sealed class ProductionFlowService
                 .Select(group => new { routeState = group.Key, count = group.Count() })
                 .OrderByDescending(x => x.count),
             lineSummaries,
-            recentTransfers
+            recentTransfers,
+            recentOperationalEvents
         };
     }
 
@@ -547,6 +580,7 @@ public sealed class ProductionFlowService
         IReadOnlyList<ProductUnitLocationHistory> locationHistory,
         IReadOnlyList<SupportLocalizationHistory> supportMovements,
         IReadOnlyList<QualityResult> quality,
+        IReadOnlyList<OperationalEventDto> operationalEvents,
         IReadOnlyDictionary<int, ProductionLineSection> sectionById,
         IReadOnlyDictionary<int, ProductionLine> lineById,
         IReadOnlyDictionary<int, Support> supportById)
@@ -592,6 +626,15 @@ public sealed class ProductionFlowService
             Source = "quality",
             Label = item.Notes ?? "Resultado de qualidade",
             Result = item.Result
+        }));
+
+        timeline.AddRange(operationalEvents.Select(item => new ProductionTimelineItem
+        {
+            EventType = item.EventType,
+            OccurredAt = item.OccurredAt,
+            Source = item.Source,
+            Label = item.Label,
+            Result = item.Severity
         }));
 
         return timeline.OrderBy(item => item.OccurredAt).ToList();

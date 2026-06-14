@@ -186,6 +186,47 @@ public sealed class ProductUnitLocationHistory : IEntity
     [JsonIgnore] public Support? ToSupport { get; set; }
 }
 
+public sealed class OperationalEvent : IEntity
+{
+    public int Id { get; set; }
+    [MaxLength(80)] public string EventCode { get; set; } = string.Empty;
+    [MaxLength(80)] public string EventType { get; set; } = string.Empty;
+    public int? ProductUnitId { get; set; }
+    public int? SupportId { get; set; }
+    public int? ManufacturingOrderId { get; set; }
+    public int? FromProductionLineId { get; set; }
+    public int? ToProductionLineId { get; set; }
+    public int? FromSectionId { get; set; }
+    public int? ToSectionId { get; set; }
+    public int? CheckpointId { get; set; }
+    public int? QualityResultId { get; set; }
+    public int? NonconformityId { get; set; }
+    public int? ReworkRecordId { get; set; }
+    public int? ScrapRecordId { get; set; }
+    public int? RackId { get; set; }
+    [MaxLength(80)] public string? ReasonCode { get; set; }
+    [MaxLength(40)] public string? Severity { get; set; }
+    [MaxLength(40)] public string Source { get; set; } = "Api";
+    [MaxLength(120)] public string? PerformedByUserId { get; set; }
+    public DateTime OccurredAt { get; set; } = DateTime.UtcNow;
+    public string? Notes { get; set; }
+    public bool IsDemo { get; set; }
+    public string? MetadataJson { get; set; }
+    [JsonIgnore] public ProductUnit? ProductUnit { get; set; }
+    [JsonIgnore] public Support? Support { get; set; }
+    [JsonIgnore] public ManufacturingOrder? ManufacturingOrder { get; set; }
+    [JsonIgnore] public ProductionLine? FromProductionLine { get; set; }
+    [JsonIgnore] public ProductionLine? ToProductionLine { get; set; }
+    [JsonIgnore] public ProductionLineSection? FromSection { get; set; }
+    [JsonIgnore] public ProductionLineSection? ToSection { get; set; }
+    [JsonIgnore] public Checkpoint? Checkpoint { get; set; }
+    [JsonIgnore] public QualityResult? QualityResult { get; set; }
+    [JsonIgnore] public Nonconformity? Nonconformity { get; set; }
+    [JsonIgnore] public ReworkRecord? ReworkRecord { get; set; }
+    [JsonIgnore] public ScrapRecord? ScrapRecord { get; set; }
+    [JsonIgnore] public Rack? Rack { get; set; }
+}
+
 public sealed class Support : IEntity
 {
     public int Id { get; set; }

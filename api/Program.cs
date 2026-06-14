@@ -29,7 +29,9 @@ builder.Services.AddDbContext<DriveTraceDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddScoped<DemoEventService>();
+builder.Services.AddScoped<OperationalEventService>();
 builder.Services.AddScoped<ProductionFlowService>();
+builder.Services.AddSingleton<PermissionCatalogService>();
 builder.Services.AddHttpClient<IFiwareContextService, FiwareContextService>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(12);

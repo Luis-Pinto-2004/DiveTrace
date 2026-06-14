@@ -7,10 +7,12 @@ namespace DriveTraceCore.Api.Services;
 public sealed class DemoEventService
 {
     private readonly DriveTraceDbContext _db;
+    private readonly OperationalEventService _operationalEvents;
 
-    public DemoEventService(DriveTraceDbContext db)
+    public DemoEventService(DriveTraceDbContext db, OperationalEventService operationalEvents)
     {
         _db = db;
+        _operationalEvents = operationalEvents;
     }
 
     public async Task<object> InjectManualEventAsync(ManualEventRequest request)
@@ -43,6 +45,7 @@ public sealed class DemoEventService
 
         foreach (var support in supports)
         {
+            var now = DateTime.UtcNow;
             var currentIndex = support.CurrentSectionId is null
                 ? -1
                 : sections.FindIndex(x => x.Id == support.CurrentSectionId.Value);
@@ -60,7 +63,7 @@ public sealed class DemoEventService
                 if (nextSection.SectionType.Contains("log", StringComparison.OrdinalIgnoreCase) || nextSection.Name.Contains("rack", StringComparison.OrdinalIgnoreCase))
                 {
                     unit.Status = unit.QualityStatus == "FAIL" ? unit.Status : "Completed";
-                    unit.CompletedAt ??= DateTime.UtcNow;
+                    unit.CompletedAt ??= now;
                 }
 
                 _db.ProductUnitLocationHistory.Add(new ProductUnitLocationHistory
@@ -74,16 +77,38 @@ public sealed class DemoEventService
                     ToSupportId = support.Id,
                     EventType = "PlaybackMovement",
                     Reason = "A reprodução demonstrativa moveu a unidade com o respetivo suporte.",
-                    OccurredAt = DateTime.UtcNow,
+                    OccurredAt = now,
                     Source = "playback"
                 });
+
+                await _operationalEvents.RecordAsync(new OperationalEventCreateRequest
+                {
+                    EventCode = $"PLAYBACK-{request.Scenario}-{unit.UnitCode}-{support.SupportCode}-{now:yyyyMMddHHmmssfff}",
+                    EventType = OperationalEventTypes.SectionMovement,
+                    ProductUnitId = unit.Id,
+                    SupportId = support.Id,
+                    ManufacturingOrderId = unit.ManufacturingOrderId,
+                    FromProductionLineId = previousSection?.LineId,
+                    ToProductionLineId = nextSection.LineId,
+                    FromSectionId = previousSection?.Id,
+                    ToSectionId = nextSection.Id,
+                    Source = OperationalEventSources.Playback,
+                    OccurredAt = now,
+                    Notes = "Reprodução demonstrativa moveu a unidade com o respetivo suporte.",
+                    IsDemo = true,
+                    Metadata = new Dictionary<string, object?>
+                    {
+                        ["scenario"] = request.Scenario,
+                        ["supportCode"] = support.SupportCode
+                    }
+                }, saveChanges: false);
             }
 
             _db.SupportLocalizationHistory.Add(new SupportLocalizationHistory
             {
                 SupportId = support.Id,
                 SectionId = nextSection.Id,
-                DateTime = DateTime.UtcNow,
+                DateTime = now,
                 EventType = "PlaybackMovement"
             });
 
@@ -110,6 +135,7 @@ public sealed class DemoEventService
 
         support.CurrentSectionId = section.Id;
         support.Status = support.Status == "Available" ? "Loaded" : support.Status;
+        var now = DateTime.UtcNow;
 
         var unit = await _db.ProductUnits.FirstOrDefaultAsync(x => x.CurrentSupportId == support.Id);
         if (unit is not null)
@@ -130,7 +156,7 @@ public sealed class DemoEventService
                 EventType = "ManualMovement",
                 Reason = request.Notes ?? "Evento manual moveu a unidade com o respetivo suporte.",
                 Notes = request.Notes,
-                OccurredAt = DateTime.UtcNow,
+                OccurredAt = now,
                 Source = "manual-event"
             });
         }
@@ -139,9 +165,29 @@ public sealed class DemoEventService
         {
             SupportId = support.Id,
             SectionId = section.Id,
-            DateTime = DateTime.UtcNow,
+            DateTime = now,
             EventType = "ManualMovement"
         });
+
+        await _operationalEvents.RecordAsync(new OperationalEventCreateRequest
+        {
+            EventCode = $"MANUAL-MOVE-{support.SupportCode}-{section.SectionCode}-{now:yyyyMMddHHmmssfff}",
+            EventType = OperationalEventTypes.SectionMovement,
+            ProductUnitId = unit?.Id,
+            SupportId = support.Id,
+            ManufacturingOrderId = unit?.ManufacturingOrderId,
+            ToProductionLineId = section.LineId,
+            ToSectionId = section.Id,
+            Source = OperationalEventSources.Manual,
+            OccurredAt = now,
+            Notes = request.Notes ?? "Evento manual moveu o suporte.",
+            IsDemo = true,
+            Metadata = new Dictionary<string, object?>
+            {
+                ["supportCode"] = support.SupportCode,
+                ["sectionCode"] = section.SectionCode
+            }
+        }, saveChanges: false);
 
         await _db.SaveChangesAsync();
         return new { support.SupportCode, section.SectionCode, unit = unit?.UnitCode, message = "Movimento de suporte registado." };
@@ -161,13 +207,14 @@ public sealed class DemoEventService
         var result = string.IsNullOrWhiteSpace(request.Result) ? "PASS" : request.Result.Trim().ToUpperInvariant();
         unit.QualityStatus = result;
         unit.Status = result == "FAIL" ? "Blocked" : unit.Status;
+        var now = DateTime.UtcNow;
 
         var quality = new QualityResult
         {
             ProductUnitId = unit.Id,
             CheckpointId = checkpoint?.Id,
             Result = result,
-            RecordedAt = DateTime.UtcNow,
+            RecordedAt = now,
             Notes = request.Notes
         };
         _db.QualityResults.Add(quality);
@@ -188,6 +235,42 @@ public sealed class DemoEventService
             await _db.SaveChangesAsync();
         }
 
+        await _operationalEvents.RecordAsync(new OperationalEventCreateRequest
+        {
+            EventCode = $"QUALITY-{quality.Id}",
+            EventType = OperationalEventTypes.QualityRecorded,
+            ProductUnitId = unit.Id,
+            ManufacturingOrderId = unit.ManufacturingOrderId,
+            CheckpointId = checkpoint?.Id,
+            QualityResultId = quality.Id,
+            ReasonCode = result,
+            Severity = result == "FAIL" ? "Maior" : null,
+            Source = OperationalEventSources.Manual,
+            OccurredAt = now,
+            Notes = request.Notes ?? "Resultado de qualidade registado manualmente.",
+            IsDemo = true
+        }, saveChanges: false);
+
+        if (nonconformity is not null)
+        {
+            await _operationalEvents.RecordAsync(new OperationalEventCreateRequest
+            {
+                EventCode = $"NC-{nonconformity.Id}",
+                EventType = OperationalEventTypes.NonconformityOpened,
+                ProductUnitId = unit.Id,
+                ManufacturingOrderId = unit.ManufacturingOrderId,
+                CheckpointId = checkpoint?.Id,
+                QualityResultId = quality.Id,
+                NonconformityId = nonconformity.Id,
+                Severity = nonconformity.Severity,
+                Source = OperationalEventSources.Manual,
+                OccurredAt = nonconformity.CreatedAt,
+                Notes = nonconformity.Description,
+                IsDemo = true
+            }, saveChanges: false);
+        }
+
+        await _db.SaveChangesAsync();
         return new { unit.UnitCode, result, nonconformityId = nonconformity?.Id, message = "Resultado de qualidade registado." };
     }
 
@@ -206,19 +289,21 @@ public sealed class DemoEventService
             throw new InvalidOperationException("Não existe nenhuma rack no sistema.");
         }
 
+        var now = DateTime.UtcNow;
         _db.RackSupportAssignments.Add(new RackSupportAssignment
         {
             RackId = rack.Id,
             SupportId = support.Id,
-            DateTimeIn = DateTime.UtcNow
+            DateTimeIn = now
         });
 
         support.Status = "Stored";
+        ProductUnit? unit = null;
         if (rack.SectionId is not null)
         {
             support.CurrentSectionId = rack.SectionId;
             var rackSection = await _db.ProductionLineSections.AsNoTracking().FirstOrDefaultAsync(x => x.Id == rack.SectionId.Value);
-            var unit = await _db.ProductUnits.FirstOrDefaultAsync(x => x.CurrentSupportId == support.Id);
+            unit = await _db.ProductUnits.FirstOrDefaultAsync(x => x.CurrentSupportId == support.Id);
             if (unit is not null)
             {
                 var previousSection = unit.CurrentSectionId is null
@@ -226,7 +311,7 @@ public sealed class DemoEventService
                     : await _db.ProductionLineSections.AsNoTracking().FirstOrDefaultAsync(x => x.Id == unit.CurrentSectionId.Value);
                 unit.CurrentSectionId = rack.SectionId;
                 unit.Status = unit.QualityStatus == "FAIL" ? unit.Status : "Completed";
-                unit.CompletedAt ??= DateTime.UtcNow;
+                unit.CompletedAt ??= now;
                 _db.ProductUnitLocationHistory.Add(new ProductUnitLocationHistory
                 {
                     ProductUnitId = unit.Id,
@@ -239,7 +324,7 @@ public sealed class DemoEventService
                     EventType = "TransferToRack",
                     Reason = request.Notes ?? "Suporte transferido para rack pós-linha.",
                     Notes = request.Notes,
-                    OccurredAt = DateTime.UtcNow,
+                    OccurredAt = now,
                     Source = "manual-event"
                 });
             }
@@ -248,10 +333,30 @@ public sealed class DemoEventService
             {
                 SupportId = support.Id,
                 SectionId = rack.SectionId.Value,
-                DateTime = DateTime.UtcNow,
+                DateTime = now,
                 EventType = "TransferToRack"
             });
         }
+
+        await _operationalEvents.RecordAsync(new OperationalEventCreateRequest
+        {
+            EventCode = $"RACK-ASSIGNED-{rack.RackCode}-{support.SupportCode}-{now:yyyyMMddHHmmssfff}",
+            EventType = OperationalEventTypes.RackAssigned,
+            ProductUnitId = unit?.Id,
+            SupportId = support.Id,
+            ManufacturingOrderId = unit?.ManufacturingOrderId,
+            ToSectionId = rack.SectionId,
+            RackId = rack.Id,
+            Source = OperationalEventSources.Manual,
+            OccurredAt = now,
+            Notes = request.Notes ?? "Suporte transferido para rack pós-linha.",
+            IsDemo = true,
+            Metadata = new Dictionary<string, object?>
+            {
+                ["rackCode"] = rack.RackCode,
+                ["supportCode"] = support.SupportCode
+            }
+        }, saveChanges: false);
 
         await _db.SaveChangesAsync();
         return new { support.SupportCode, rack.RackCode, message = "Suporte transferido para rack pós-linha." };

@@ -1,5 +1,6 @@
 using DriveTraceCore.Api.Data;
 using DriveTraceCore.Api.Models;
+using DriveTraceCore.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Resource = DriveTraceCore.Api.Models.Resource;
@@ -32,6 +33,11 @@ public abstract class CrudController<TEntity> : ControllerBase where TEntity : c
     [HttpPost]
     public virtual async Task<ActionResult<TEntity>> Create(TEntity entity)
     {
+        if (!PermissionCatalogService.HasPermission(HttpContext, PermissionNames.MasterDataManage))
+        {
+            return PermissionCatalogService.Forbidden(PermissionNames.MasterDataManage);
+        }
+
         Db.Set<TEntity>().Add(entity);
         await Db.SaveChangesAsync();
         return CreatedAtAction(nameof(GetById), new { id = entity.Id }, entity);
@@ -40,6 +46,11 @@ public abstract class CrudController<TEntity> : ControllerBase where TEntity : c
     [HttpPut("{id:int}")]
     public virtual async Task<IActionResult> Update(int id, TEntity entity)
     {
+        if (!PermissionCatalogService.HasPermission(HttpContext, PermissionNames.MasterDataManage))
+        {
+            return PermissionCatalogService.Forbidden(PermissionNames.MasterDataManage);
+        }
+
         if (id != entity.Id)
         {
             return BadRequest("The route id does not match the entity id.");
@@ -59,6 +70,11 @@ public abstract class CrudController<TEntity> : ControllerBase where TEntity : c
     [HttpDelete("{id:int}")]
     public virtual async Task<IActionResult> Delete(int id)
     {
+        if (!PermissionCatalogService.HasPermission(HttpContext, PermissionNames.MasterDataManage))
+        {
+            return PermissionCatalogService.Forbidden(PermissionNames.MasterDataManage);
+        }
+
         var entity = await Db.Set<TEntity>().FirstOrDefaultAsync(x => x.Id == id);
         if (entity is null)
         {
@@ -176,7 +192,40 @@ public sealed class RacksController : CrudController<Rack>
 [Route("api/rack-support-assignments")]
 public sealed class RackSupportAssignmentsController : CrudController<RackSupportAssignment>
 {
-    public RackSupportAssignmentsController(DriveTraceDbContext db) : base(db) { }
+    private readonly OperationalEventService _events;
+
+    public RackSupportAssignmentsController(DriveTraceDbContext db, OperationalEventService events) : base(db)
+    {
+        _events = events;
+    }
+
+    [HttpPost]
+    public override async Task<ActionResult<RackSupportAssignment>> Create(RackSupportAssignment entity)
+    {
+        if (!PermissionCatalogService.HasPermission(HttpContext, PermissionNames.RacksManage))
+        {
+            return PermissionCatalogService.Forbidden(PermissionNames.RacksManage);
+        }
+
+        Db.RackSupportAssignments.Add(entity);
+        await Db.SaveChangesAsync();
+
+        var unit = await Db.ProductUnits.AsNoTracking().FirstOrDefaultAsync(x => x.CurrentSupportId == entity.SupportId);
+        await _events.RecordAsync(new OperationalEventCreateRequest
+        {
+            EventCode = $"RACK-ASSIGNMENT-{entity.Id}",
+            EventType = OperationalEventTypes.RackAssigned,
+            ProductUnitId = unit?.Id,
+            SupportId = entity.SupportId,
+            ManufacturingOrderId = unit?.ManufacturingOrderId,
+            RackId = entity.RackId,
+            Source = OperationalEventSources.Api,
+            OccurredAt = entity.DateTimeIn,
+            Notes = "Suporte associado a rack por operação API."
+        });
+
+        return CreatedAtAction(nameof(GetById), new { id = entity.Id }, entity);
+    }
 }
 
 [Route("api/raw-materials")]
@@ -200,25 +249,160 @@ public sealed class UnitMaterialLotUsagesController : CrudController<UnitMateria
 [Route("api/quality-results")]
 public sealed class QualityResultsController : CrudController<QualityResult>
 {
-    public QualityResultsController(DriveTraceDbContext db) : base(db) { }
+    private readonly OperationalEventService _events;
+
+    public QualityResultsController(DriveTraceDbContext db, OperationalEventService events) : base(db)
+    {
+        _events = events;
+    }
+
+    [HttpPost]
+    public override async Task<ActionResult<QualityResult>> Create(QualityResult entity)
+    {
+        if (!PermissionCatalogService.HasPermission(HttpContext, PermissionNames.QualityRecord))
+        {
+            return PermissionCatalogService.Forbidden(PermissionNames.QualityRecord);
+        }
+
+        Db.QualityResults.Add(entity);
+        await Db.SaveChangesAsync();
+
+        var unit = await Db.ProductUnits.AsNoTracking().FirstOrDefaultAsync(x => x.Id == entity.ProductUnitId);
+        await _events.RecordAsync(new OperationalEventCreateRequest
+        {
+            EventCode = $"QUALITY-{entity.Id}",
+            EventType = OperationalEventTypes.QualityRecorded,
+            ProductUnitId = entity.ProductUnitId,
+            ManufacturingOrderId = unit?.ManufacturingOrderId,
+            CheckpointId = entity.CheckpointId,
+            QualityResultId = entity.Id,
+            ReasonCode = entity.Result,
+            Severity = entity.Result.Equals("FAIL", StringComparison.OrdinalIgnoreCase) ? "Maior" : null,
+            Source = OperationalEventSources.Api,
+            OccurredAt = entity.RecordedAt,
+            Notes = entity.Notes
+        });
+
+        return CreatedAtAction(nameof(GetById), new { id = entity.Id }, entity);
+    }
 }
 
 [Route("api/nonconformities")]
 public sealed class NonconformitiesController : CrudController<Nonconformity>
 {
-    public NonconformitiesController(DriveTraceDbContext db) : base(db) { }
+    private readonly OperationalEventService _events;
+
+    public NonconformitiesController(DriveTraceDbContext db, OperationalEventService events) : base(db)
+    {
+        _events = events;
+    }
+
+    [HttpPost]
+    public override async Task<ActionResult<Nonconformity>> Create(Nonconformity entity)
+    {
+        if (!PermissionCatalogService.HasPermission(HttpContext, PermissionNames.QualityDecide))
+        {
+            return PermissionCatalogService.Forbidden(PermissionNames.QualityDecide);
+        }
+
+        Db.Nonconformities.Add(entity);
+        await Db.SaveChangesAsync();
+
+        var unit = await Db.ProductUnits.AsNoTracking().FirstOrDefaultAsync(x => x.Id == entity.ProductUnitId);
+        await _events.RecordAsync(new OperationalEventCreateRequest
+        {
+            EventCode = $"NC-{entity.Id}",
+            EventType = OperationalEventTypes.NonconformityOpened,
+            ProductUnitId = entity.ProductUnitId,
+            ManufacturingOrderId = unit?.ManufacturingOrderId,
+            QualityResultId = entity.QualityResultId,
+            NonconformityId = entity.Id,
+            Severity = entity.Severity,
+            Source = OperationalEventSources.Api,
+            OccurredAt = entity.CreatedAt,
+            Notes = entity.Description
+        });
+
+        return CreatedAtAction(nameof(GetById), new { id = entity.Id }, entity);
+    }
 }
 
 [Route("api/rework-records")]
 public sealed class ReworkRecordsController : CrudController<ReworkRecord>
 {
-    public ReworkRecordsController(DriveTraceDbContext db) : base(db) { }
+    private readonly OperationalEventService _events;
+
+    public ReworkRecordsController(DriveTraceDbContext db, OperationalEventService events) : base(db)
+    {
+        _events = events;
+    }
+
+    [HttpPost]
+    public override async Task<ActionResult<ReworkRecord>> Create(ReworkRecord entity)
+    {
+        if (!PermissionCatalogService.HasPermission(HttpContext, PermissionNames.QualityDecide))
+        {
+            return PermissionCatalogService.Forbidden(PermissionNames.QualityDecide);
+        }
+
+        Db.ReworkRecords.Add(entity);
+        await Db.SaveChangesAsync();
+
+        var unit = await Db.ProductUnits.AsNoTracking().FirstOrDefaultAsync(x => x.Id == entity.ProductUnitId);
+        await _events.RecordAsync(new OperationalEventCreateRequest
+        {
+            EventCode = $"REWORK-{entity.Id}",
+            EventType = entity.EndedAt.HasValue ? OperationalEventTypes.ReworkCompleted : OperationalEventTypes.ReworkStarted,
+            ProductUnitId = entity.ProductUnitId,
+            ManufacturingOrderId = unit?.ManufacturingOrderId,
+            NonconformityId = entity.NonconformityId,
+            ReworkRecordId = entity.Id,
+            Source = OperationalEventSources.Api,
+            OccurredAt = entity.EndedAt ?? entity.StartedAt,
+            Notes = entity.Notes
+        });
+
+        return CreatedAtAction(nameof(GetById), new { id = entity.Id }, entity);
+    }
 }
 
 [Route("api/scrap-records")]
 public sealed class ScrapRecordsController : CrudController<ScrapRecord>
 {
-    public ScrapRecordsController(DriveTraceDbContext db) : base(db) { }
+    private readonly OperationalEventService _events;
+
+    public ScrapRecordsController(DriveTraceDbContext db, OperationalEventService events) : base(db)
+    {
+        _events = events;
+    }
+
+    [HttpPost]
+    public override async Task<ActionResult<ScrapRecord>> Create(ScrapRecord entity)
+    {
+        if (!PermissionCatalogService.HasPermission(HttpContext, PermissionNames.QualityDecide))
+        {
+            return PermissionCatalogService.Forbidden(PermissionNames.QualityDecide);
+        }
+
+        Db.ScrapRecords.Add(entity);
+        await Db.SaveChangesAsync();
+
+        var unit = await Db.ProductUnits.AsNoTracking().FirstOrDefaultAsync(x => x.Id == entity.ProductUnitId);
+        await _events.RecordAsync(new OperationalEventCreateRequest
+        {
+            EventCode = $"SCRAP-{entity.Id}",
+            EventType = OperationalEventTypes.ScrapRecorded,
+            ProductUnitId = entity.ProductUnitId,
+            ManufacturingOrderId = unit?.ManufacturingOrderId,
+            NonconformityId = entity.NonconformityId,
+            ScrapRecordId = entity.Id,
+            Source = OperationalEventSources.Api,
+            OccurredAt = entity.ScrappedAt,
+            Notes = entity.Reason
+        });
+
+        return CreatedAtAction(nameof(GetById), new { id = entity.Id }, entity);
+    }
 }
 
 [Route("api/predictions")]

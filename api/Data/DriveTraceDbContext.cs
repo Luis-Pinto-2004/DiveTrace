@@ -20,6 +20,7 @@ public sealed class DriveTraceDbContext : DbContext
     public DbSet<Checkpoint> Checkpoints => Set<Checkpoint>();
     public DbSet<ProductUnit> ProductUnits => Set<ProductUnit>();
     public DbSet<ProductUnitLocationHistory> ProductUnitLocationHistory => Set<ProductUnitLocationHistory>();
+    public DbSet<OperationalEvent> OperationalEvents => Set<OperationalEvent>();
     public DbSet<Support> Supports => Set<Support>();
     public DbSet<UnitSupportAssignment> UnitSupportAssignments => Set<UnitSupportAssignment>();
     public DbSet<SupportLocalizationHistory> SupportLocalizationHistory => Set<SupportLocalizationHistory>();
@@ -123,6 +124,100 @@ public sealed class DriveTraceDbContext : DbContext
             .WithMany()
             .HasForeignKey(x => x.ToSupportId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<OperationalEvent>()
+            .HasIndex(x => x.EventCode)
+            .IsUnique();
+
+        modelBuilder.Entity<OperationalEvent>()
+            .HasIndex(x => new { x.OccurredAt, x.EventType });
+
+        modelBuilder.Entity<OperationalEvent>()
+            .HasIndex(x => new { x.ProductUnitId, x.OccurredAt });
+
+        modelBuilder.Entity<OperationalEvent>()
+            .HasIndex(x => new { x.SupportId, x.OccurredAt });
+
+        modelBuilder.Entity<OperationalEvent>()
+            .HasIndex(x => new { x.ManufacturingOrderId, x.OccurredAt });
+
+        modelBuilder.Entity<OperationalEvent>()
+            .HasOne(x => x.ProductUnit)
+            .WithMany()
+            .HasForeignKey(x => x.ProductUnitId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<OperationalEvent>()
+            .HasOne(x => x.Support)
+            .WithMany()
+            .HasForeignKey(x => x.SupportId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<OperationalEvent>()
+            .HasOne(x => x.ManufacturingOrder)
+            .WithMany()
+            .HasForeignKey(x => x.ManufacturingOrderId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<OperationalEvent>()
+            .HasOne(x => x.FromProductionLine)
+            .WithMany()
+            .HasForeignKey(x => x.FromProductionLineId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<OperationalEvent>()
+            .HasOne(x => x.ToProductionLine)
+            .WithMany()
+            .HasForeignKey(x => x.ToProductionLineId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<OperationalEvent>()
+            .HasOne(x => x.FromSection)
+            .WithMany()
+            .HasForeignKey(x => x.FromSectionId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<OperationalEvent>()
+            .HasOne(x => x.ToSection)
+            .WithMany()
+            .HasForeignKey(x => x.ToSectionId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<OperationalEvent>()
+            .HasOne(x => x.Checkpoint)
+            .WithMany()
+            .HasForeignKey(x => x.CheckpointId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<OperationalEvent>()
+            .HasOne(x => x.QualityResult)
+            .WithMany()
+            .HasForeignKey(x => x.QualityResultId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<OperationalEvent>()
+            .HasOne(x => x.Nonconformity)
+            .WithMany()
+            .HasForeignKey(x => x.NonconformityId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<OperationalEvent>()
+            .HasOne(x => x.ReworkRecord)
+            .WithMany()
+            .HasForeignKey(x => x.ReworkRecordId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<OperationalEvent>()
+            .HasOne(x => x.ScrapRecord)
+            .WithMany()
+            .HasForeignKey(x => x.ScrapRecordId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<OperationalEvent>()
+            .HasOne(x => x.Rack)
+            .WithMany()
+            .HasForeignKey(x => x.RackId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         modelBuilder.Entity<Support>()
             .HasOne(x => x.CurrentSection)

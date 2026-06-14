@@ -26,9 +26,12 @@ Production flow endpoints:
 
 - `POST /api/product-units/{id}/transfer`
 - `GET /api/product-units/{id}/trace`
+- `GET /api/product-units/{id}/events`
 - `GET /api/operations/flow-summary`
 - `GET /api/operator/workbench`
 - `GET /api/customer/orders/{publicTrackingCode}`
+- `GET /api/operational-events`
+- `GET /api/operational-events/recent`
 
 Useful CRUD endpoints added for admin/data inspection:
 
@@ -38,6 +41,8 @@ Useful CRUD endpoints added for admin/data inspection:
 ## Transfer Semantics
 
 `POST /api/product-units/{id}/transfer` updates the product unit current section and writes a `ProductUnitLocationHistory` row.
+
+Since Fase A, the same transfer also writes an `OperationalEvent` with `LineTransfer` or `SectionMovement`. This keeps the previous movement history intact while exposing a unified event stream for dashboard, trace and validation scripts.
 
 If `moveCurrentSupport` is true, the current support moves with the unit and a `SupportLocalizationHistory` row is also written. If `toSupportId` is supplied, the unit can transfer to a different support; open unit-support assignment records are closed and a new one is created.
 
@@ -52,8 +57,18 @@ New UI surfaces:
 - `Operator Workbench`: transfer-ready, blocked, rework and no-support queues.
 - `Customer Lookup`: consulta pública usando o código demo `TRC-PORTA-001`.
 - `Grafana Analytics`: receives flow summary data for line and transfer metrics.
+- `Event Playback`: shows recent `OperationalEvent` records, while keeping manual/playback controls.
 
 No factory-floor graph is introduced in this phase.
+
+## Fase A Operational Events
+
+`OperationalEvents` consolidates seed, transfer, quality, nonconformity, rework, scrap, rack and FIWARE publication events.
+
+- `GET /api/product-units/{id}/trace` now includes `operationalEvents`.
+- `GET /api/operations/flow-summary` now includes `totals.operationalEvents`, `totals.operationalEventsLast24h` and `recentOperationalEvents`.
+- The demo seed writes idempotent PT-PT operational events without deleting unknown real data.
+- Backend permission guards protect transfer, trace, FIWARE publish, event listings and critical write actions.
 
 ## FIWARE
 

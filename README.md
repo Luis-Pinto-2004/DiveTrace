@@ -178,7 +178,7 @@ npm run dev
 
 ## Operações CRUD na interface
 
-O admin pode gerir pela dashboard ordens de fabrico, unidades de produto, suportes, materiais e lotes, qualidade, racks, previsões e parâmetros do sistema. As operações de eliminação têm confirmação na interface e podem ser recusadas pela API quando existirem associações históricas ou regras de chave estrangeira.
+O admin pode gerir pela dashboard ordens de fabrico, unidades de produto, suportes, materiais e lotes, qualidade, racks e parâmetros do sistema. As operações de eliminação têm confirmação na interface e podem ser recusadas pela API quando existirem associações históricas ou regras de chave estrangeira.
 
 A autenticação continua a ser demo/local, mas a Fase B aplica guardas funcionais reais no backend através de `X-DriveTrace-Role` e `X-DriveTrace-User`. O histórico de localização de suportes é apresentado apenas para consulta, porque deve ser gerado por eventos/movimentos e não editado manualmente.
 
@@ -224,6 +224,14 @@ Guia detalhado:
 
 - `docs/PRODUCTION_SIMULATOR.md`
 
+## Fase F0 - clareza visual e analitica operacional
+
+A Fase F0 remove a area de previsoes e melhora a leitura operacional: mapa de rastreabilidade com modo simples/tecnico, analitica deterministica baseada em regras, catalogo Grafana compacto, simulador com resultado de cenario em destaque e smoke tests com espera robusta pela API.
+
+Guia detalhado:
+
+- `docs/UX_ANALYTICS_REFINEMENT.md`
+
 ## Autenticação demo
 
 - `admin/admin`
@@ -240,7 +248,7 @@ Guia detalhado:
 
 ## Dados demo
 
-O cenário demo representa um fluxo automóvel de portas em PT-PT com várias linhas: `ProductUnit` como unidade rastreável, `Support` como transporte/âncora física, `Rack` para logística pós-linha, materiais/lotes de matéria-prima, qualidade, não conformidades, retrabalho, recuperação/recondicionamento, sucata e previsões demonstrativas.
+O cenário demo representa um fluxo automóvel de portas em PT-PT com várias linhas: `ProductUnit` como unidade rastreável, `Support` como transporte/âncora física, `Rack` para logística pós-linha, materiais/lotes de matéria-prima, qualidade, não conformidades, retrabalho, recuperação/recondicionamento e sucata.
 
 ## Dados demonstrativos PT-PT
 
@@ -262,10 +270,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\test-phase-b-roles.ps1
 powershell -ExecutionPolicy Bypass -File .\scripts\test-phase-c-trace-graph.ps1
 ```
 
-Se os dados antigos persistirem em volumes Docker, usar:
+Se os dados antigos persistirem em volumes Docker, preferir reconstruir sem apagar volumes:
 
 ```powershell
-docker compose down -v
 docker compose up -d --build
 ```
 
@@ -276,4 +283,4 @@ docker compose up -d --build
 - RBAC atual baseado em cabeçalhos demo/local, não em identidade criptograficamente autenticada
 - Grafana local provisionado para demonstração académica
 - FIWARE opcional para demonstração
-- Previsões demonstrativas, sem IA real nesta V1
+- A Fase F0 removeu a área de previsões; a analítica atual é determinística e baseada em regras operacionais.

@@ -57,12 +57,40 @@ Validate:
 docker compose up -d --build
 ```
 
+Antes de correr smoke tests, esperar pela API:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\wait-api.ps1
+```
+
 Validate:
 
 - Dashboard: `http://localhost:8088`
 - Swagger: `http://localhost:5181/swagger`
 - Orion-LD: `http://localhost:1026/version`
 - Grafana: `http://localhost:33010`
+
+## Fase F0 - clareza visual e analitica operacional
+
+```powershell
+dotnet build .\api\DriveTraceCore.Api.csproj
+cd dashboard
+npm run build
+cd ..
+docker compose config
+docker compose up -d --build
+powershell -ExecutionPolicy Bypass -File .\scripts\wait-api.ps1
+```
+
+Validar:
+
+1. O menu nao apresenta a area de previsoes.
+2. O mapa de rastreabilidade tem modo simples e modo tecnico.
+3. O modo simples do mapa esconde nos tecnicos e mantem linhas, seccoes, unidade, qualidade e rota.
+4. A analitica apresenta estado operacional, principal atencao, acao recomendada e evidencia.
+5. O catalogo Grafana mostra tres dashboards inicialmente e permite expandir.
+6. O simulador mostra resultado do cenario no topo, detalhes tecnicos colapsados e runs limitadas.
+7. Os scripts de smoke test usam readiness da API para evitar falsos negativos apos `docker compose up`.
 
 ## Fase B - perfis e permissoes
 

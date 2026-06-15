@@ -40,4 +40,3 @@
 - `/api/nonconformities`
 - `/api/rework-records`
 - `/api/scrap-records`
-- `/api/predictions`

@@ -7,6 +7,8 @@ $ErrorActionPreference = "Stop"
 $script:FailedChecks = 0
 $script:StaleEntityId = "urn:ngsi-ld:Support:teste"
 
+& "$PSScriptRoot\wait-api.ps1"
+
 function Register-Failure {
   param([string]$Message)
   Write-Host "[FAIL] $Message"

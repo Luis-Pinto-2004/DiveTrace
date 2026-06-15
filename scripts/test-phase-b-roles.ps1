@@ -8,6 +8,9 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 $script:FailedChecks = 0
 
+$apiRoot = $ApiBaseUrl -replace "/api/?$", ""
+& "$PSScriptRoot\wait-api.ps1" -Url "$apiRoot/swagger/v1/swagger.json"
+
 function Register-Failure {
   param([string]$Message)
   Write-Host "[FAIL] $Message"

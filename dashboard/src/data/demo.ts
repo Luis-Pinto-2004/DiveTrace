@@ -32,8 +32,6 @@ export interface ReworkRecord { id: number; productUnitId: number; nonconformity
 export interface ScrapRecord { id: number; productUnitId: number; nonconformityId?: number; scrappedAt: string; reason?: string }
 export interface RackSupportAssignment { id: number; rackId: number; supportId: number; dateTimeIn: string; dateTimeOut?: string }
 export interface SupportLocalizationHistory { id: number; supportId: number; sectionId: number; dateTime: string; eventType: string }
-export interface PredictionRecord { id: number; manufacturingOrderId?: number; modelVersion: string; modelType: string; lastDate?: string; createdAt?: string; confidence?: number; status?: string }
-
 const now = new Date().toISOString()
 
 export const demoDashboard: DashboardSummary = {
@@ -252,9 +250,4 @@ export const demoSupportLocalizationHistory: SupportLocalizationHistory[] = [
   { id: 3, supportId: 1, sectionId: 9, dateTime: now, eventType: 'LineTransfer' },
   { id: 4, supportId: 3, sectionId: 14, dateTime: now, eventType: 'LineTransfer' },
   { id: 5, supportId: 6, sectionId: 7, dateTime: now, eventType: 'TransferToRack' },
-]
-
-export const demoPredictions: PredictionRecord[] = [
-  { id: 1, manufacturingOrderId: 1, modelVersion: 'previsao-v1', modelType: 'Tempo de conclusão (demo)', lastDate: now, createdAt: now, confidence: 0.78, status: 'Demonstração' },
-  { id: 2, manufacturingOrderId: 2, modelVersion: 'previsao-v1', modelType: 'Risco de atraso (demo)', lastDate: now, createdAt: now, confidence: 0.64, status: 'Demonstração' },
 ]

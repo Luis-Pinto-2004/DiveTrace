@@ -6,6 +6,7 @@ import '@vue-flow/core/dist/theme-default.css'
 import { api, getApiErrorMessage } from '../services/api'
 
 type GraphMode = 'factory' | 'product-unit' | 'order'
+type GraphDetailMode = 'simple' | 'technical'
 
 const props = defineProps<{
   initialProductUnitId?: number | null
@@ -157,6 +158,7 @@ const selectedStatus = ref('all')
 const selectedQuality = ref('all')
 const selectedNodeType = ref('all')
 const compactMode = ref(false)
+const displayMode = ref<GraphDetailMode>('simple')
 const showEvents = ref(true)
 const showMaterials = ref(true)
 const focusedSectionId = ref<number | null>(null)
@@ -182,6 +184,7 @@ const selectedNodeEdges = computed(() => {
 const visibleGraphNodes = computed(() => {
   if (!graph.value) return []
   return graph.value.nodes.filter((node) => {
+    if (displayMode.value === 'simple' && technicalNodeTypes.has(node.type)) return false
     if (!showEvents.value && node.type === 'Event') return false
     if (!showMaterials.value && node.type === 'MaterialLot') return false
     if (selectedNodeType.value !== 'all' && node.type !== selectedNodeType.value) return false
@@ -233,7 +236,8 @@ const flowEdges = computed<FlowEdge[]>(() => {
     markerEnd: { type: MarkerType.ArrowClosed, color: edgeColor(edge.severity), width: 16, height: 16 },
     style: {
       stroke: edgeColor(edge.severity),
-      strokeWidth: edge.severity === 'warning' ? 3 : 2,
+      strokeWidth: edge.severity === 'warning' || edge.type === 'line-transfer' ? 3 : 2,
+      strokeDasharray: edge.type === 'route' || edge.severity === 'history' ? '7 6' : undefined,
     },
     labelStyle: {
       fill: '#334155',
@@ -263,6 +267,40 @@ const selectedMetadataEntries = computed(() => {
     .filter((entry) => entry[1] !== null && entry[1] !== undefined && entry[1] !== '')
     .slice(0, 18)
     .map(([key, value]) => ({ key, label: metadataLabels[key] ?? splitCamelCase(key), value: metricValue(value) }))
+})
+
+const technicalNodeTypes = new Set(['Customer', 'ManufacturingOrder', 'Product', 'MaterialLot', 'Event'])
+
+const graphDecision = computed(() => {
+  const summary = graph.value?.summary
+  if (!summary) {
+    return {
+      state: 'Sem mapa carregado',
+      attention: 'Selecione modo, unidade ou ordem para carregar o mapa.',
+      action: 'Atualizar mapa',
+      evidence: 'Sem métricas disponíveis.',
+      tone: 'trace-decision-muted',
+    }
+  }
+
+  const topMetric = metricEntries.value[0]
+  if (summary.hasOpenIssues) {
+    return {
+      state: statusLabel(summary.status),
+      attention: summary.qualityStatus ? `Qualidade: ${statusLabel(summary.qualityStatus)}` : 'Existem alertas operacionais.',
+      action: summary.recommendation,
+      evidence: topMetric ? `${topMetric.label}: ${topMetric.value}` : `${visibleGraphNodes.value.length} nós visíveis`,
+      tone: 'trace-decision-danger',
+    }
+  }
+
+  return {
+    state: statusLabel(summary.status),
+    attention: summary.currentSection || summary.currentLine || 'Fluxo operacional estável.',
+    action: summary.recommendation || 'Manter monitorização operacional.',
+    evidence: topMetric ? `${topMetric.label}: ${topMetric.value}` : `${visibleGraphNodes.value.length} nós visíveis`,
+    tone: 'trace-decision-ok',
+  }
 })
 
 onMounted(async () => {
@@ -296,7 +334,7 @@ watch(
   },
 )
 
-watch([selectedLine, selectedStatus, selectedQuality, selectedNodeType, showEvents, showMaterials, compactMode, focusedSectionId], () => {
+watch([selectedLine, selectedStatus, selectedQuality, selectedNodeType, showEvents, showMaterials, compactMode, displayMode, focusedSectionId], () => {
   void fitGraph()
 })
 
@@ -347,6 +385,18 @@ function setMode(mode: GraphMode) {
   if (!availableModes.value.includes(mode)) return
   activeMode.value = mode
   focusedSectionId.value = null
+}
+
+function setDisplayMode(mode: GraphDetailMode) {
+  displayMode.value = mode
+  if (mode === 'simple') {
+    showEvents.value = false
+    showMaterials.value = false
+    selectedNodeType.value = 'all'
+  } else {
+    showEvents.value = true
+    showMaterials.value = true
+  }
 }
 
 function selectNode(node: TraceGraphNodeDto) {
@@ -670,9 +720,32 @@ function nodeTooltip(node: TraceGraphNodeDto) {
           </select>
         </label>
 
-        <button type="button" class="btn-secondary" @click="fitGraph">Ajustar ao ecrã</button>
+        <div class="trace-mode-group trace-detail-mode" aria-label="Detalhe do mapa">
+          <button type="button" class="trace-mode-button" :class="{ 'trace-mode-button-active': displayMode === 'simple' }" @click="setDisplayMode('simple')">Simples</button>
+          <button type="button" class="trace-mode-button" :class="{ 'trace-mode-button-active': displayMode === 'technical' }" @click="setDisplayMode('technical')">Técnico</button>
+        </div>
+        <button type="button" class="btn-secondary" @click="fitGraph">Ajustar à vista</button>
         <button type="button" class="btn-secondary" @click="resetViewport">Recentrar</button>
         <button type="button" class="btn-primary" @click="loadGraph">Atualizar</button>
+      </div>
+    </div>
+
+    <div class="trace-decision-panel" :class="graphDecision.tone">
+      <div>
+        <span>Estado operacional</span>
+        <strong>{{ graphDecision.state }}</strong>
+      </div>
+      <div>
+        <span>Principal atenção</span>
+        <strong>{{ graphDecision.attention }}</strong>
+      </div>
+      <div>
+        <span>Ação recomendada</span>
+        <strong>{{ graphDecision.action }}</strong>
+      </div>
+      <div>
+        <span>Evidência</span>
+        <strong>{{ graphDecision.evidence }}</strong>
       </div>
     </div>
 
@@ -736,8 +809,8 @@ function nodeTooltip(node: TraceGraphNodeDto) {
 
         <div class="trace-toggle-row">
           <label class="trace-toggle"><input v-model="compactMode" type="checkbox" /> Vista compacta</label>
-          <label class="trace-toggle"><input v-model="showMaterials" type="checkbox" /> Materiais</label>
-          <label class="trace-toggle"><input v-model="showEvents" type="checkbox" /> Eventos</label>
+          <label v-if="displayMode === 'technical'" class="trace-toggle"><input v-model="showMaterials" type="checkbox" /> Materiais</label>
+          <label v-if="displayMode === 'technical'" class="trace-toggle"><input v-model="showEvents" type="checkbox" /> Eventos</label>
           <button v-if="focusedSectionId" type="button" class="btn-ghost btn-compact" @click="clearFocusedSection">Limpar foco da secção</button>
         </div>
 
@@ -845,6 +918,7 @@ function nodeTooltip(node: TraceGraphNodeDto) {
 }
 
 .trace-graph-toolbar,
+.trace-decision-panel,
 .trace-canvas-shell,
 .trace-detail-panel,
 .trace-summary-card,
@@ -901,6 +975,74 @@ function nodeTooltip(node: TraceGraphNodeDto) {
 .trace-mode-button-active {
   background: #0f766e;
   color: white;
+}
+
+.trace-detail-mode {
+  background: rgb(236 253 245);
+}
+
+.dark .trace-detail-mode {
+  background: rgb(6 78 59 / 0.28);
+}
+
+.trace-decision-panel {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  padding: 0.85rem;
+  border-left: 0.35rem solid #0ea5e9;
+}
+
+.trace-decision-panel div {
+  min-width: 0;
+  border-right: 1px solid rgb(226 232 240);
+  padding-right: 0.75rem;
+}
+
+.trace-decision-panel div:last-child {
+  border-right: 0;
+  padding-right: 0;
+}
+
+.trace-decision-panel span {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  color: rgb(100 116 139);
+}
+
+.trace-decision-panel strong {
+  display: block;
+  margin-top: 0.25rem;
+  overflow-wrap: anywhere;
+  font-size: 0.9rem;
+  font-weight: 950;
+  line-height: 1.25;
+  color: rgb(15 23 42);
+}
+
+.trace-decision-ok {
+  border-left-color: #059669;
+  background: linear-gradient(90deg, rgb(16 185 129 / 0.12), rgb(255 255 255 / 0.96));
+}
+
+.trace-decision-danger {
+  border-left-color: #dc2626;
+  background: linear-gradient(90deg, rgb(239 68 68 / 0.12), rgb(255 255 255 / 0.96));
+}
+
+.trace-decision-muted {
+  border-left-color: #64748b;
+}
+
+.dark .trace-decision-panel strong {
+  color: white;
+}
+
+.dark .trace-decision-panel div {
+  border-color: rgb(30 41 59);
 }
 
 .trace-toolbar-fields,
@@ -1075,7 +1217,7 @@ function nodeTooltip(node: TraceGraphNodeDto) {
 
 .trace-flow-frame {
   position: relative;
-  min-height: clamp(32rem, 62vh, 48rem);
+  min-height: clamp(420px, 65vh, 760px);
   background:
     linear-gradient(90deg, rgb(148 163 184 / 0.14) 1px, transparent 1px),
     linear-gradient(180deg, rgb(148 163 184 / 0.14) 1px, transparent 1px),
@@ -1093,12 +1235,12 @@ function nodeTooltip(node: TraceGraphNodeDto) {
 
 .trace-flow {
   width: 100%;
-  height: clamp(32rem, 62vh, 48rem);
+  height: clamp(420px, 65vh, 760px);
 }
 
 .trace-state {
   display: grid;
-  min-height: clamp(32rem, 62vh, 48rem);
+  min-height: clamp(420px, 65vh, 760px);
   place-content: center;
   gap: 0.35rem;
   padding: 1rem;
@@ -1238,6 +1380,8 @@ function nodeTooltip(node: TraceGraphNodeDto) {
   top: 5rem;
   display: grid;
   gap: 0.9rem;
+  max-height: calc(100vh - 6rem);
+  overflow: auto;
   padding: 1rem;
 }
 
@@ -1354,10 +1498,26 @@ function nodeTooltip(node: TraceGraphNodeDto) {
 
   .trace-detail-panel {
     position: static;
+    max-height: none;
   }
 }
 
 @media (max-width: 720px) {
+  .trace-decision-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .trace-decision-panel div {
+    border-right: 0;
+    border-bottom: 1px solid rgb(226 232 240);
+    padding-bottom: 0.6rem;
+  }
+
+  .trace-decision-panel div:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+
   .trace-summary-state {
     grid-column: span 1;
   }

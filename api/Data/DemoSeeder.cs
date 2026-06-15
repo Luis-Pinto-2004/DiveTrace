@@ -84,7 +84,6 @@ public static class DemoSeeder
         await db.SaveChangesAsync();
 
         await SeedOperationalEventsAsync(db, now, orders, units, supports, racks, sections, quality, nonconformities, reconditioning);
-        await SeedPredictionsAsync(db, now, orders);
         await SeedSimulationDemoAsync(db, now, customers, products, variants, process, lines, sections);
         await NormalizeAdHocLegacyDemoRowsAsync(db, now, customers, products, variants, process, lines, sections);
 
@@ -952,16 +951,6 @@ public static class DemoSeeder
                 IsDemo = true
             });
         }
-    }
-
-    private static async Task SeedPredictionsAsync(
-        DriveTraceDbContext db,
-        DateTime now,
-        IReadOnlyDictionary<string, ManufacturingOrder> orders)
-    {
-        await EnsurePredictionAsync(db, orders["of1"], "previsao-v1", "Tempo de conclusão (demo)", now);
-        await EnsurePredictionAsync(db, orders["of2"], "previsao-v1", "Risco de atraso (demo)", now.AddMinutes(-25));
-        await EnsurePredictionAsync(db, orders["of3"], "previsao-v1", "Risco de qualidade (demo)", now.AddMinutes(-45));
     }
 
     private static async Task NormalizeLegacyDemoCodesAsync(DriveTraceDbContext db)
@@ -1943,25 +1932,6 @@ public static class DemoSeeder
         scrap.NonconformityId = nonconformity.Id;
         scrap.ScrappedAt = scrappedAt;
         scrap.Reason = reason;
-    }
-
-    private static async Task EnsurePredictionAsync(
-        DriveTraceDbContext db,
-        ManufacturingOrder order,
-        string modelVersion,
-        string modelType,
-        DateTime lastDate)
-    {
-        var prediction = await db.Predictions.FirstOrDefaultAsync(x => x.ManufacturingOrderId == order.Id && x.ModelType == modelType);
-        if (prediction is null)
-        {
-            prediction = new Prediction { ManufacturingOrderId = order.Id, CreatedAt = lastDate };
-            db.Predictions.Add(prediction);
-        }
-
-        prediction.ModelVersion = modelVersion;
-        prediction.ModelType = modelType;
-        prediction.LastDate = lastDate;
     }
 
     private static async Task RenameProductionLineAsync(DriveTraceDbContext db, string oldCode, string newCode)

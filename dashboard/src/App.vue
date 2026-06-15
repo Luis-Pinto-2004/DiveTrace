@@ -24,7 +24,6 @@ import {
   demoProductionLineSections,
   demoProducts,
   demoQuality,
-  demoPredictions,
   demoRackSupportAssignments,
   demoRacks,
   demoResources,
@@ -49,7 +48,6 @@ import {
   type ProductionLine,
   type ProductionLineSection,
   type QualityRecord,
-  type PredictionRecord,
   type Rack,
   type RackSupportAssignment,
   type RawMaterial,
@@ -748,7 +746,6 @@ type ViewKey =
   | 'settings'
   | 'users'
   | 'parameters'
-  | 'predictions'
 
 const activeView = ref<ViewKey>('overview')
 const traceGraphInitialUnitId = ref<number | null>(null)
@@ -788,7 +785,6 @@ const quality = ref<QualityRecord[]>(demoQuality)
 const nonconformities = ref<NonconformityRecord[]>(demoNonconformities)
 const reworkRecords = ref<ReworkRecord[]>(demoReworkRecords)
 const scrapRecords = ref<ScrapRecord[]>(demoScrapRecords)
-const predictions = ref<PredictionRecord[]>(demoPredictions)
 const supportHistory = ref<SupportLocalizationHistory[]>(demoSupportLocalizationHistory)
 
 type FiwareEntityRecord = {
@@ -1043,9 +1039,7 @@ const manualEvent = ref({
 
 // The navigation items displayed in the sidebar. Each item has a key to
 // control which view is active, a label (in English) that will be
-// translated using the `t` function, and a simple icon. If you add
-// additional domain views in the future (e.g. users or predictions) include
-// them here.
+// translated using the `t` function, and a simple icon.
 const nav = [
   { key: 'overview', label: 'Dashboard / Line Overview', icon: '⌁' },
   { key: 'operator', label: 'Operator Workbench', icon: 'OP' },
@@ -1062,7 +1056,6 @@ const nav = [
   { key: 'events', label: 'Event Playback', icon: 'EV' },
   { key: 'fiware', label: 'FIWARE Context Monitor', icon: 'LD' },
   { key: 'analytics', label: 'Grafana Analytics', icon: 'AN' },
-  { key: 'predictions', label: 'Predictions', icon: 'PR' },
   { key: 'parameters', label: 'System Parameters', icon: 'CFG' },
   { key: 'users', label: 'Users', icon: 'USR' },
 ] as const
@@ -1080,7 +1073,6 @@ const viewPermissions: Partial<Record<ViewKey, string>> = {
   events: 'OperationalEvents.View',
   fiware: 'Fiware.View',
   analytics: 'Grafana.View',
-  predictions: 'Orders.View',
   users: 'Users.Manage',
   parameters: 'MasterData.Manage',
   operator: 'ProductUnits.Transfer',
@@ -1101,7 +1093,7 @@ const roleHomeViews: Record<RoleKey, ViewKey> = {
 const navGroups = [
   { key: 'Operation', items: ['overview', 'operator', 'orders', 'racks', 'simulation'] },
   { key: 'Traceability', items: ['traceGraph', 'units', 'supports', 'materials', 'quality', 'reconditioning', 'customer'] },
-  { key: 'Monitoring', items: ['events', 'fiware', 'analytics', 'predictions'] },
+  { key: 'Monitoring', items: ['events', 'fiware', 'analytics'] },
   { key: 'Administration', items: ['parameters', 'users'] },
 ] as const
 function navByGroup(groupKey: typeof navGroups[number]['key']) {
@@ -1163,7 +1155,6 @@ const viewTitles: Record<ViewKey, string> = {
   settings: 'Settings',
   users: 'Users',
   parameters: 'System Parameters',
-  predictions: 'Predictions',
 }
 
 const activeViewTitle = computed(() => viewTitles[activeView.value])
@@ -1187,7 +1178,6 @@ const viewSubtitles: Record<ViewKey, string> = {
   settings: 'Settings subtitle',
   users: 'Users subtitle',
   parameters: 'Parameters subtitle',
-  predictions: 'Predictions subtitle',
 }
 const activeViewSubtitle = computed(() => viewSubtitles[activeView.value])
 
@@ -1489,10 +1479,6 @@ function formatShortTime(value?: string) {
   return new Date(value).toLocaleTimeString(locale.value, { hour: '2-digit', minute: '2-digit' })
 }
 
-function formatConfidence(value?: number | null) {
-  return typeof value === 'number' ? `${Math.round(value * 100)}%` : '-'
-}
-
 function normalizeToken(value: string) {
   if (!value) return value
   const hashIndex = value.lastIndexOf('#')
@@ -1686,7 +1672,6 @@ const productOptions = () => entityOptions(products.value, (item) => translateMa
 const variantOptions = () => entityOptions(variants.value, (item) => `${item.variantCode} · ${translateMaterialName(item.name)}`)
 const customerOptions = () => entityOptions(customers.value, (item) => `${item.customerCode} · ${item.name}`)
 const orderOptions = () => entityOptions(orders.value, (item) => item.orderNumber, false)
-const optionalOrderOptions = () => entityOptions(orders.value, (item) => item.orderNumber)
 const processOptions = () => entityOptions(manufacturingProcesses.value, (item) => item.processName, false)
 const productionLineOptions = () => entityOptions(productionLines.value, (item) => `${item.lineCode} · ${item.name}`, false)
 const optionalProductionLineOptions = () => entityOptions(productionLines.value, (item) => `${item.lineCode} · ${item.name}`)
@@ -2280,28 +2265,6 @@ const rackAssignmentsCrud: CrudConfig = {
   newItem: () => ({ rackId: racks.value[0]?.id || '', supportId: supports.value[0]?.id || '', dateTimeIn: nowInput(), dateTimeOut: '' }),
 }
 
-const predictionsCrud: CrudConfig = {
-  key: 'predictions',
-  title: 'Predictions',
-  description: 'This section prepares future analysis of completion times, delay risk and productive deviations. In this V1 the data is demonstrative.',
-  path: '/predictions',
-  writePermission: 'MasterData.Manage',
-  itemsRef: asCrudRef(predictions),
-  fields: [
-    { key: 'manufacturingOrderId', label: 'Manufacturing order', type: 'select', nullable: true, options: optionalOrderOptions },
-    { key: 'modelVersion', label: 'Model version', required: true },
-    { key: 'modelType', label: 'Model type', required: true },
-    { key: 'lastDate', label: 'Last update', type: 'datetime', nullable: true },
-  ],
-  columns: [
-    { key: 'manufacturingOrderId', label: 'Order', format: (value) => orderLabel(value) },
-    { key: 'modelVersion', label: 'Model' },
-    { key: 'modelType', label: 'Type', format: (value) => t(String(value || '')) },
-    { key: 'lastDate', label: 'Last update', format: formatOptionalDate },
-  ],
-  newItem: () => ({ manufacturingOrderId: orders.value[0]?.id || '', modelVersion: 'future-v1', modelType: 'Placeholder', lastDate: nowInput(), createdAt: new Date().toISOString() }),
-}
-
 const parameterConfigs: CrudConfig[] = [
   {
     key: 'customers',
@@ -2497,7 +2460,6 @@ const activeCrudConfigs = computed(() => {
   if (activeView.value === 'materials') return materialCrudConfigs
   if (activeView.value === 'quality') return qualityCrudConfigs
   if (activeView.value === 'racks') return rackCrudConfigs
-  if (activeView.value === 'predictions') return [predictionsCrud]
   if (activeView.value === 'parameters' && canManageUsers.value) return parameterConfigs.filter((config) => config.key === parameterTab.value)
   return []
 })
@@ -2533,7 +2495,6 @@ async function loadData(showSpinner = true) {
     nonconformityData,
     reworkData,
     scrapData,
-    predictionData,
     supportHistoryData,
     contextData,
     flowSummaryData,
@@ -2565,7 +2526,6 @@ async function loadData(showSpinner = true) {
     apiGetAllowed('Quality.View', '/nonconformities', demoNonconformities, [] as NonconformityRecord[]),
     apiGetAllowed('Quality.View', '/rework-records', demoReworkRecords, [] as ReworkRecord[]),
     apiGetAllowed('Quality.View', '/scrap-records', demoScrapRecords, [] as ScrapRecord[]),
-    apiGetAllowed('Orders.View', '/predictions', demoPredictions, [] as PredictionRecord[]),
     apiGetAllowed('ProductUnits.Trace', '/support-localization-history', demoSupportLocalizationHistory, [] as SupportLocalizationHistory[]),
     apiGetAllowed('Fiware.View', '/fiware/context', emptyFiwareContext(), emptyFiwareContext()),
     apiGetAllowed('ProductUnits.View', '/operations/flow-summary', emptyFlowSummary(), emptyFlowSummary()),
@@ -2598,7 +2558,6 @@ async function loadData(showSpinner = true) {
   nonconformities.value = nonconformityData
   reworkRecords.value = reworkData
   scrapRecords.value = scrapData
-  predictions.value = predictionData
   supportHistory.value = supportHistoryData
   fiwareContext.value = normalizeFiwareContextPayload(contextData)
   flowSummary.value = flowSummaryData
@@ -3311,11 +3270,6 @@ onBeforeUnmount(() => {
                 </section>
               </section>
 
-              <section v-if="activeView === 'predictions'" class="card p-5 sm:p-6">
-                <div class="section-heading"><div><p>{{ t('Predictions') }}</p><h3>{{ t('Operational forecasts') }}</h3></div></div>
-                <p class="mt-3 text-slate-600 dark:text-slate-300">{{ t('This section prepares future analysis of completion times, delay risk and productive deviations. In this V1 the data is demonstrative.') }}</p>
-              </section>
-
               <section v-if="activeView === 'parameters' && canManageUsers" class="card p-5 sm:p-6">
                 <div class="section-heading"><div><p>{{ t('Admin') }}</p><h3>{{ t('System Parameters') }}</h3></div></div>
                 <div class="mt-5 flex flex-wrap gap-2">
@@ -3906,30 +3860,6 @@ onBeforeUnmount(() => {
                 :operational-data="analyticsOperationalData"
                 @refresh="loadData(false)"
               />
-            </div>
-
-            <!-- PREDICTIONS VIEW -->
-            <div v-if="false && activeView === 'predictions'" class="space-y-6">
-              <section class="card p-6">
-                <div class="section-heading"><div><p>{{ t('Predictions') }}</p><h3>{{ t('Operational forecasts') }}</h3></div></div>
-                <p class="mt-3 text-slate-600 dark:text-slate-300">{{ t('This section prepares future analysis of completion times, delay risk and productive deviations. In this V1 the data is demonstrative.') }}</p>
-                <div class="mt-5 overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700">
-                  <table class="data-table">
-                    <thead><tr><th>{{ t('Order') }}</th><th>{{ t('Model') }}</th><th>{{ t('Type') }}</th><th>{{ t('Last update') }}</th><th>{{ t('Confidence') }}</th><th>{{ t('Status') }}</th></tr></thead>
-                    <tbody>
-                      <tr v-for="prediction in predictions" :key="prediction.id">
-                        <td>{{ prediction.manufacturingOrderId ? 'MO-' + prediction.manufacturingOrderId : '-' }}</td>
-                        <td>{{ prediction.modelVersion }}</td>
-                        <td>{{ t(prediction.modelType) }}</td>
-                        <td>{{ formatDate(prediction.lastDate) }}</td>
-                        <td>{{ formatConfidence(prediction.confidence) }}</td>
-                        <td><span :class="statusClass(prediction.status)">{{ translateStatus(prediction.status) }}</span></td>
-                      </tr>
-                      <tr v-if="!predictions.length"><td colspan="6" class="text-center">{{ t('No predictions available yet.') }}</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-              </section>
             </div>
 
             <!-- USERS VIEW -->

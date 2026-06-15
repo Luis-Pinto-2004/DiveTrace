@@ -393,18 +393,6 @@ public sealed class ScrapRecord : IEntity
     [JsonIgnore] public Nonconformity? Nonconformity { get; set; }
 }
 
-public sealed class Prediction : IEntity
-{
-    public int Id { get; set; }
-    public int? ManufacturingOrderId { get; set; }
-    public byte[]? Model { get; set; }
-    [MaxLength(80)] public string ModelVersion { get; set; } = "future-v1";
-    [MaxLength(80)] public string ModelType { get; set; } = "Placeholder";
-    public DateTime? LastDate { get; set; }
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-    [JsonIgnore] public ManufacturingOrder? ManufacturingOrder { get; set; }
-}
-
 public sealed class ManualEventRequest
 {
     public string EventType { get; set; } = "MoveSupport";

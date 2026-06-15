@@ -466,10 +466,3 @@ public sealed class ScrapRecordsController : CrudController<ScrapRecord>
         return CreatedAtAction(nameof(GetById), new { id = entity.Id }, entity);
     }
 }
-
-[Route("api/predictions")]
-public sealed class PredictionsController : CrudController<Prediction>
-{
-    protected override string? ReadPermission => PermissionNames.OrdersView;
-    public PredictionsController(DriveTraceDbContext db) : base(db) { }
-}

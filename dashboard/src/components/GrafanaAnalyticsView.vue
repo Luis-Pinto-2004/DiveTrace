@@ -27,6 +27,26 @@
       </div>
     </section>
 
+    <section class="analytics-decision-strip" :class="primaryOperationalDecision.toneClass">
+      <div>
+        <span>{{ t('Estado operacional') }}</span>
+        <strong>{{ primaryOperationalDecision.state }}</strong>
+      </div>
+      <div>
+        <span>{{ t('Principal atenção') }}</span>
+        <strong>{{ primaryOperationalDecision.attention }}</strong>
+      </div>
+      <div>
+        <span>{{ t('Ação recomendada') }}</span>
+        <strong>{{ primaryOperationalDecision.action }}</strong>
+      </div>
+      <div>
+        <span>{{ t('Evidência') }}</span>
+        <strong>{{ primaryOperationalDecision.evidence }}</strong>
+      </div>
+      <button type="button" class="btn-primary" @click="focusTab(primaryOperationalDecision.tab)">{{ t('Abrir detalhe') }}</button>
+    </section>
+
     <section class="analytics-section">
       <div class="section-heading">
         <div class="min-w-0">
@@ -53,7 +73,7 @@
         </div>
       </div>
       <div class="analytics-insight-grid">
-        <article v-for="insight in operationalInsights" :key="insight.key" class="analytics-insight-card" :class="insight.toneClass">
+        <article v-for="insight in visibleOperationalInsights" :key="insight.key" class="analytics-insight-card" :class="insight.toneClass">
           <span>{{ insight.domain }}</span>
           <strong>{{ insight.title }}</strong>
           <p>{{ insight.description }}</p>
@@ -72,10 +92,13 @@
           <h3>{{ t('Grafana dashboard catalogue') }}</h3>
           <p class="section-description">{{ t('Dashboard catalogue description') }}</p>
         </div>
+        <button type="button" class="btn-secondary" @click="showAllDashboards = !showAllDashboards">
+          {{ showAllDashboards ? t('Mostrar menos') : t('Ver todos') }}
+        </button>
       </div>
-      <div class="dashboard-card-grid">
+      <div class="dashboard-compact-list">
         <article
-          v-for="dashboard in dashboardCatalog"
+          v-for="dashboard in visibleDashboardCatalog"
           :key="dashboard.uid"
           class="dashboard-card"
           :class="activeTab === dashboard.tab ? 'dashboard-card-active' : ''"
@@ -133,10 +156,13 @@
         >
           {{ t(tab.label) }}
         </button>
+        <button type="button" class="mobile-tab" :class="showEmbeddedPanels ? 'mobile-tab-active' : ''" @click="showEmbeddedPanels = !showEmbeddedPanels">
+          {{ showEmbeddedPanels ? t('Ocultar detalhe') : t('Mostrar detalhe') }}
+        </button>
       </div>
     </section>
 
-    <section class="grid min-w-0 gap-5 xl:grid-cols-2">
+    <section v-if="showEmbeddedPanels" class="grid min-w-0 gap-5 xl:grid-cols-3">
       <GrafanaPanel
         v-for="card in activePanelCards"
         :key="card.key"
@@ -392,6 +418,8 @@ const activeTab = ref<TabKey>('executive')
 const grafanaAvailable = ref<boolean | null>(null)
 const checkingConnectivity = ref(false)
 const statusTimestampRaw = ref('')
+const showAllDashboards = ref(false)
+const showEmbeddedPanels = ref(true)
 const showFullDashboard = ref(false)
 
 let availabilityTimer: ReturnType<typeof setInterval> | undefined
@@ -403,7 +431,8 @@ const grafanaBaseUrl = computed(() => {
 
 const grafanaTheme = computed<'dark' | 'light'>(() => (props.theme === 'dark' ? 'dark' : 'light'))
 const activeDashboard = computed(() => dashboardCatalog.find((item) => item.tab === activeTab.value) ?? dashboardCatalog[0])
-const activePanelCards = computed(() => dashboardsByTab[activeTab.value])
+const visibleDashboardCatalog = computed(() => showAllDashboards.value ? dashboardCatalog : dashboardCatalog.slice(0, 3))
+const activePanelCards = computed(() => dashboardsByTab[activeTab.value].slice(0, 3))
 
 const statusTimestamp = computed(() => {
   if (!statusTimestampRaw.value) return '-'
@@ -643,6 +672,33 @@ const operationalInsights = computed(() => {
       tab: 'quality' as TabKey,
     },
   ]
+})
+
+const visibleOperationalInsights = computed(() => operationalInsights.value.slice(0, 4))
+
+const primaryOperationalDecision = computed(() => {
+  const attentionInsight = operationalInsights.value.find((insight) => insight.toneClass === 'tone-danger')
+    ?? operationalInsights.value.find((insight) => insight.toneClass === 'tone-warning')
+
+  if (attentionInsight) {
+    return {
+      state: 'Atenção necessária',
+      attention: attentionInsight.title,
+      action: attentionInsight.action,
+      evidence: attentionInsight.description,
+      tab: attentionInsight.tab,
+      toneClass: attentionInsight.toneClass,
+    }
+  }
+
+  return {
+    state: t('Fluxo operacional estável'),
+    attention: t('No blocked units right now.'),
+    action: t('Keep monitoring quality gates.'),
+    evidence: `${activeUnits.value} unidades ativas / ${passRate.value === null ? '-' : `${passRate.value}%`} PASS`,
+    tab: 'executive' as TabKey,
+    toneClass: 'tone-success',
+  }
 })
 
 function focusTab(tab: TabKey) {

@@ -41,10 +41,6 @@
 - ReworkRecord
 - ScrapRecord
 
-## Future placeholder
-
-- Prediction
-
 ## Naming decision
 
 The implementation uses `ManufacturingSectionPhase`, aligned with the current class/database modelling direction and clearer than a generic phase name because each phase is associated with a production-line section.

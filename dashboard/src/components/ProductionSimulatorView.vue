@@ -112,6 +112,7 @@ const selectedScenarioKey = ref('')
 const runName = ref('Demonstração operacional')
 const runSpeed = ref<'Manual' | 'Automatic'>('Manual')
 const runNotes = ref('Simulação operacional de demonstração.')
+const showAllRuns = ref(false)
 let autoTimer: number | undefined
 
 const selectedScenario = computed(() => state.value.scenarios.find((scenario) => scenario.key === selectedScenarioKey.value) ?? state.value.scenarios[0] ?? null)
@@ -125,9 +126,21 @@ const statusCards = computed(() => [
 const selectedRunSteps = computed(() => selectedRun.value?.steps ?? [])
 const selectedRunTone = computed(() => statusTone(selectedRun.value?.status))
 const selectedRunProgressLabel = computed(() => `${selectedRun.value?.progressPercent ?? 0}%`)
+const visibleRuns = computed(() => showAllRuns.value ? runs.value : runs.value.slice(0, 6))
 const selectedRunSummary = computed(() => {
   if (!selectedRun.value) return 'Selecione uma simulação ou crie um novo cenário.'
   return `${selectedRun.value.scenarioName} · passo ${selectedRun.value.currentStep}/${selectedRun.value.stepCount}`
+})
+const selectedRunOutcome = computed(() => {
+  const run = selectedRun.value
+  if (!run) return { label: 'Sem run selecionada', detail: 'Crie ou escolha uma simulação para ver o resultado.', tone: 'warning' }
+  if (run.status === 'Running') return { label: 'Em execução', detail: selectedRunSummary.value, tone: 'flow' }
+  if (run.status === 'Paused') return { label: 'Pausada', detail: selectedRunSummary.value, tone: 'attention' }
+  if (run.qualityDisposition === 'Scrap' || run.recoveryStatus === 'Rejected') return { label: 'Sucata', detail: run.lastStepDescription || 'Cenário terminado com rejeição/sucata.', tone: 'critical' }
+  if (run.isReconditioned || run.recoveryStatus === 'Reconditioned') return { label: 'Recondicionada', detail: run.lastStepDescription || 'Unidade recuperada com validação funcional.', tone: 'attention' }
+  if (run.status === 'Completed' && run.qualityStatus === 'PASS') return { label: 'Conforme', detail: run.lastStepDescription || 'Fluxo terminado sem desvios críticos.', tone: 'ok' }
+  if (run.status === 'Stopped') return { label: 'Terminada', detail: run.lastStepDescription || 'Run encerrada.', tone: 'warning' }
+  return { label: formatRunStatus(run.status), detail: selectedRunSummary.value, tone: statusTone(run.status) }
 })
 
 onMounted(() => {
@@ -229,11 +242,6 @@ async function tickRun() {
   await runAction(`/simulation/runs/${selectedRunId.value}/tick`, 'Passo avançado.')
 }
 
-async function runStep() {
-  if (!selectedRunId.value) return
-  await runAction(`/simulation/runs/${selectedRunId.value}/run-step`, 'Passo executado.')
-}
-
 async function pauseRun() {
   if (!selectedRunId.value) return
   await runAction(`/simulation/runs/${selectedRunId.value}/pause`, 'Simulação pausada.')
@@ -312,6 +320,15 @@ function stepTone(result?: string | null) {
   return 'warning'
 }
 
+function stepVisualTone(step: SimulationStep) {
+  if (step.stepType === 'Transfer') return 'flow'
+  if (step.stepType === 'Quality') return (step.result || '').toLowerCase().includes('fail') ? 'critical' : 'ok'
+  if (step.stepType === 'Reconditioning') return 'attention'
+  if (step.stepType === 'Scrap') return 'critical'
+  if (step.stepType === 'Rack') return 'ok'
+  return stepTone(step.result)
+}
+
 function stepLabel(stepType: string) {
   return {
     Transfer: 'Transferência',
@@ -374,6 +391,12 @@ function openSelectedRunOrderGraph() {
           <strong>{{ card.value }}</strong>
           <p>{{ card.detail }}</p>
         </article>
+      </div>
+
+      <div class="scenario-result-strip mt-4" :class="selectedRunOutcome.tone">
+        <span>Resultado do cenário</span>
+        <strong>{{ selectedRunOutcome.label }}</strong>
+        <p>{{ selectedRunOutcome.detail }}</p>
       </div>
     </section>
 
@@ -449,12 +472,11 @@ function openSelectedRunOrderGraph() {
         <div class="button-row mt-4">
           <button class="btn-primary" :disabled="actionLoading || !selectedScenario" @click="createRun">Criar simulação</button>
           <button class="btn-secondary" :disabled="actionLoading || !selectedRunId" @click="tickRun">Avançar passo</button>
-          <button class="btn-secondary" :disabled="actionLoading || !selectedRunId" @click="runStep">Executar passo</button>
-          <button class="btn-secondary" :disabled="actionLoading || !selectedRunId || selectedRun?.status !== 'Running'" @click="syncAutoRun">Iniciar automático</button>
+          <button class="btn-secondary" :disabled="actionLoading || !selectedRunId || selectedRun?.status !== 'Running'" @click="syncAutoRun">Automático</button>
           <button class="btn-secondary" :disabled="actionLoading || !selectedRunId || selectedRun?.status !== 'Running'" @click="pauseRun">Pausar</button>
           <button class="btn-secondary" :disabled="actionLoading || !selectedRunId || selectedRun?.status !== 'Paused'" @click="resumeRun">Retomar</button>
           <button class="btn-danger" :disabled="actionLoading || !selectedRunId" @click="stopRun">Parar</button>
-          <button class="btn-secondary" :disabled="actionLoading || !selectedRunId" @click="resetRun">Reset demo</button>
+          <button class="btn-secondary" :disabled="actionLoading || !selectedRunId" @click="resetRun">Preparar demo limpa</button>
         </div>
 
         <div class="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/50">
@@ -498,14 +520,17 @@ function openSelectedRunOrderGraph() {
           <span class="state-pill" :class="selectedRunTone">{{ formatRunStatus(selectedRun?.status) }}</span>
         </div>
 
-        <div v-if="selectedRun" class="detail-grid mt-4">
-          <div><dt>Progresso</dt><dd>{{ selectedRunProgressLabel }}</dd></div>
-          <div><dt>Velocidade</dt><dd>{{ selectedRun.executionMode }}</dd></div>
-          <div><dt>Passo atual</dt><dd>{{ selectedRun.currentStep }}</dd></div>
-          <div><dt>Último passo</dt><dd>{{ selectedRun.lastStepType || 'n/d' }}</dd></div>
-          <div><dt>Iniciada</dt><dd>{{ formatDate(selectedRun.startedAt) }}</dd></div>
-          <div><dt>Fechada</dt><dd>{{ formatDate(selectedRun.completedAt || selectedRun.pausedAt) }}</dd></div>
-        </div>
+        <details v-if="selectedRun" class="technical-details mt-4">
+          <summary>Detalhes técnicos</summary>
+          <div class="detail-grid mt-3">
+            <div><dt>Progresso</dt><dd>{{ selectedRunProgressLabel }}</dd></div>
+            <div><dt>Velocidade</dt><dd>{{ selectedRun.executionMode }}</dd></div>
+            <div><dt>Passo atual</dt><dd>{{ selectedRun.currentStep }}</dd></div>
+            <div><dt>Último passo</dt><dd>{{ selectedRun.lastStepType || 'n/d' }}</dd></div>
+            <div><dt>Iniciada</dt><dd>{{ formatDate(selectedRun.startedAt) }}</dd></div>
+            <div><dt>Fechada</dt><dd>{{ formatDate(selectedRun.completedAt || selectedRun.pausedAt) }}</dd></div>
+          </div>
+        </details>
 
         <div class="mt-4 flex flex-wrap gap-2">
           <button class="btn-secondary" :disabled="!selectedRun?.productUnitId" @click="openSelectedRunUnitGraph">Abrir grafo da unidade</button>
@@ -523,13 +548,13 @@ function openSelectedRunOrderGraph() {
           </div>
 
           <div class="timeline-shell">
-            <article v-for="step in selectedRunSteps" :key="step.id" class="timeline-card" :class="stepTone(step.result)">
+            <article v-for="step in selectedRunSteps" :key="step.id" class="timeline-card" :class="stepVisualTone(step)">
               <div class="flex items-start justify-between gap-3">
                 <div>
                   <p class="text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">Passo {{ step.stepNumber }} · {{ stepLabel(step.stepType) }}</p>
                   <h4 class="text-base font-black">{{ step.description }}</h4>
                 </div>
-                <span class="state-pill" :class="stepTone(step.result)">{{ step.result || 'n/d' }}</span>
+                <span class="state-pill" :class="stepVisualTone(step)">{{ step.result || 'n/d' }}</span>
               </div>
               <p class="mt-2 text-xs font-semibold text-slate-500 dark:text-slate-400">{{ formatDate(step.executedAt) }}</p>
             </article>
@@ -547,10 +572,13 @@ function openSelectedRunOrderGraph() {
           <p>Execuções recentes</p>
           <h3>Runs disponíveis</h3>
         </div>
+        <button v-if="runs.length > 6" type="button" class="btn-secondary" @click="showAllRuns = !showAllRuns">
+          {{ showAllRuns ? 'Mostrar últimas 6' : 'Ver todos' }}
+        </button>
       </div>
       <div class="runs-grid mt-4">
         <button
-          v-for="run in runs"
+          v-for="run in visibleRuns"
           :key="run.id"
           type="button"
           class="run-card"
@@ -607,6 +635,59 @@ function openSelectedRunOrderGraph() {
   gap: 0.5rem;
 }
 
+.scenario-result-strip {
+  border: 1px solid rgb(226 232 240);
+  border-left: 0.35rem solid rgb(14 165 233);
+  border-radius: 0.6rem;
+  background: rgb(255 255 255 / 0.9);
+  padding: 0.85rem 1rem;
+}
+
+.scenario-result-strip span {
+  display: block;
+  color: rgb(100 116 139);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.scenario-result-strip strong {
+  display: block;
+  margin-top: 0.25rem;
+  color: rgb(15 23 42);
+  font-size: 1.35rem;
+  font-weight: 950;
+  line-height: 1.1;
+}
+
+.scenario-result-strip p {
+  margin-top: 0.3rem;
+  color: rgb(71 85 105);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.scenario-result-strip.ok { border-left-color: rgb(5 150 105); background: rgb(236 253 245 / 0.86); }
+.scenario-result-strip.flow { border-left-color: rgb(37 99 235); background: rgb(239 246 255 / 0.9); }
+.scenario-result-strip.attention { border-left-color: rgb(168 85 247); background: rgb(250 245 255 / 0.9); }
+.scenario-result-strip.warning { border-left-color: rgb(245 158 11); background: rgb(255 251 235 / 0.9); }
+.scenario-result-strip.critical { border-left-color: rgb(220 38 38); background: rgb(254 242 242 / 0.9); }
+
+.technical-details {
+  border: 1px solid rgb(226 232 240);
+  border-radius: 0.65rem;
+  background: rgb(248 250 252 / 0.86);
+  padding: 0.75rem;
+}
+
+.technical-details summary {
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 950;
+  text-transform: uppercase;
+  color: rgb(71 85 105);
+}
+
 .timeline-shell {
   display: grid;
   gap: 0.75rem;
@@ -625,7 +706,12 @@ function openSelectedRunOrderGraph() {
 }
 
 .timeline-card.attention {
-  background: rgba(14, 165, 233, 0.08);
+  background: rgba(168, 85, 247, 0.10);
+}
+
+.timeline-card.flow {
+  background: rgba(37, 99, 235, 0.08);
+  border-color: rgba(37, 99, 235, 0.32);
 }
 
 .timeline-card.warning {
@@ -673,8 +759,13 @@ function openSelectedRunOrderGraph() {
 }
 
 .state-pill.attention {
-  background: rgba(14, 165, 233, 0.14);
-  color: rgb(3 105 161);
+  background: rgba(168, 85, 247, 0.14);
+  color: rgb(107 33 168);
+}
+
+.state-pill.flow {
+  background: rgba(37, 99, 235, 0.14);
+  color: rgb(29 78 216);
 }
 
 .state-pill.critical {
@@ -715,14 +806,21 @@ function openSelectedRunOrderGraph() {
 
 :global(.dark) .detail-grid div,
 :global(.dark) .timeline-card,
-:global(.dark) .run-card {
+:global(.dark) .run-card,
+:global(.dark) .technical-details {
   border-color: rgb(51 65 85);
 }
 
 :global(.dark) .detail-grid dd,
 :global(.dark) .timeline-card h4,
-:global(.dark) .run-card h4 {
+:global(.dark) .run-card h4,
+:global(.dark) .scenario-result-strip strong {
   color: rgb(248 250 252);
+}
+
+:global(.dark) .scenario-result-strip,
+:global(.dark) .technical-details {
+  background: rgb(15 23 42 / 0.82);
 }
 
 @media (max-width: 1024px) {

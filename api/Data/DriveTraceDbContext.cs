@@ -34,7 +34,6 @@ public sealed class DriveTraceDbContext : DbContext
     public DbSet<ReworkRecord> ReworkRecords => Set<ReworkRecord>();
     public DbSet<ReconditionRecord> ReconditionRecords => Set<ReconditionRecord>();
     public DbSet<ScrapRecord> ScrapRecords => Set<ScrapRecord>();
-    public DbSet<Prediction> Predictions => Set<Prediction>();
     public DbSet<SimulationRun> SimulationRuns => Set<SimulationRun>();
     public DbSet<SimulationStep> SimulationSteps => Set<SimulationStep>();
 

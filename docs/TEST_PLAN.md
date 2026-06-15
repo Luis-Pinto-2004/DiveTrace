@@ -63,3 +63,19 @@ Validate:
 - Swagger: `http://localhost:5181/swagger`
 - Orion-LD: `http://localhost:1026/version`
 - Grafana: `http://localhost:3004`
+
+## Fase B - perfis e permissoes
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\test-phase-b-roles.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\test-phase-b-roles.ps1 -PublishFiware
+```
+
+Validar:
+
+1. `GET /api/auth/me` devolve `roleKey` e permissoes do perfil ativo.
+2. Cliente so acede a `GET /api/customer/orders/{publicTrackingCode}`.
+3. Operador acede a `/api/operator/workbench`, mas nao a FIWARE, racks ou materiais.
+4. Qualidade acede a resultados/nao conformidades, mas nao a racks.
+5. Logistica acede a racks e materiais, mas nao a qualidade.
+6. Demo viewer fica em leitura; escritas protegidas devolvem `403`.

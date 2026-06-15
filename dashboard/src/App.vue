@@ -123,6 +123,81 @@ const fallbackPermissionCatalog: PermissionCatalog = {
   ],
 }
 
+const frontendRolePermissions: Record<RoleKey, string[]> = {
+  admin: fallbackPermissionCatalog.activePermissions,
+  supervisor: [
+    'Orders.View',
+    'Orders.Manage',
+    'ProductUnits.View',
+    'ProductUnits.Transfer',
+    'ProductUnits.Trace',
+    'Supports.Manage',
+    'Quality.View',
+    'Racks.View',
+    'Racks.Manage',
+    'Materials.View',
+    'Grafana.View',
+    'OperationalEvents.View',
+    'Simulation.Manage',
+  ],
+  operator: [
+    'Orders.View',
+    'ProductUnits.View',
+    'ProductUnits.Transfer',
+    'ProductUnits.Trace',
+    'OperationalEvents.View',
+  ],
+  quality: [
+    'Orders.View',
+    'ProductUnits.View',
+    'ProductUnits.Trace',
+    'Quality.View',
+    'Quality.Record',
+    'Quality.Decide',
+    'OperationalEvents.View',
+  ],
+  logistics: [
+    'ProductUnits.View',
+    'ProductUnits.Trace',
+    'Racks.View',
+    'Racks.Manage',
+    'Materials.View',
+    'Materials.Manage',
+    'Supports.Manage',
+    'OperationalEvents.View',
+  ],
+  client: ['CustomerPortal.View'],
+  demoViewer: [
+    'Orders.View',
+    'ProductUnits.View',
+    'ProductUnits.Trace',
+    'Quality.View',
+    'Racks.View',
+    'Materials.View',
+    'Fiware.View',
+    'Grafana.View',
+    'CustomerPortal.View',
+    'OperationalEvents.View',
+  ],
+}
+
+type AuthUserContext = {
+  id: string
+  name: string
+  username: string
+  email?: string
+  role: string
+  roleKey: RoleKey
+  permissions: string[]
+  preferredLanguage?: string
+  preferredTheme?: string
+  department?: string
+  associatedEntity?: { type?: string; id?: number; code?: string }
+  customer?: { id?: number; customerCode?: string; name?: string; defaultPublicTrackingCode?: string }
+  assignedLine?: { id?: number; code?: string; name?: string }
+  assignedSection?: { id?: number; code?: string; name?: string; sectionType?: string }
+}
+
 type UserProfile = {
   id: string
   name: string
@@ -158,7 +233,7 @@ const defaultDemoUsers: UserProfile[] = [
     name: 'Operador de linha',
     username: 'operador',
     email: 'operador@drivetrace.local',
-    role: 'Funcionário/Operador',
+    role: 'Operador',
     roleKey: 'operator',
     organization: 'DRIVOLUTION WP3',
     project: 'DriveTrace Core',
@@ -263,16 +338,10 @@ function getRoleLabel(roleKey: RoleKey) {
 
 function buildUserRole(roleKey: RoleKey) {
   return roleProfiles[roleKey]?.label ?? roleKey
-  if (roleKey === 'admin') return 'Administrador'
-  if (roleKey === 'client') return 'Cliente'
-  return 'Funcionário/Operador'
 }
 
 function defaultJobTitle(roleKey: RoleKey) {
   return roleProfiles[roleKey]?.jobTitle ?? 'Operador'
-  if (roleKey === 'admin') return 'Administrador do sistema'
-  if (roleKey === 'client') return 'Cliente'
-  return 'Operador'
 }
 
 function persistUsers() {
@@ -289,10 +358,15 @@ function setAuthenticatedUser(profile: UserProfile | null) {
   isAuthenticated.value = profile !== null
   persistActiveUser(profile)
   profileForm.value = buildProfileForm(profile)
+  permissionNotice.value = ''
+  if (profile) {
+    activeView.value = homeViewForRole(profile.roleKey)
+  }
   if (!profile) {
     isEditingProfile.value = false
     profileError.value = ''
     profileSuccess.value = ''
+    serverUserContext.value = null
   }
 }
 
@@ -397,7 +471,11 @@ function backendRoleFor(roleKey?: RoleKey) {
 }
 
 function can(permission: string) {
-  return isAdmin() || activePermissions.value.has(permission)
+  if (isAdmin()) return true
+  if (!user.value) return activePermissions.value.has(permission)
+  const localPermissions = frontendRolePermissions[user.value.roleKey] ?? []
+  const catalogMatchesRole = permissionCatalog.value.activeRole === backendRoleFor(user.value.roleKey)
+  return localPermissions.includes(permission) || (catalogMatchesRole && activePermissions.value.has(permission))
 }
 
 const canManageUsers = computed(() => can('Users.Manage'))
@@ -427,6 +505,8 @@ function resetUserForm(clearMessages = true) {
   }
 }
 
+const demoLoginProfiles = computed(() => [defaultUser, ...defaultDemoUsers])
+
 /**
  * Attempt to log the user in using local/demo users.
  */
@@ -445,6 +525,12 @@ function login() {
   } else {
     loginError.value = t('Invalid credentials')
   }
+}
+
+function loginAsDemo(profile: UserProfile) {
+  loginForm.value.username = profile.username
+  loginForm.value.password = profile.password
+  login()
 }
 
 function registerUser(autoLogin = false) {
@@ -638,6 +724,7 @@ const activeView = ref<ViewKey>('overview')
 const loading = ref(true)
 const apiStatus = ref('Connecting to API...')
 const eventStatus = ref('')
+const permissionNotice = ref('')
 
 const sidebarMinWidth = 220
 const sidebarDefaultWidth = 280
@@ -878,6 +965,18 @@ function emptyOperatorWorkbench(): OperatorWorkbench {
   }
 }
 
+function emptyDashboardSummary(): DashboardSummary {
+  return {
+    appName: 'DriveTrace Core',
+    subtitle: 'Sem dados internos para este perfil',
+    generatedAt: '',
+    counts: { openOrders: 0, activeUnits: 0, activeSupports: 0, qualityIssues: 0, rackAssignments: 0 },
+    wipBySection: [],
+    recentEvents: [],
+    qualityAlerts: [],
+  }
+}
+
 const fiwareContext = ref<FiwareContextSnapshot>(emptyFiwareContext())
 const fiwareLoading = ref(false)
 const fiwareActionStatus = ref('')
@@ -885,6 +984,7 @@ const fiwareLastPublish = ref<FiwarePublishResult | null>(null)
 const flowSummary = ref<FlowSummary>(emptyFlowSummary())
 const operatorWorkbench = ref<OperatorWorkbench>(emptyOperatorWorkbench())
 const operationalEvents = ref<OperationalEventRecord[]>([])
+const serverUserContext = ref<AuthUserContext | null>(null)
 const selectedUnitTrace = ref<ProductUnitTrace | null>(null)
 const traceLoading = ref(false)
 const transferStatus = ref('')
@@ -933,6 +1033,7 @@ const nav = [
 ] as const
 
 const viewPermissions: Partial<Record<ViewKey, string>> = {
+  overview: 'ProductUnits.View',
   orders: 'Orders.View',
   units: 'ProductUnits.View',
   supports: 'ProductUnits.View',
@@ -948,6 +1049,17 @@ const viewPermissions: Partial<Record<ViewKey, string>> = {
   operator: 'ProductUnits.Transfer',
   customer: 'CustomerPortal.View',
 }
+
+const roleHomeViews: Record<RoleKey, ViewKey> = {
+  admin: 'overview',
+  supervisor: 'overview',
+  operator: 'operator',
+  quality: 'quality',
+  logistics: 'racks',
+  client: 'customer',
+  demoViewer: 'overview',
+}
+
 const navGroups = [
   { key: 'Operation', items: ['overview', 'operator', 'orders', 'racks'] },
   { key: 'Traceability', items: ['units', 'supports', 'materials', 'quality', 'customer'] },
@@ -963,6 +1075,20 @@ function navByGroup(groupKey: typeof navGroups[number]['key']) {
 function canShowNav(key: ViewKey) {
   const permission = viewPermissions[key]
   return !permission || can(permission)
+}
+
+function firstAllowedDomainView() {
+  return nav.find((item) => canShowNav(item.key))?.key ?? 'settings'
+}
+
+function homeViewForRole(roleKey?: RoleKey) {
+  const preferred = roleHomeViews[roleKey || user.value?.roleKey || 'demoViewer']
+  return canShowNav(preferred) ? preferred : firstAllowedDomainView()
+}
+
+function ensureAccessibleView() {
+  if (activeView.value === 'profile' || activeView.value === 'settings') return
+  if (!canShowNav(activeView.value)) activeView.value = homeViewForRole(user.value?.roleKey)
 }
 
 const viewTitles: Record<ViewKey, string> = {
@@ -1014,6 +1140,7 @@ function navIcon(key: ViewKey, icon: string) {
 
 const sectionsById = computed(() => new Map(productionLineSections.value.map((section) => [section.id, section])))
 const supportsById = computed(() => new Map(supports.value.map((support) => [support.id, support])))
+const racksById = computed(() => new Map(racks.value.map((rack) => [rack.id, rack])))
 const unitsById = computed(() => new Map(units.value.map((unit) => [unit.id, unit])))
 
 const activeUnits = computed(() => units.value.filter((unit) => ['Active', 'Blocked', 'Rework'].includes(unit.status)))
@@ -1021,11 +1148,15 @@ const blockedUnits = computed(() => units.value.filter((unit) => ['Blocked', 'Re
 const loadedSupports = computed(() => supports.value.filter((support) => support.status === 'Loaded'))
 const racksAvailable = computed(() => racks.value.filter((rack) => rack.status === 'Available'))
 const activeRackAssignments = computed(() => rackSupportAssignments.value.filter((assignment) => !assignment.dateTimeOut))
+const recentRackAssignments = computed(() => [...rackSupportAssignments.value].sort((a, b) => new Date(b.dateTimeIn).getTime() - new Date(a.dateTimeIn).getTime()).slice(0, 8))
 const occupiedRacks = computed(() => new Set(activeRackAssignments.value.map((assignment) => assignment.rackId)).size)
 const postLineSupports = computed(() => supports.value.filter((support) => {
   const section = support.currentSectionId ? sectionsById.value.get(support.currentSectionId) : undefined
   return section?.sectionCode === 'SEC-RACK' || section?.sectionType?.toLowerCase().includes('log')
 }))
+const openNonconformities = computed(() => nonconformities.value.filter((item) => !['Closed', 'Completed'].includes(item.status)))
+const activeReworkRecords = computed(() => reworkRecords.value.filter((item) => !item.endedAt && !['Closed', 'Completed'].includes(item.status)))
+const recentQualityRecords = computed(() => [...quality.value].sort((a, b) => new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime()).slice(0, 8))
 const passQualityCount = computed(() => quality.value.filter((item) => item.result === 'PASS').length)
 const failQualityCount = computed(() => quality.value.filter((item) => item.result === 'FAIL').length)
 const passRate = computed(() => {
@@ -1046,6 +1177,50 @@ const apiHealthClass = computed(() => {
 })
 const apiHealthTitle = computed(() => t(apiStatus.value || 'API status'))
 const sidebarProfileLine = computed(() => `${locale.value === 'pt-PT' ? 'PT' : 'EN'} · ${theme.value === 'dark' ? t('Dark') : t('Light')}`)
+const currentRoleLabel = computed(() => user.value ? getRoleLabel(user.value.roleKey) : '')
+const roleContextCards = computed(() => {
+  const roleKey = user.value?.roleKey ?? 'demoViewer'
+  if (roleKey === 'operator') {
+    return [
+      { key: 'area', label: 'Área atribuída', value: serverUserContext.value?.assignedSection?.code || 'SEC-SOLD', detail: serverUserContext.value?.assignedLine?.name || 'Linha operacional', tone: 'tone-info' },
+      { key: 'queue', label: 'Fila de execução', value: operatorWorkbench.value.units.length, detail: 'Unidades disponíveis na bancada operacional', tone: 'tone-muted' },
+      { key: 'blocked', label: 'Atenção imediata', value: operatorWorkbench.value.queues.blocked, detail: 'Unidades bloqueadas ou em retrabalho', tone: operatorWorkbench.value.queues.blocked ? 'tone-warning' : 'tone-success' },
+    ]
+  }
+  if (roleKey === 'quality') {
+    return [
+      { key: 'fail', label: 'Resultados reprovados', value: failQualityCount.value, detail: 'Registos FAIL sob análise', tone: failQualityCount.value ? 'tone-warning' : 'tone-success' },
+      { key: 'nc', label: 'Não conformidades abertas', value: openNonconformities.value.length, detail: 'Decisão de qualidade pendente', tone: openNonconformities.value.length ? 'tone-warning' : 'tone-success' },
+      { key: 'rework', label: 'Retrabalhos ativos', value: activeReworkRecords.value.length, detail: 'Unidades em recuperação controlada', tone: activeReworkRecords.value.length ? 'tone-info' : 'tone-muted' },
+    ]
+  }
+  if (roleKey === 'logistics') {
+    return [
+      { key: 'racks', label: 'Racks disponíveis', value: racksAvailable.value.length, detail: 'Capacidade pós-linha livre', tone: 'tone-success' },
+      { key: 'occupied', label: 'Ocupação', value: `${rackUtilization.value}%`, detail: 'Utilização atual de racks', tone: rackUtilization.value > 75 ? 'tone-warning' : 'tone-info' },
+      { key: 'assignments', label: 'Atribuições ativas', value: activeRackAssignments.value.length, detail: 'Suportes ligados a racks', tone: 'tone-muted' },
+    ]
+  }
+  if (roleKey === 'client') {
+    return [
+      { key: 'customer', label: 'Cliente', value: serverUserContext.value?.customer?.customerCode || 'CLI-AUTO-001', detail: serverUserContext.value?.customer?.name || 'Consulta externa', tone: 'tone-info' },
+      { key: 'tracking', label: 'Código público', value: serverUserContext.value?.customer?.defaultPublicTrackingCode || customerLookupCode.value, detail: 'Visível sem dados internos de fábrica', tone: 'tone-success' },
+      { key: 'scope', label: 'Âmbito', value: 'Portal', detail: 'Acesso limitado ao progresso da ordem', tone: 'tone-muted' },
+    ]
+  }
+  if (roleKey === 'demoViewer') {
+    return [
+      { key: 'mode', label: 'Modo', value: 'Leitura', detail: 'Perfil demo sem escrita operacional', tone: 'tone-muted' },
+      { key: 'events', label: 'Eventos', value: recentOperationalEvents.value.length, detail: 'Histórico operacional visível', tone: 'tone-info' },
+      { key: 'analytics', label: 'Analítica', value: can('Grafana.View') ? 'Ativa' : 'Sem acesso', detail: 'Vista de demonstração', tone: 'tone-success' },
+    ]
+  }
+  return [
+    { key: 'role', label: 'Perfil ativo', value: currentRoleLabel.value, detail: serverUserContext.value?.department || 'Operação interna', tone: 'tone-info' },
+    { key: 'users', label: 'Utilizadores ativos', value: activeUserCount.value, detail: 'Perfis locais disponíveis para demonstração', tone: 'tone-muted' },
+    { key: 'orders', label: 'Ordens abertas', value: summary.value.counts.openOrders, detail: 'Seguimento operacional da produção', tone: 'tone-info' },
+  ]
+})
 const activeUserCount = computed(() => users.value.filter((profile) => profile.active).length)
 const administratorCount = computed(() => users.value.filter((profile) => profile.roleKey === 'admin').length)
 const operatorCount = computed(() => users.value.filter((profile) => profile.roleKey === 'operator').length)
@@ -1209,6 +1384,14 @@ function toggleMobileSidebar() {
 }
 
 function navigateTo(view: ViewKey) {
+  if (view !== 'profile' && view !== 'settings' && !canShowNav(view)) {
+    permissionNotice.value = 'Não tem permissão para aceder a esta vista.'
+    activeView.value = homeViewForRole(user.value?.roleKey)
+    showUserMenu.value = false
+    closeMobileSidebar()
+    return
+  }
+  permissionNotice.value = ''
   activeView.value = view
   showUserMenu.value = false
   closeMobileSidebar()
@@ -1224,6 +1407,10 @@ function sectionName(sectionId?: number) {
 
 function supportCode(supportId?: number) {
   return supportId ? supportsById.value.get(supportId)?.supportCode || `SUP ${supportId}` : t('No support')
+}
+
+function rackCode(rackId?: number) {
+  return rackId ? racksById.value.get(rackId)?.rackCode || `RACK ${rackId}` : '-'
 }
 
 function unitCode(unitId?: number) {
@@ -1391,6 +1578,7 @@ type CrudConfig = {
   title: string
   description?: string
   path: string
+  writePermission?: string
   itemsRef: Ref<EntityRecord[]>
   fields: CrudField[]
   columns: CrudColumn[]
@@ -1584,7 +1772,15 @@ function prepareFormValue(field: CrudField, value: unknown) {
   return value
 }
 
+function canWriteCrud(config: CrudConfig) {
+  return !config.writePermission || can(config.writePermission)
+}
+
 function startCrudAdd(config: CrudConfig) {
+  if (!canWriteCrud(config)) {
+    crudMessages.value[config.key] = { type: 'error', text: 'Não tem permissão para criar ou editar nesta vista.' }
+    return
+  }
   crudForms.value[config.key] = { ...config.newItem() }
   crudEditingId.value[config.key] = null
   crudOpen.value[config.key] = true
@@ -1592,6 +1788,10 @@ function startCrudAdd(config: CrudConfig) {
 }
 
 function startCrudEdit(config: CrudConfig, item: EntityRecord) {
+  if (!canWriteCrud(config)) {
+    crudMessages.value[config.key] = { type: 'error', text: 'Não tem permissão para criar ou editar nesta vista.' }
+    return
+  }
   const form: EntityRecord = {}
   for (const field of config.fields) {
     form[field.key] = prepareFormValue(field, item[field.key])
@@ -1628,6 +1828,10 @@ function payloadFor(config: CrudConfig) {
 }
 
 async function saveCrud(config: CrudConfig) {
+  if (!canWriteCrud(config)) {
+    crudMessages.value[config.key] = { type: 'error', text: 'Não tem permissão para criar ou editar nesta vista.' }
+    return
+  }
   const form = crudForms.value[config.key] || {}
   const editingId = crudEditingId.value[config.key] || undefined
   const requiredError = validateRequiredFields(config, form)
@@ -1654,6 +1858,10 @@ async function saveCrud(config: CrudConfig) {
 }
 
 async function removeCrud(config: CrudConfig, item: EntityRecord) {
+  if (!canWriteCrud(config)) {
+    crudMessages.value[config.key] = { type: 'error', text: 'Não tem permissão para eliminar nesta vista.' }
+    return
+  }
   const blocked = config.canDelete?.(item)
   if (blocked && blocked !== true) {
     crudMessages.value[config.key] = { type: 'error', text: blocked }
@@ -1696,6 +1904,7 @@ function crudPanelConfig(config: CrudConfig) {
     ...config,
     maxVisibleRows: config.maxVisibleRows ?? 7,
     maxTableHeight: config.maxTableHeight ?? 'clamp(320px, 48vh, 560px)',
+    readOnly: config.writePermission ? !can(config.writePermission) : false,
     items: () => config.itemsRef.value,
   }
 }
@@ -1708,6 +1917,7 @@ const ordersCrud: CrudConfig = {
   key: 'orders',
   title: 'Manufacturing Orders',
   path: '/manufacturing-orders',
+  writePermission: 'Orders.Manage',
   itemsRef: asCrudRef(orders),
   fields: [
     { key: 'orderNumber', label: 'Order number', required: true },
@@ -1754,6 +1964,7 @@ const unitsCrud: CrudConfig = {
   key: 'units',
   title: 'Product Units',
   path: '/product-units',
+  writePermission: 'MasterData.Manage',
   itemsRef: asCrudRef(units),
   confirmDelete: true,
   fields: [
@@ -1794,6 +2005,7 @@ const supportsCrud: CrudConfig = {
   key: 'supports',
   title: 'Supports / WIP Tracking',
   path: '/supports',
+  writePermission: 'Supports.Manage',
   itemsRef: asCrudRef(supports),
   confirmDelete: true,
   canDelete: supportDeleteRule,
@@ -1814,6 +2026,7 @@ const rawMaterialsCrud: CrudConfig = {
   key: 'raw-materials',
   title: 'Raw materials',
   path: '/raw-materials',
+  writePermission: 'Materials.Manage',
   itemsRef: asCrudRef(materials),
   fields: [
     { key: 'name', label: 'Name', required: true },
@@ -1830,6 +2043,7 @@ const lotsCrud: CrudConfig = {
   key: 'lot-raw-materials',
   title: 'Material lots',
   path: '/lot-raw-materials',
+  writePermission: 'Materials.Manage',
   itemsRef: asCrudRef(lots),
   fields: [
     { key: 'rawMaterialId', label: 'Material', type: 'select', required: true, options: materialOptions },
@@ -1853,6 +2067,7 @@ const unitMaterialLotUsagesCrud: CrudConfig = {
   key: 'unit-material-lot-usages',
   title: 'Unit material lot usages',
   path: '/unit-material-lot-usages',
+  writePermission: 'Materials.Manage',
   itemsRef: asCrudRef(unitMaterialLotUsages),
   confirmDelete: true,
   fields: [
@@ -1875,6 +2090,7 @@ const qualityResultsCrud: CrudConfig = {
   key: 'quality-results',
   title: 'Quality results',
   path: '/quality-results',
+  writePermission: 'Quality.Record',
   itemsRef: asCrudRef(quality),
   confirmDelete: true,
   fields: [
@@ -1899,6 +2115,7 @@ const nonconformitiesCrud: CrudConfig = {
   key: 'nonconformities',
   title: 'Nonconformities',
   path: '/nonconformities',
+  writePermission: 'Quality.Decide',
   itemsRef: asCrudRef(nonconformities),
   allowDelete: false,
   fields: [
@@ -1921,6 +2138,7 @@ const reworkRecordsCrud: CrudConfig = {
   key: 'rework-records',
   title: 'Rework records',
   path: '/rework-records',
+  writePermission: 'Quality.Decide',
   itemsRef: asCrudRef(reworkRecords),
   allowDelete: false,
   fields: [
@@ -1945,6 +2163,7 @@ const scrapRecordsCrud: CrudConfig = {
   title: 'Scrap records',
   description: 'Scrap records are historical evidence and do not delete product units.',
   path: '/scrap-records',
+  writePermission: 'Quality.Decide',
   itemsRef: asCrudRef(scrapRecords),
   allowDelete: false,
   fields: [
@@ -1966,6 +2185,7 @@ const racksCrud: CrudConfig = {
   key: 'racks',
   title: 'Racks / Post-line Logistics',
   path: '/racks',
+  writePermission: 'Racks.Manage',
   itemsRef: asCrudRef(racks),
   fields: [
     { key: 'rackCode', label: 'Rack code', required: true },
@@ -1984,6 +2204,7 @@ const rackAssignmentsCrud: CrudConfig = {
   key: 'rack-support-assignments',
   title: 'Rack support assignments',
   path: '/rack-support-assignments',
+  writePermission: 'Racks.Manage',
   itemsRef: asCrudRef(rackSupportAssignments),
   confirmDelete: true,
   fields: [
@@ -2006,6 +2227,7 @@ const predictionsCrud: CrudConfig = {
   title: 'Predictions',
   description: 'This section prepares future analysis of completion times, delay risk and productive deviations. In this V1 the data is demonstrative.',
   path: '/predictions',
+  writePermission: 'MasterData.Manage',
   itemsRef: asCrudRef(predictions),
   fields: [
     { key: 'manufacturingOrderId', label: 'Manufacturing order', type: 'select', nullable: true, options: optionalOrderOptions },
@@ -2222,6 +2444,11 @@ const activeCrudConfigs = computed(() => {
   return []
 })
 
+async function apiGetAllowed<T>(permission: string, path: string, fallback: T, blockedFallback: T): Promise<T> {
+  if (!can(permission)) return blockedFallback
+  return apiGet(path, fallback)
+}
+
 async function loadData(showSpinner = true) {
   if (showSpinner) loading.value = true
   const [
@@ -2255,37 +2482,39 @@ async function loadData(showSpinner = true) {
     operatorWorkbenchData,
     permissionCatalogData,
     operationalEventsData,
+    authContextData,
   ] = await Promise.all([
-    apiGet('/dashboard/summary', demoDashboard),
-    apiGet('/products', demoProducts),
-    apiGet('/variants', demoVariants),
-    apiGet('/customers', demoCustomers),
-    apiGet('/production-lines', demoProductionLines),
-    apiGet('/production-line-sections', demoProductionLineSections),
-    apiGet('/resources', demoResources),
-    apiGet('/manufacturing-processes', demoManufacturingProcesses),
-    apiGet('/manufacturing-section-phases', demoManufacturingSectionPhases),
-    apiGet('/manufacturing-process-phases', demoManufacturingProcessPhases),
-    apiGet('/checkpoints', demoCheckpoints),
-    apiGet('/manufacturing-orders', demoOrders),
-    apiGet('/product-units', demoUnits),
-    apiGet('/supports', demoSupports),
-    apiGet('/racks', demoRacks),
-    apiGet('/rack-support-assignments', demoRackSupportAssignments),
-    apiGet('/raw-materials', demoMaterials),
-    apiGet('/lot-raw-materials', demoLots),
-    apiGet('/unit-material-lot-usages', demoUnitMaterialLotUsages),
-    apiGet('/quality-results', demoQuality),
-    apiGet('/nonconformities', demoNonconformities),
-    apiGet('/rework-records', demoReworkRecords),
-    apiGet('/scrap-records', demoScrapRecords),
-    apiGet('/predictions', demoPredictions),
-    apiGet('/support-localization-history', demoSupportLocalizationHistory),
-    apiGet('/fiware/context', emptyFiwareContext()),
-    apiGet('/operations/flow-summary', emptyFlowSummary()),
-    apiGet('/operator/workbench', emptyOperatorWorkbench()),
+    apiGetAllowed('ProductUnits.View', '/dashboard/summary', demoDashboard, emptyDashboardSummary()),
+    apiGetAllowed('MasterData.Manage', '/products', demoProducts, [] as Product[]),
+    apiGetAllowed('MasterData.Manage', '/variants', demoVariants, [] as Variant[]),
+    apiGetAllowed('MasterData.Manage', '/customers', demoCustomers, [] as Customer[]),
+    apiGetAllowed('MasterData.Manage', '/production-lines', demoProductionLines, [] as ProductionLine[]),
+    apiGetAllowed('MasterData.Manage', '/production-line-sections', demoProductionLineSections, [] as ProductionLineSection[]),
+    apiGetAllowed('MasterData.Manage', '/resources', demoResources, [] as ResourceRecord[]),
+    apiGetAllowed('MasterData.Manage', '/manufacturing-processes', demoManufacturingProcesses, [] as ManufacturingProcess[]),
+    apiGetAllowed('MasterData.Manage', '/manufacturing-section-phases', demoManufacturingSectionPhases, [] as ManufacturingSectionPhase[]),
+    apiGetAllowed('MasterData.Manage', '/manufacturing-process-phases', demoManufacturingProcessPhases, [] as ManufacturingProcessPhase[]),
+    apiGetAllowed('Quality.View', '/checkpoints', demoCheckpoints, [] as Checkpoint[]),
+    apiGetAllowed('Orders.View', '/manufacturing-orders', demoOrders, [] as ManufacturingOrder[]),
+    apiGetAllowed('ProductUnits.View', '/product-units', demoUnits, [] as ProductUnit[]),
+    apiGetAllowed('ProductUnits.View', '/supports', demoSupports, [] as Support[]),
+    apiGetAllowed('Racks.View', '/racks', demoRacks, [] as Rack[]),
+    apiGetAllowed('Racks.View', '/rack-support-assignments', demoRackSupportAssignments, [] as RackSupportAssignment[]),
+    apiGetAllowed('Materials.View', '/raw-materials', demoMaterials, [] as RawMaterial[]),
+    apiGetAllowed('Materials.View', '/lot-raw-materials', demoLots, [] as LotRawMaterial[]),
+    apiGetAllowed('Materials.View', '/unit-material-lot-usages', demoUnitMaterialLotUsages, [] as UnitMaterialLotUsage[]),
+    apiGetAllowed('Quality.View', '/quality-results', demoQuality, [] as QualityRecord[]),
+    apiGetAllowed('Quality.View', '/nonconformities', demoNonconformities, [] as NonconformityRecord[]),
+    apiGetAllowed('Quality.View', '/rework-records', demoReworkRecords, [] as ReworkRecord[]),
+    apiGetAllowed('Quality.View', '/scrap-records', demoScrapRecords, [] as ScrapRecord[]),
+    apiGetAllowed('Orders.View', '/predictions', demoPredictions, [] as PredictionRecord[]),
+    apiGetAllowed('ProductUnits.Trace', '/support-localization-history', demoSupportLocalizationHistory, [] as SupportLocalizationHistory[]),
+    apiGetAllowed('Fiware.View', '/fiware/context', emptyFiwareContext(), emptyFiwareContext()),
+    apiGetAllowed('ProductUnits.View', '/operations/flow-summary', emptyFlowSummary(), emptyFlowSummary()),
+    apiGetAllowed('ProductUnits.View', '/operator/workbench', emptyOperatorWorkbench(), emptyOperatorWorkbench()),
     apiGet(`/permissions/catalog?role=${encodeURIComponent(backendRoleFor(user.value?.roleKey))}`, fallbackPermissionCatalog),
-    apiGet('/operational-events/recent?limit=20', [] as OperationalEventRecord[]),
+    apiGetAllowed('OperationalEvents.View', '/operational-events/recent?limit=20', [] as OperationalEventRecord[], [] as OperationalEventRecord[]),
+    apiGet('/auth/me', null as AuthUserContext | null),
   ])
 
   summary.value = dashboardData
@@ -2318,6 +2547,11 @@ async function loadData(showSpinner = true) {
   operatorWorkbench.value = operatorWorkbenchData
   permissionCatalog.value = permissionCatalogData
   operationalEvents.value = operationalEventsData
+  serverUserContext.value = authContextData
+  if (authContextData?.customer?.defaultPublicTrackingCode && user.value?.roleKey === 'client') {
+    customerLookupCode.value = authContextData.customer.defaultPublicTrackingCode
+  }
+  ensureAccessibleView()
   apiStatus.value = dashboardData === demoDashboard ? 'Offline demo data loaded' : 'Connected to DriveTrace Core API'
   if (showSpinner) loading.value = false
 }
@@ -2459,7 +2693,11 @@ function handleDesktopMediaChange(event: MediaQueryListEvent | MediaQueryList) {
 }
 
 onMounted(() => {
-  void loadData()
+  if (isAuthenticated.value) {
+    void loadData()
+  } else {
+    loading.value = false
+  }
   if (typeof window !== 'undefined' && 'matchMedia' in window) {
     desktopMediaQuery = window.matchMedia('(min-width: 1024px)')
     handleDesktopMediaChange(desktopMediaQuery)
@@ -2494,7 +2732,14 @@ onBeforeUnmount(() => {
           <p v-if="loginError" class="text-red-600 text-sm">{{ loginError }}</p>
           <button type="submit" class="btn-primary w-full">{{ t('Submit') }}</button>
           <button type="button" class="btn-secondary w-full" @click="isRegistering = true; loginError = ''">{{ t('Create account') }}</button>
-          <p class="text-center text-xs text-slate-500 dark:text-slate-400">admin / admin</p>
+          <div class="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900/50">
+            <p class="text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">Contas demo</p>
+            <div class="mt-2 grid grid-cols-2 gap-2">
+              <button v-for="profile in demoLoginProfiles" :key="profile.username" type="button" class="btn-secondary btn-compact justify-center" @click="loginAsDemo(profile)">
+                {{ profile.username }}
+              </button>
+            </div>
+          </div>
         </form>
         <form v-else @submit.prevent="registerUser(false)" class="space-y-4">
           <label class="form-label">{{ t('Name / full name') }}<input v-model="registerForm.name" class="form-input" /></label>
@@ -2504,9 +2749,13 @@ onBeforeUnmount(() => {
           <label class="form-label">{{ t('Confirm password') }}<input v-model="registerForm.confirmPassword" type="password" class="form-input" /></label>
           <label class="form-label">{{ t('Role') }}
             <select v-model="registerForm.roleKey" class="form-input">
-              <option value="operator">{{ t('Operator') }}</option>
-              <option value="client">{{ t('Client') }}</option>
               <option value="admin">{{ t('Administrator') }}</option>
+              <option value="supervisor">{{ t('Supervisor') }}</option>
+              <option value="operator">{{ t('Operator') }}</option>
+              <option value="quality">{{ t('Quality technician') }}</option>
+              <option value="logistics">{{ t('Logistics') }}</option>
+              <option value="client">{{ t('Client') }}</option>
+              <option value="demoViewer">{{ t('Demo viewer') }}</option>
             </select>
           </label>
           <p v-if="registerError" class="text-red-600 text-sm">{{ registerError }}</p>
@@ -2614,6 +2863,9 @@ onBeforeUnmount(() => {
         <!-- MAIN CONTENT -->
         <section class="app-content">
           <div class="content-shell">
+            <p v-if="permissionNotice" class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-100">
+              {{ permissionNotice }}
+            </p>
             <div v-if="loading" class="card p-6 text-center text-slate-600 dark:bg-slate-800 dark:text-slate-200 sm:p-8">{{ t('Loading DriveTrace Core data...') }}</div>
             <template v-else>
               <!-- PROFILE VIEW -->
@@ -2702,7 +2954,7 @@ onBeforeUnmount(() => {
                   <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
                     <button v-if="isEditingProfile" class="btn-primary sm:order-2" @click="saveProfileChanges">{{ t('Save changes') }}</button>
                     <button v-if="isEditingProfile" class="btn-secondary sm:order-1" @click="cancelProfileEdit">{{ t('Cancel') }}</button>
-                    <button class="btn-secondary sm:order-3" @click="activeView = 'overview'">{{ t('Back to dashboard') }}</button>
+                    <button class="btn-secondary sm:order-3" @click="navigateTo(homeViewForRole(user?.roleKey))">{{ t('Back to dashboard') }}</button>
                     <button class="btn-secondary sm:order-4" @click="activeView = 'settings'">{{ t('Open settings') }}</button>
                   </div>
                 </section>
@@ -2742,9 +2994,9 @@ onBeforeUnmount(() => {
               </div>
               <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-900 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-100">
                 <p>{{ t('Demo/local authentication') }}</p>
-                <p class="mt-1 font-medium">{{ t('The API is not protected by JWT yet. Access control is local to the dashboard for this V1.') }}</p>
+                <p class="mt-1 font-medium">{{ t('The API is not protected by JWT yet. Demo role headers are enforced by backend permission guards in this V1.') }}</p>
               </div>
-              <button class="btn-secondary" @click="activeView = 'overview'">{{ t('Back to dashboard') }}</button>
+              <button class="btn-secondary" @click="navigateTo(homeViewForRole(user?.roleKey))">{{ t('Back to dashboard') }}</button>
             </div>
 
             <!-- CRUD VIEWS -->
@@ -2849,6 +3101,59 @@ onBeforeUnmount(() => {
                 <div class="metric-card"><span>{{ t('FAIL') }}</span><strong>{{ quality.filter((item) => item.result === 'FAIL').length }}</strong></div>
               </section>
 
+              <section v-if="activeView === 'quality'" class="industrial-panel">
+                <div class="section-heading">
+                  <div>
+                    <p>Qualidade</p>
+                    <h3>Painel de decisão de qualidade</h3>
+                    <p class="section-description">Resultados, não conformidades, retrabalho e sucata ficam agregados para o técnico de qualidade.</p>
+                  </div>
+                </div>
+                <div class="mt-5 grid gap-3 sm:grid-cols-3">
+                  <article v-for="card in roleContextCards" :key="card.key" class="decision-card" :class="card.tone">
+                    <span>{{ card.label }}</span>
+                    <strong>{{ card.value }}</strong>
+                    <p>{{ card.detail }}</p>
+                  </article>
+                </div>
+                <div class="mt-5 grid gap-5 xl:grid-cols-2">
+                  <div>
+                    <h4 class="text-sm font-black text-slate-950 dark:text-white">Últimos resultados registados</h4>
+                    <div class="table-shell">
+                      <table class="data-table">
+                        <thead><tr><th>{{ t('Unit') }}</th><th>{{ t('Result') }}</th><th>{{ t('Recorded at') }}</th><th>{{ t('Notes') }}</th></tr></thead>
+                        <tbody>
+                          <tr v-for="record in recentQualityRecords" :key="record.id">
+                            <td class="font-bold">{{ unitCode(record.productUnitId) }}</td>
+                            <td><span :class="statusClass(record.result)">{{ translateQualityResult(record.result) }}</span></td>
+                            <td>{{ formatDate(record.recordedAt) }}</td>
+                            <td class="max-w-[18rem] truncate" :title="record.notes || '-'">{{ record.notes || '-' }}</td>
+                          </tr>
+                          <tr v-if="!recentQualityRecords.length"><td colspan="4" class="text-center">{{ t('No records found') }}</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  <div>
+                    <h4 class="text-sm font-black text-slate-950 dark:text-white">Não conformidades abertas</h4>
+                    <div class="table-shell">
+                      <table class="data-table">
+                        <thead><tr><th>{{ t('Unit') }}</th><th>{{ t('Severity') }}</th><th>{{ t('Status') }}</th><th>{{ t('Description') }}</th></tr></thead>
+                        <tbody>
+                          <tr v-for="item in openNonconformities" :key="item.id">
+                            <td class="font-bold">{{ unitCode(item.productUnitId) }}</td>
+                            <td><span :class="statusClass(item.severity)">{{ translateStatus(item.severity) }}</span></td>
+                            <td><span :class="statusClass(item.status)">{{ translateStatus(item.status) }}</span></td>
+                            <td class="max-w-[18rem] truncate" :title="item.description || '-'">{{ item.description || '-' }}</td>
+                          </tr>
+                          <tr v-if="!openNonconformities.length"><td colspan="4" class="text-center">{{ t('No records found') }}</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
               <section v-if="activeView === 'racks'" class="space-y-5 lg:space-y-6">
                 <div class="ops-hero">
                   <div class="grid gap-6 xl:grid-cols-[1fr_0.9fr] xl:items-center">
@@ -2897,6 +3202,37 @@ onBeforeUnmount(() => {
                     </div>
                   </section>
                 </div>
+                <section class="industrial-panel">
+                  <div class="section-heading">
+                    <div>
+                      <p>Logística</p>
+                      <h3>Atribuições rack-suporte</h3>
+                      <p class="section-description">A logística gere capacidade pós-linha sem substituir a rastreabilidade por suporte e unidade de produto.</p>
+                    </div>
+                  </div>
+                  <div class="mt-5 grid gap-3 sm:grid-cols-3">
+                    <article v-for="card in roleContextCards" :key="card.key" class="decision-card" :class="card.tone">
+                      <span>{{ card.label }}</span>
+                      <strong>{{ card.value }}</strong>
+                      <p>{{ card.detail }}</p>
+                    </article>
+                  </div>
+                  <div class="table-shell mt-5">
+                    <table class="data-table">
+                      <thead><tr><th>{{ t('Rack') }}</th><th>{{ t('Support') }}</th><th>{{ t('Status') }}</th><th>{{ t('Date/time in') }}</th><th>{{ t('Date/time out') }}</th></tr></thead>
+                      <tbody>
+                        <tr v-for="assignment in recentRackAssignments" :key="assignment.id">
+                          <td class="font-bold">{{ rackCode(assignment.rackId) }}</td>
+                          <td>{{ supportCode(assignment.supportId) }}</td>
+                          <td><span :class="statusClass(assignment.dateTimeOut ? 'Completed' : 'Active')">{{ assignment.dateTimeOut ? t('Completed') : t('Active') }}</span></td>
+                          <td>{{ formatDate(assignment.dateTimeIn) }}</td>
+                          <td>{{ formatDate(assignment.dateTimeOut) }}</td>
+                        </tr>
+                        <tr v-if="!recentRackAssignments.length"><td colspan="5" class="text-center">{{ t('No records found') }}</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
               </section>
 
               <section v-if="activeView === 'predictions'" class="card p-5 sm:p-6">
@@ -2964,6 +3300,13 @@ onBeforeUnmount(() => {
                     </div>
                   </div>
                 </div>
+              </section>
+              <section v-if="roleContextCards.length" class="kpi-grid">
+                <article v-for="card in roleContextCards" :key="card.key" class="kpi-card" :class="card.tone">
+                  <span>{{ card.label }}</span>
+                  <strong>{{ card.value }}</strong>
+                  <p>{{ card.detail }}</p>
+                </article>
               </section>
               <section class="kpi-grid">
                 <article v-for="metric in overviewKpis" :key="metric.key" class="kpi-card" :class="metric.tone">
@@ -3133,6 +3476,13 @@ onBeforeUnmount(() => {
                   </div>
                   <button class="btn-primary" type="button" @click="loadData(false)">{{ t('Refresh') }}</button>
                 </div>
+                <div v-if="roleContextCards.length" class="mt-5 grid gap-3 sm:grid-cols-3">
+                  <article v-for="card in roleContextCards" :key="card.key" class="kpi-card" :class="card.tone">
+                    <span>{{ card.label }}</span>
+                    <strong>{{ card.value }}</strong>
+                    <p>{{ card.detail }}</p>
+                  </article>
+                </div>
                 <div class="kpi-grid mt-5">
                   <article class="kpi-card tone-info"><span>{{ t('Transfer ready') }}</span><strong>{{ operatorWorkbench.queues.transferReady }}</strong><p>{{ t('Units at transfer-capable sections') }}</p></article>
                   <article class="kpi-card" :class="operatorWorkbench.queues.blocked ? 'tone-warning' : 'tone-success'"><span>{{ t('Blocked') }}</span><strong>{{ operatorWorkbench.queues.blocked }}</strong><p>{{ t('Units requiring attention') }}</p></article>
@@ -3210,6 +3560,13 @@ onBeforeUnmount(() => {
                   <label class="form-label flex-1">{{ t('Public tracking code') }}<input v-model="customerLookupCode" class="form-input" /></label>
                   <button class="btn-primary self-end" type="submit">{{ t('Search') }}</button>
                 </form>
+                <div v-if="roleContextCards.length" class="mt-5 grid gap-3 sm:grid-cols-3">
+                  <article v-for="card in roleContextCards" :key="card.key" class="kpi-card" :class="card.tone">
+                    <span>{{ card.label }}</span>
+                    <strong>{{ card.value }}</strong>
+                    <p>{{ card.detail }}</p>
+                  </article>
+                </div>
                 <p v-if="customerLookupStatus" class="mt-4 rounded-lg border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">{{ customerLookupStatus }}</p>
               </section>
 

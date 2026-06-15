@@ -1,6 +1,6 @@
 # Permissions
 
-Fase A adiciona uma base simples e escalavel de permissoes para o modo demo/local. Nao introduz OAuth, SSO ou autenticacao pesada.
+Fase B aplica controlo funcional real por permissoes no backend, mantendo autenticacao demo/local. Nao existe ainda JWT, OAuth, SSO ou gestao externa de identidades.
 
 ## Perfis
 
@@ -36,8 +36,22 @@ Fase A adiciona uma base simples e escalavel de permissoes para o modo demo/loca
 - `CustomerPortal.View`
 - `OperationalEvents.View`
 
+## Matriz resumida
+
+| Perfil | Permissoes principais |
+| --- | --- |
+| `Administrator` | Todas |
+| `Supervisor` | Ordens, unidades, transferencias, trace, suportes, qualidade, racks, materiais, Grafana, eventos e simulacao |
+| `Operator` | Ordens em leitura, unidades, transferencias, trace e eventos |
+| `QualityTechnician` | Ordens em leitura, unidades, trace, qualidade, decisao de qualidade e eventos |
+| `Logistics` | Unidades, trace, racks, materiais, suportes e eventos |
+| `Customer` | Apenas `CustomerPortal.View` |
+| `DemoViewer` | Leitura demo: ordens, unidades, trace, qualidade, racks, materiais, FIWARE, Grafana, portal cliente e eventos |
+
 ## API
 
+- `GET /api/auth/me`
+- `GET /api/auth/demo-users`
 - `GET /api/permissions/catalog`
 - `GET /api/permissions/catalog?role=Operator`
 - `GET /api/permissions/profiles/{role}`
@@ -49,20 +63,42 @@ O backend le os cabecalhos:
 - `X-DriveTrace-User`
 - `X-DriveTrace-Permissions`
 
-Se nenhum cabecalho for enviado, o ambiente local assume `Administrator` para manter os scripts e o modo demo compativeis. Quando uma funcao e enviada explicitamente, as guardas devolvem `403` se a permissao estiver em falta.
+Se nenhum cabecalho for enviado, o ambiente local assume `Administrator` para manter scripts antigos e modo demo compativeis. Quando um papel e enviado explicitamente, as guardas devolvem `403` se a permissao estiver em falta.
 
-## Guardas iniciais
+## Guardas funcionais
 
+- Dashboard summary, flow summary e operator workbench: `ProductUnits.View`.
+- Portal de cliente: `CustomerPortal.View`.
+- CRUD de ordens: leitura `Orders.View`, escrita `Orders.Manage`.
+- CRUD de unidades: leitura `ProductUnits.View`, escrita geral `MasterData.Manage`.
+- Trace e historico de suporte: `ProductUnits.Trace`.
 - Transferencia de unidade: `ProductUnits.Transfer`.
-- Trace e eventos por unidade: `ProductUnits.Trace`.
-- Eventos operacionais recentes/listagem: `OperationalEvents.View`.
-- Escritas CRUD gerais: `MasterData.Manage`.
-- Qualidade CRUD: `Quality.Record` ou `Quality.Decide`.
-- Racks CRUD especializado: `Racks.Manage`.
+- Suportes: leitura `ProductUnits.View`, escrita `Supports.Manage`.
+- Qualidade: leitura `Quality.View`, registo `Quality.Record`, decisoes `Quality.Decide`.
+- Racks e atribuicoes rack-suporte: leitura `Racks.View`, escrita `Racks.Manage`.
+- Materiais e lotes: leitura `Materials.View`, escrita `Materials.Manage`.
 - Playback: `Simulation.Manage`.
 - FIWARE leitura: `Fiware.View`.
 - FIWARE publicacao: `Fiware.Manage`.
+- Eventos operacionais recentes/listagem: `OperationalEvents.View`.
+- Utilizadores: `Users.Manage`.
+- Dados mestre/parametros: `MasterData.Manage`.
 
 ## Dashboard
 
-O dashboard envia `X-DriveTrace-Role` e `X-DriveTrace-User` com base no utilizador local ativo e filtra vistas/acesso por permissao. Os perfis demo disponiveis sao `admin`, `supervisor`, `operador`, `qualidade`, `logistica`, `cliente` e `demo`.
+O dashboard envia `X-DriveTrace-Role` e `X-DriveTrace-User` com base no utilizador local ativo. A interface:
+
+- filtra navegacao por permissao;
+- inicia cada papel na vista funcional adequada;
+- mostra mensagem de acesso negado quando uma vista nao e permitida;
+- mantem paineis CRUD em modo so leitura quando o papel pode consultar mas nao escrever;
+- impede o perfil `Customer` de ver dados internos, logs tecnicos, FIWARE, Grafana e utilizadores.
+
+Perfis demo disponiveis: `admin`, `supervisor`, `operador`, `qualidade`, `logistica`, `cliente` e `demo`.
+
+## Validacao
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\test-phase-b-roles.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\test-phase-b-roles.ps1 -PublishFiware
+```

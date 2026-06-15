@@ -51,18 +51,33 @@ public sealed class ProductionFlowController : ControllerBase
     [HttpGet("operations/flow-summary")]
     public async Task<IActionResult> FlowSummary(CancellationToken cancellationToken)
     {
+        if (!PermissionCatalogService.HasPermission(HttpContext, PermissionNames.ProductUnitsView))
+        {
+            return PermissionCatalogService.Forbidden(PermissionNames.ProductUnitsView);
+        }
+
         return Ok(await _flow.GetFlowSummaryAsync(cancellationToken));
     }
 
     [HttpGet("operator/workbench")]
     public async Task<IActionResult> OperatorWorkbench(CancellationToken cancellationToken)
     {
+        if (!PermissionCatalogService.HasPermission(HttpContext, PermissionNames.ProductUnitsView))
+        {
+            return PermissionCatalogService.Forbidden(PermissionNames.ProductUnitsView);
+        }
+
         return Ok(await _flow.GetOperatorWorkbenchAsync(cancellationToken));
     }
 
     [HttpGet("customer/orders/{publicTrackingCode}")]
     public async Task<IActionResult> CustomerOrder(string publicTrackingCode, CancellationToken cancellationToken)
     {
+        if (!PermissionCatalogService.HasPermission(HttpContext, PermissionNames.CustomerPortalView))
+        {
+            return PermissionCatalogService.Forbidden(PermissionNames.CustomerPortalView);
+        }
+
         var order = await _flow.GetCustomerOrderAsync(publicTrackingCode, cancellationToken);
         return order is null ? NotFound() : Ok(order);
     }

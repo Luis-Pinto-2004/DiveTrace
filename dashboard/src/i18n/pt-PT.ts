@@ -273,6 +273,7 @@ export const ptPT: Record<string, string> = {
   'Current theme': 'Tema atual',
   'Demo/local authentication': 'Autenticação demo/local',
   'The API is not protected by JWT yet. Access control is local to the dashboard for this V1.': 'A API ainda não está protegida por JWT. O controlo de acesso é local à dashboard nesta V1.',
+  'The API is not protected by JWT yet. Demo role headers are enforced by backend permission guards in this V1.': 'A API ainda não está protegida por JWT. Os cabeçalhos de papel demo são aplicados por guardas de permissão no backend nesta V1.',
   'Basic accessibility': 'Acessibilidade básica',
   'Clear mode is the default. Dark mode, language and session preferences are persisted locally.': 'O modo claro é o padrão. O modo escuro, idioma e sessão são guardados localmente.',
   'DriveTrace Core': 'DriveTrace Core',

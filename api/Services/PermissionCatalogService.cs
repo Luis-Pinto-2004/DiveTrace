@@ -76,6 +76,17 @@ public static class RoleNames
 
 public sealed class PermissionCatalogService
 {
+    public static readonly IReadOnlyList<DemoUserProfile> DemoUsers =
+    [
+        new("admin", "Administrador", "admin", RoleNames.Administrator, "admin@drivetrace.local", "Administração", null, null, null),
+        new("supervisor", "Supervisor de Produção", "supervisor", RoleNames.Supervisor, "supervisor@drivetrace.local", "Produção", null, null, null),
+        new("operador", "Operador Linha 1", "operador", RoleNames.Operator, "operador@drivetrace.local", "Linha 1", "LINHA-01", "SEC-SOLD", null),
+        new("qualidade", "Técnico de Qualidade", "qualidade", RoleNames.QualityTechnician, "qualidade@drivetrace.local", "Qualidade", "LINHA-04", "SEC-CQ", null),
+        new("logistica", "Responsável de Logística", "logistica", RoleNames.Logistics, "logistica@drivetrace.local", "Logística", "LINHA-04", "SEC-RACK", null),
+        new("cliente", "Cliente Demo", "cliente", RoleNames.Customer, "cliente@drivetrace.local", "Cliente", null, null, "CLI-AUTO-001"),
+        new("demo", "Visualizador Demo", "demo", RoleNames.DemoViewer, "demo@drivetrace.local", "Demonstração", null, null, null)
+    ];
+
     private static readonly IReadOnlyDictionary<string, string> RoleAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
         ["admin"] = RoleNames.Administrator,
@@ -110,7 +121,6 @@ public sealed class PermissionCatalogService
             PermissionNames.RacksView,
             PermissionNames.RacksManage,
             PermissionNames.MaterialsView,
-            PermissionNames.FiwareView,
             PermissionNames.GrafanaView,
             PermissionNames.OperationalEventsView,
             PermissionNames.SimulationManage
@@ -121,9 +131,6 @@ public sealed class PermissionCatalogService
             PermissionNames.ProductUnitsView,
             PermissionNames.ProductUnitsTransfer,
             PermissionNames.ProductUnitsTrace,
-            PermissionNames.SupportsManage,
-            PermissionNames.RacksView,
-            PermissionNames.MaterialsView,
             PermissionNames.OperationalEventsView
         },
         [RoleNames.QualityTechnician] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -142,13 +149,14 @@ public sealed class PermissionCatalogService
             PermissionNames.ProductUnitsTrace,
             PermissionNames.RacksView,
             PermissionNames.RacksManage,
+            PermissionNames.MaterialsView,
+            PermissionNames.MaterialsManage,
             PermissionNames.SupportsManage,
             PermissionNames.OperationalEventsView
         },
         [RoleNames.Customer] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            PermissionNames.CustomerPortalView,
-            PermissionNames.ProductUnitsTrace
+            PermissionNames.CustomerPortalView
         },
         [RoleNames.DemoViewer] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -186,6 +194,35 @@ public sealed class PermissionCatalogService
         };
     }
 
+    public static DemoUserProfile ResolveDemoUser(HttpContext context)
+    {
+        var username = context.Request.Headers["X-DriveTrace-User"].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(username))
+        {
+            var user = DemoUsers.FirstOrDefault(item => item.Username.Equals(username.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (user is not null) return user;
+        }
+
+        var role = ResolveRole(context);
+        return DemoUsers.FirstOrDefault(item => item.Role.Equals(role, StringComparison.OrdinalIgnoreCase))
+            ?? DemoUsers[0];
+    }
+
+    public static string ToRoleKey(string role)
+    {
+        return role switch
+        {
+            RoleNames.Administrator => "admin",
+            RoleNames.Supervisor => "supervisor",
+            RoleNames.Operator => "operator",
+            RoleNames.QualityTechnician => "quality",
+            RoleNames.Logistics => "logistics",
+            RoleNames.Customer => "client",
+            RoleNames.DemoViewer => "demoViewer",
+            _ => "demoViewer"
+        };
+    }
+
     public static bool HasPermission(HttpContext context, string permission)
     {
         var activePermissions = ResolvePermissions(context);
@@ -194,7 +231,20 @@ public sealed class PermissionCatalogService
 
     public static string ResolveRole(HttpContext context)
     {
-        return ResolveRole(context.Request.Headers["X-DriveTrace-Role"].FirstOrDefault());
+        var headerRole = context.Request.Headers["X-DriveTrace-Role"].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(headerRole))
+        {
+            return ResolveRole(headerRole);
+        }
+
+        var username = context.Request.Headers["X-DriveTrace-User"].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(username))
+        {
+            var user = DemoUsers.FirstOrDefault(item => item.Username.Equals(username.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (user is not null) return user.Role;
+        }
+
+        return ResolveRole((string?)null);
     }
 
     public static string ResolveRole(string? requestedRole)
@@ -242,7 +292,7 @@ public sealed class PermissionCatalogService
     {
         return new ObjectResult(new
         {
-            error = "Permissão insuficiente.",
+            error = "Não tem permissão para executar esta operação.",
             requiredPermission = permission
         })
         {
@@ -294,3 +344,14 @@ public sealed class PermissionCatalogService
         };
     }
 }
+
+public sealed record DemoUserProfile(
+    string Username,
+    string Name,
+    string Password,
+    string Role,
+    string Email,
+    string Department,
+    string? LineCode,
+    string? SectionCode,
+    string? CustomerCode);

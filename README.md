@@ -41,6 +41,7 @@ Este comando arranca a stack principal completa, incluindo `db`, `mongo-db`, `or
 - Dashboard summary: http://localhost:5181/api/dashboard/summary
 - Flow summary: http://localhost:5181/api/operations/flow-summary
 - Operator workbench: http://localhost:5181/api/operator/workbench
+- Perfil ativo demo: http://localhost:5181/api/auth/me
 - Acompanhamento público do cliente: http://localhost:5181/api/customer/orders/TRC-PORTA-001
 - Orion-LD: http://localhost:1026/version
 - IoT Agent: http://localhost:4041/iot/about
@@ -53,6 +54,8 @@ Para testes detalhados, troubleshooting e validação ponta-a-ponta da integraç
 
 - `docs/FIWARE_TESTING.md`
 - `docs/PRODUCTION_FLOW.md`
+- `docs/USER_ROLES.md`
+- `docs/PERMISSIONS.md`
 
 ## Execuções seguintes
 
@@ -172,15 +175,21 @@ npm run dev
 
 O admin pode gerir pela dashboard ordens de fabrico, unidades de produto, suportes, materiais e lotes, qualidade, racks, previsões e parâmetros do sistema. As operações de eliminação têm confirmação na interface e podem ser recusadas pela API quando existirem associações históricas ou regras de chave estrangeira.
 
-A autenticação continua a ser demo/local no frontend e o backend ainda não aplica RBAC real. O histórico de localização de suportes é apresentado apenas para consulta, porque deve ser gerado por eventos/movimentos e não editado manualmente.
+A autenticação continua a ser demo/local, mas a Fase B aplica guardas funcionais reais no backend através de `X-DriveTrace-Role` e `X-DriveTrace-User`. O histórico de localização de suportes é apresentado apenas para consulta, porque deve ser gerado por eventos/movimentos e não editado manualmente.
 
 ## Autenticação demo
 
 - `admin/admin`
+- `supervisor/supervisor`
+- `operador/operador`
+- `qualidade/qualidade`
+- `logistica/logistica`
+- `cliente/cliente`
+- `demo/demo`
 - Autenticação local/demo no frontend
 - Sessão e utilizadores guardados em `localStorage`
 - A API ainda não está protegida por JWT
-- Preparado para evolução futura com autenticação real e RBAC
+- Guardas backend por permissão para o modo demo/local
 
 ## Dados demo
 
@@ -195,12 +204,13 @@ O cenário demo representa um fluxo automóvel de portas em PT-PT com várias li
 - Linhas demo: `LINHA-01` a `LINHA-04`.
 - Secções demo: `SEC-MP`, `SEC-ATRIB-SUP`, `SEC-CORTE-ESTAMP`, `SEC-SOLD`, `SEC-PINT-A`, `SEC-PINT-B`, `SEC-CQ`, `SEC-RETRAB`, `SEC-RACK`.
 - Consulta pública de cliente: `TRC-PORTA-001`.
-- Utilizadores locais demo: `admin/admin`, `operador/operador`, `cliente/cliente`.
+- Utilizadores locais demo: `admin/admin`, `supervisor/supervisor`, `operador/operador`, `qualidade/qualidade`, `logistica/logistica`, `cliente/cliente`, `demo/demo`.
 
 Validação rápida do fluxo multi-linha:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\test-production-flow.ps1 -PublishFiware
+powershell -ExecutionPolicy Bypass -File .\scripts\test-phase-b-roles.ps1
 ```
 
 Se os dados antigos persistirem em volumes Docker, usar:
@@ -214,6 +224,7 @@ docker compose up -d --build
 
 - Auth local/demo no frontend
 - API ainda não protegida por JWT
+- RBAC atual baseado em cabeçalhos demo/local, não em identidade criptograficamente autenticada
 - Grafana local provisionado para demonstração académica
 - FIWARE opcional para demonstração
 - Previsões demonstrativas, sem IA real nesta V1

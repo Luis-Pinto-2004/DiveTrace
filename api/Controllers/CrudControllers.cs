@@ -11,6 +11,8 @@ namespace DriveTraceCore.Api.Controllers;
 public abstract class CrudController<TEntity> : ControllerBase where TEntity : class, IEntity
 {
     protected readonly DriveTraceDbContext Db;
+    protected virtual string? ReadPermission => null;
+    protected virtual string WritePermission => PermissionNames.MasterDataManage;
 
     protected CrudController(DriveTraceDbContext db)
     {
@@ -20,12 +22,22 @@ public abstract class CrudController<TEntity> : ControllerBase where TEntity : c
     [HttpGet]
     public virtual async Task<ActionResult<IEnumerable<TEntity>>> GetAll()
     {
+        if (!CanRead())
+        {
+            return PermissionCatalogService.Forbidden(ReadPermission!);
+        }
+
         return Ok(await Db.Set<TEntity>().AsNoTracking().OrderBy(x => x.Id).ToListAsync());
     }
 
     [HttpGet("{id:int}")]
     public virtual async Task<ActionResult<TEntity>> GetById(int id)
     {
+        if (!CanRead())
+        {
+            return PermissionCatalogService.Forbidden(ReadPermission!);
+        }
+
         var entity = await Db.Set<TEntity>().AsNoTracking().FirstOrDefaultAsync(x => x.Id == id);
         return entity is null ? NotFound() : Ok(entity);
     }
@@ -33,9 +45,9 @@ public abstract class CrudController<TEntity> : ControllerBase where TEntity : c
     [HttpPost]
     public virtual async Task<ActionResult<TEntity>> Create(TEntity entity)
     {
-        if (!PermissionCatalogService.HasPermission(HttpContext, PermissionNames.MasterDataManage))
+        if (!CanWrite())
         {
-            return PermissionCatalogService.Forbidden(PermissionNames.MasterDataManage);
+            return PermissionCatalogService.Forbidden(WritePermission);
         }
 
         Db.Set<TEntity>().Add(entity);
@@ -46,9 +58,9 @@ public abstract class CrudController<TEntity> : ControllerBase where TEntity : c
     [HttpPut("{id:int}")]
     public virtual async Task<IActionResult> Update(int id, TEntity entity)
     {
-        if (!PermissionCatalogService.HasPermission(HttpContext, PermissionNames.MasterDataManage))
+        if (!CanWrite())
         {
-            return PermissionCatalogService.Forbidden(PermissionNames.MasterDataManage);
+            return PermissionCatalogService.Forbidden(WritePermission);
         }
 
         if (id != entity.Id)
@@ -70,9 +82,9 @@ public abstract class CrudController<TEntity> : ControllerBase where TEntity : c
     [HttpDelete("{id:int}")]
     public virtual async Task<IActionResult> Delete(int id)
     {
-        if (!PermissionCatalogService.HasPermission(HttpContext, PermissionNames.MasterDataManage))
+        if (!CanWrite())
         {
-            return PermissionCatalogService.Forbidden(PermissionNames.MasterDataManage);
+            return PermissionCatalogService.Forbidden(WritePermission);
         }
 
         var entity = await Db.Set<TEntity>().FirstOrDefaultAsync(x => x.Id == id);
@@ -85,113 +97,149 @@ public abstract class CrudController<TEntity> : ControllerBase where TEntity : c
         await Db.SaveChangesAsync();
         return NoContent();
     }
+
+    private bool CanRead()
+    {
+        return ReadPermission is null || PermissionCatalogService.HasPermission(HttpContext, ReadPermission);
+    }
+
+    private bool CanWrite()
+    {
+        return PermissionCatalogService.HasPermission(HttpContext, WritePermission);
+    }
 }
 
 [Route("api/products")]
 public sealed class ProductsController : CrudController<Product>
 {
+    protected override string? ReadPermission => PermissionNames.MasterDataManage;
     public ProductsController(DriveTraceDbContext db) : base(db) { }
 }
 
 [Route("api/variants")]
 public sealed class VariantsController : CrudController<Variant>
 {
+    protected override string? ReadPermission => PermissionNames.MasterDataManage;
     public VariantsController(DriveTraceDbContext db) : base(db) { }
 }
 
 [Route("api/customers")]
 public sealed class CustomersController : CrudController<Customer>
 {
+    protected override string? ReadPermission => PermissionNames.MasterDataManage;
     public CustomersController(DriveTraceDbContext db) : base(db) { }
 }
 
 [Route("api/manufacturing-orders")]
 public sealed class ManufacturingOrdersController : CrudController<ManufacturingOrder>
 {
+    protected override string? ReadPermission => PermissionNames.OrdersView;
+    protected override string WritePermission => PermissionNames.OrdersManage;
     public ManufacturingOrdersController(DriveTraceDbContext db) : base(db) { }
 }
 
 [Route("api/production-lines")]
 public sealed class ProductionLinesController : CrudController<ProductionLine>
 {
+    protected override string? ReadPermission => PermissionNames.MasterDataManage;
     public ProductionLinesController(DriveTraceDbContext db) : base(db) { }
 }
 
 [Route("api/production-line-sections")]
 public sealed class ProductionLineSectionsController : CrudController<ProductionLineSection>
 {
+    protected override string? ReadPermission => PermissionNames.MasterDataManage;
     public ProductionLineSectionsController(DriveTraceDbContext db) : base(db) { }
 }
 
 [Route("api/resources")]
 public sealed class ResourcesController : CrudController<Resource>
 {
+    protected override string? ReadPermission => PermissionNames.MasterDataManage;
     public ResourcesController(DriveTraceDbContext db) : base(db) { }
 }
 
 [Route("api/manufacturing-processes")]
 public sealed class ManufacturingProcessesController : CrudController<ManufacturingProcess>
 {
+    protected override string? ReadPermission => PermissionNames.MasterDataManage;
     public ManufacturingProcessesController(DriveTraceDbContext db) : base(db) { }
 }
 
 [Route("api/manufacturing-section-phases")]
 public sealed class ManufacturingSectionPhasesController : CrudController<ManufacturingSectionPhase>
 {
+    protected override string? ReadPermission => PermissionNames.MasterDataManage;
     public ManufacturingSectionPhasesController(DriveTraceDbContext db) : base(db) { }
 }
 
 [Route("api/manufacturing-process-phases")]
 public sealed class ManufacturingProcessPhasesController : CrudController<ManufacturingProcessPhase>
 {
+    protected override string? ReadPermission => PermissionNames.MasterDataManage;
     public ManufacturingProcessPhasesController(DriveTraceDbContext db) : base(db) { }
 }
 
 [Route("api/checkpoints")]
 public sealed class CheckpointsController : CrudController<Checkpoint>
 {
+    protected override string? ReadPermission => PermissionNames.QualityView;
+    protected override string WritePermission => PermissionNames.MasterDataManage;
     public CheckpointsController(DriveTraceDbContext db) : base(db) { }
 }
 
 [Route("api/product-units")]
 public sealed class ProductUnitsController : CrudController<ProductUnit>
 {
+    protected override string? ReadPermission => PermissionNames.ProductUnitsView;
     public ProductUnitsController(DriveTraceDbContext db) : base(db) { }
 }
 
 [Route("api/product-unit-location-history")]
 public sealed class ProductUnitLocationHistoryController : CrudController<ProductUnitLocationHistory>
 {
+    protected override string? ReadPermission => PermissionNames.ProductUnitsTrace;
+    protected override string WritePermission => PermissionNames.ProductUnitsTransfer;
     public ProductUnitLocationHistoryController(DriveTraceDbContext db) : base(db) { }
 }
 
 [Route("api/supports")]
 public sealed class SupportsController : CrudController<Support>
 {
+    protected override string? ReadPermission => PermissionNames.ProductUnitsView;
+    protected override string WritePermission => PermissionNames.SupportsManage;
     public SupportsController(DriveTraceDbContext db) : base(db) { }
 }
 
 [Route("api/unit-support-assignments")]
 public sealed class UnitSupportAssignmentsController : CrudController<UnitSupportAssignment>
 {
+    protected override string? ReadPermission => PermissionNames.ProductUnitsTrace;
+    protected override string WritePermission => PermissionNames.SupportsManage;
     public UnitSupportAssignmentsController(DriveTraceDbContext db) : base(db) { }
 }
 
 [Route("api/support-localization-history")]
 public sealed class SupportLocalizationHistoryController : CrudController<SupportLocalizationHistory>
 {
+    protected override string? ReadPermission => PermissionNames.ProductUnitsTrace;
+    protected override string WritePermission => PermissionNames.ProductUnitsTransfer;
     public SupportLocalizationHistoryController(DriveTraceDbContext db) : base(db) { }
 }
 
 [Route("api/racks")]
 public sealed class RacksController : CrudController<Rack>
 {
+    protected override string? ReadPermission => PermissionNames.RacksView;
+    protected override string WritePermission => PermissionNames.RacksManage;
     public RacksController(DriveTraceDbContext db) : base(db) { }
 }
 
 [Route("api/rack-support-assignments")]
 public sealed class RackSupportAssignmentsController : CrudController<RackSupportAssignment>
 {
+    protected override string? ReadPermission => PermissionNames.RacksView;
+    protected override string WritePermission => PermissionNames.RacksManage;
     private readonly OperationalEventService _events;
 
     public RackSupportAssignmentsController(DriveTraceDbContext db, OperationalEventService events) : base(db)
@@ -231,24 +279,32 @@ public sealed class RackSupportAssignmentsController : CrudController<RackSuppor
 [Route("api/raw-materials")]
 public sealed class RawMaterialsController : CrudController<RawMaterial>
 {
+    protected override string? ReadPermission => PermissionNames.MaterialsView;
+    protected override string WritePermission => PermissionNames.MaterialsManage;
     public RawMaterialsController(DriveTraceDbContext db) : base(db) { }
 }
 
 [Route("api/lot-raw-materials")]
 public sealed class LotRawMaterialsController : CrudController<LotRawMaterial>
 {
+    protected override string? ReadPermission => PermissionNames.MaterialsView;
+    protected override string WritePermission => PermissionNames.MaterialsManage;
     public LotRawMaterialsController(DriveTraceDbContext db) : base(db) { }
 }
 
 [Route("api/unit-material-lot-usages")]
 public sealed class UnitMaterialLotUsagesController : CrudController<UnitMaterialLotUsage>
 {
+    protected override string? ReadPermission => PermissionNames.MaterialsView;
+    protected override string WritePermission => PermissionNames.MaterialsManage;
     public UnitMaterialLotUsagesController(DriveTraceDbContext db) : base(db) { }
 }
 
 [Route("api/quality-results")]
 public sealed class QualityResultsController : CrudController<QualityResult>
 {
+    protected override string? ReadPermission => PermissionNames.QualityView;
+    protected override string WritePermission => PermissionNames.QualityRecord;
     private readonly OperationalEventService _events;
 
     public QualityResultsController(DriveTraceDbContext db, OperationalEventService events) : base(db)
@@ -290,6 +346,8 @@ public sealed class QualityResultsController : CrudController<QualityResult>
 [Route("api/nonconformities")]
 public sealed class NonconformitiesController : CrudController<Nonconformity>
 {
+    protected override string? ReadPermission => PermissionNames.QualityView;
+    protected override string WritePermission => PermissionNames.QualityDecide;
     private readonly OperationalEventService _events;
 
     public NonconformitiesController(DriveTraceDbContext db, OperationalEventService events) : base(db)
@@ -330,6 +388,8 @@ public sealed class NonconformitiesController : CrudController<Nonconformity>
 [Route("api/rework-records")]
 public sealed class ReworkRecordsController : CrudController<ReworkRecord>
 {
+    protected override string? ReadPermission => PermissionNames.QualityView;
+    protected override string WritePermission => PermissionNames.QualityDecide;
     private readonly OperationalEventService _events;
 
     public ReworkRecordsController(DriveTraceDbContext db, OperationalEventService events) : base(db)
@@ -369,6 +429,8 @@ public sealed class ReworkRecordsController : CrudController<ReworkRecord>
 [Route("api/scrap-records")]
 public sealed class ScrapRecordsController : CrudController<ScrapRecord>
 {
+    protected override string? ReadPermission => PermissionNames.QualityView;
+    protected override string WritePermission => PermissionNames.QualityDecide;
     private readonly OperationalEventService _events;
 
     public ScrapRecordsController(DriveTraceDbContext db, OperationalEventService events) : base(db)
@@ -408,5 +470,6 @@ public sealed class ScrapRecordsController : CrudController<ScrapRecord>
 [Route("api/predictions")]
 public sealed class PredictionsController : CrudController<Prediction>
 {
+    protected override string? ReadPermission => PermissionNames.OrdersView;
     public PredictionsController(DriveTraceDbContext db) : base(db) { }
 }

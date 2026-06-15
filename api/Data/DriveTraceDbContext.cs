@@ -32,8 +32,11 @@ public sealed class DriveTraceDbContext : DbContext
     public DbSet<QualityResult> QualityResults => Set<QualityResult>();
     public DbSet<Nonconformity> Nonconformities => Set<Nonconformity>();
     public DbSet<ReworkRecord> ReworkRecords => Set<ReworkRecord>();
+    public DbSet<ReconditionRecord> ReconditionRecords => Set<ReconditionRecord>();
     public DbSet<ScrapRecord> ScrapRecords => Set<ScrapRecord>();
     public DbSet<Prediction> Predictions => Set<Prediction>();
+    public DbSet<SimulationRun> SimulationRuns => Set<SimulationRun>();
+    public DbSet<SimulationStep> SimulationSteps => Set<SimulationStep>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -76,6 +79,18 @@ public sealed class DriveTraceDbContext : DbContext
             .WithMany()
             .HasForeignKey(x => x.CurrentSectionId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<ProductUnit>()
+            .HasOne(x => x.ReconditionedFromNonconformity)
+            .WithMany()
+            .HasForeignKey(x => x.ReconditionedFromNonconformityId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<ProductUnit>()
+            .HasOne(x => x.ReconditionedByResource)
+            .WithMany()
+            .HasForeignKey(x => x.ReconditionedByResourceId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         modelBuilder.Entity<ProductUnitLocationHistory>()
             .HasIndex(x => new { x.ProductUnitId, x.OccurredAt });
@@ -208,6 +223,12 @@ public sealed class DriveTraceDbContext : DbContext
             .OnDelete(DeleteBehavior.SetNull);
 
         modelBuilder.Entity<OperationalEvent>()
+            .HasOne(x => x.ReconditionRecord)
+            .WithMany()
+            .HasForeignKey(x => x.ReconditionRecordId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<OperationalEvent>()
             .HasOne(x => x.ScrapRecord)
             .WithMany()
             .HasForeignKey(x => x.ScrapRecordId)
@@ -234,8 +255,58 @@ public sealed class DriveTraceDbContext : DbContext
         modelBuilder.Entity<RackSupportAssignment>()
             .HasIndex(x => new { x.RackId, x.SupportId, x.DateTimeOut });
 
+        modelBuilder.Entity<ReconditionRecord>()
+            .HasIndex(x => new { x.ProductUnitId, x.Status });
+
+        modelBuilder.Entity<ReconditionRecord>()
+            .HasIndex(x => x.NonconformityId);
+
+        modelBuilder.Entity<ReconditionRecord>()
+            .HasOne(x => x.ProductUnit)
+            .WithMany(x => x.ReconditionRecords)
+            .HasForeignKey(x => x.ProductUnitId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ReconditionRecord>()
+            .HasOne(x => x.Nonconformity)
+            .WithMany()
+            .HasForeignKey(x => x.NonconformityId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<ReconditionRecord>()
+            .HasOne(x => x.ReworkRecord)
+            .WithMany()
+            .HasForeignKey(x => x.ReworkRecordId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<ReconditionRecord>()
+            .HasOne(x => x.RecordedByResource)
+            .WithMany()
+            .HasForeignKey(x => x.RecordedByResourceId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         modelBuilder.Entity<QualityResult>()
             .Property(x => x.Result)
             .HasMaxLength(20);
+
+        modelBuilder.Entity<SimulationRun>()
+            .HasIndex(x => x.RunCode)
+            .IsUnique();
+
+        modelBuilder.Entity<SimulationRun>()
+            .HasIndex(x => new { x.ScenarioKey, x.Status, x.StartedAt });
+
+        modelBuilder.Entity<SimulationStep>()
+            .HasIndex(x => new { x.SimulationRunId, x.StepNumber })
+            .IsUnique();
+
+        modelBuilder.Entity<SimulationStep>()
+            .HasIndex(x => new { x.SimulationRunId, x.ExecutedAt });
+
+        modelBuilder.Entity<SimulationStep>()
+            .HasOne(x => x.SimulationRun)
+            .WithMany(x => x.Steps)
+            .HasForeignKey(x => x.SimulationRunId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

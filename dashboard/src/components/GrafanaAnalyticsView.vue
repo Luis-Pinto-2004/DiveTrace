@@ -238,6 +238,10 @@ type SummaryData = {
     activeSupports?: number
     qualityIssues?: number
     rackAssignments?: number
+    reconditionedUnits?: number
+    recoveryCandidates?: number
+    inRecovery?: number
+    recoveryRate?: number
   }
   wipBySection?: Array<{ section: string; sectionCode?: string; productUnits: number; activeSupports?: number }>
   recentEvents?: Array<{ supportCode: string; section: string; eventType: string; dateTime: string }>
@@ -251,11 +255,14 @@ type OperationalData = {
       transferPoints?: number
       transfers?: number
       transfersLast24h?: number
+      reconditionedUnits?: number
+      recoveryCandidates?: number
+      recoveryRate?: number
     }
     lineSummaries?: Array<{ lineCode?: string; name?: string; wipUnits?: number; blockedUnits?: number }>
   }
   orders: Array<{ status?: string }>
-  units: Array<{ status?: string; qualityStatus?: string; currentSectionId?: number }>
+  units: Array<{ status?: string; qualityStatus?: string; currentSectionId?: number; isReconditioned?: boolean; recoveryStatus?: string; qualityDisposition?: string }>
   supports: Array<{ status?: string; currentSectionId?: number }>
   racks: Array<{ status?: string }>
   rackSupportAssignments: Array<{ dateTimeOut?: string | null }>
@@ -363,7 +370,9 @@ const dashboardsByTab: Record<TabKey, PanelCard[]> = {
     { key: 'quality-pass-fail', title: 'Resultados de qualidade aprovado/reprovado', description: 'Resultados dos pontos de controlo e equilíbrio aprovado/reprovado.', dashboardUid: 'drivetrace-quality-traceability', slug: 'drivetrace-quality-traceability', panelId: 1, height: 320 },
     { key: 'quality-nc-severity', title: 'Não conformidades por severidade', description: 'Distribuição de não conformidades por severidade.', dashboardUid: 'drivetrace-quality-traceability', slug: 'drivetrace-quality-traceability', panelId: 2, height: 320 },
     { key: 'quality-rework', title: 'Registos de retrabalho em aberto', description: 'Unidades atuais em estado de retrabalho.', dashboardUid: 'drivetrace-quality-traceability', slug: 'drivetrace-quality-traceability', panelId: 4, height: 260 },
+    { key: 'quality-reconditioning-status', title: 'Estado de recuperação / recondicionamento', description: 'Candidatas, em recuperação, rejeitadas e recondicionadas.', dashboardUid: 'drivetrace-quality-traceability', slug: 'drivetrace-quality-traceability', panelId: 12, height: 320 },
     { key: 'quality-recent-events', title: 'Tabela de resultados de qualidade recentes', description: 'Evidência recente de qualidade e eventos de rastreabilidade.', dashboardUid: 'drivetrace-quality-traceability', slug: 'drivetrace-quality-traceability', panelId: 7, height: 380 },
+    { key: 'quality-reconditioned-table', title: 'Unidades recuperadas e recondicionadas', description: 'Histórico operacional das decisões de recuperação produtiva.', dashboardUid: 'drivetrace-quality-traceability', slug: 'drivetrace-quality-traceability', panelId: 13, height: 380 },
   ],
   fiware: [
     { key: 'fiware-publishable-entities', title: 'Entidades de contexto publicáveis estimadas', description: 'Quantidade estimada de entidades prontas para publicação.', dashboardUid: 'drivetrace-fiware-infra-status', slug: 'drivetrace-fiware-infrastructure-status', panelId: 1, height: 260 },
@@ -475,6 +484,15 @@ const openOrders = computed(() => props.operationalData.summary.counts?.openOrde
 const activeRackAssignments = computed(() => props.operationalData.summary.counts?.rackAssignments ?? countBy(props.operationalData.rackSupportAssignments, (item) => !item.dateTimeOut))
 const openNonconformities = computed(() => props.operationalData.summary.counts?.qualityIssues ?? countBy(props.operationalData.nonconformities, (item) => !['closed', 'completed'].includes(normalized(item.status))))
 const openRework = computed(() => countBy(props.operationalData.reworkRecords, (item) => !['closed', 'completed'].includes(normalized(item.status))))
+const reconditionedUnits = computed(() => props.operationalData.summary.counts?.reconditionedUnits
+  ?? props.operationalData.flowSummary?.totals?.reconditionedUnits
+  ?? countBy(props.operationalData.units, (unit) => unit.isReconditioned === true || normalized(unit.recoveryStatus) === 'reconditioned' || normalized(unit.qualityDisposition) === 'reconditioned'))
+const recoveryCandidates = computed(() => props.operationalData.summary.counts?.recoveryCandidates
+  ?? props.operationalData.flowSummary?.totals?.recoveryCandidates
+  ?? countBy(props.operationalData.units, (unit) => ['candidate', 'recoverable'].includes(normalized(unit.recoveryStatus))))
+const inRecoveryUnits = computed(() => props.operationalData.summary.counts?.inRecovery
+  ?? countBy(props.operationalData.units, (unit) => normalized(unit.recoveryStatus) === 'inrecovery'))
+const recoveryRate = computed(() => props.operationalData.summary.counts?.recoveryRate ?? props.operationalData.flowSummary?.totals?.recoveryRate ?? null)
 const productionLineCount = computed(() => props.operationalData.flowSummary?.totals?.productionLines ?? 0)
 const transferPoints = computed(() => props.operationalData.flowSummary?.totals?.transferPoints ?? 0)
 const transfersLast24h = computed(() => props.operationalData.flowSummary?.totals?.transfersLast24h ?? 0)
@@ -534,6 +552,12 @@ const operationalMetrics = computed(() => [
     detail: `${passResults.value} PASS / ${failResults.value} FAIL`,
   },
   {
+    key: 'reconditioning',
+    label: t('Recuperação / Recondicionamento'),
+    value: String(reconditionedUnits.value),
+    detail: `${recoveryCandidates.value} ${t('candidatas')} / ${inRecoveryUnits.value} ${t('em recuperação')} / ${recoveryRate.value === null ? '-' : `${recoveryRate.value}%`}`,
+  },
+  {
     key: 'racks',
     label: t('Rack utilization'),
     value: rackUtilization.value === null ? '-' : `${rackUtilization.value}%`,
@@ -576,6 +600,19 @@ const operationalInsights = computed(() => {
       description: openNonconformities.value > 0 ? t('Open nonconformities insight') : t('No open nonconformities insight'),
       action: openNonconformities.value > 0 ? t('Review nonconformity owner and release criteria.') : t('No automatic recommendation available.'),
       toneClass: openNonconformities.value > 0 ? 'tone-warning' : 'tone-success',
+      tab: 'quality' as TabKey,
+    },
+    {
+      key: 'reconditioning',
+      domain: t('Recuperação / Recondicionamento'),
+      title: `${reconditionedUnits.value} ${t('unidades recondicionadas')}`,
+      description: recoveryCandidates.value + inRecoveryUnits.value > 0
+        ? t('Há unidades recuperáveis a aguardar decisão ou validação final.')
+        : t('Sem pendências críticas de recondicionamento.'),
+      action: recoveryCandidates.value + inRecoveryUnits.value > 0
+        ? t('Validar severidade, retrabalho e aprovação funcional antes de libertar.')
+        : t('Manter monitorização das decisões de recuperação.'),
+      toneClass: recoveryCandidates.value + inRecoveryUnits.value > 0 ? 'tone-warning' : 'tone-success',
       tab: 'quality' as TabKey,
     },
     {

@@ -9,7 +9,7 @@ Fase B introduz perfis demo, vistas por papel e guardas funcionais no backend. A
 | `admin` | `admin` | `Administrator` | Painel operacional |
 | `supervisor` | `supervisor` | `Supervisor` | Painel operacional |
 | `operador` | `operador` | `Operator` | Bancada do operador |
-| `qualidade` | `qualidade` | `QualityTechnician` | Painel de qualidade |
+| `qualidade` | `qualidade` | `QualityTechnician` | Recuperacao / Recondicionamento |
 | `logistica` | `logistica` | `Logistics` | Logistica pos-linha / racks |
 | `cliente` | `cliente` | `Customer` | Consulta publica de cliente |
 | `demo` | `demo` | `DemoViewer` | Painel demo em leitura |
@@ -17,12 +17,51 @@ Fase B introduz perfis demo, vistas por papel e guardas funcionais no backend. A
 ## Regras por papel
 
 - `Administrator`: acesso total, incluindo utilizadores, dados mestre, FIWARE, Grafana e escritas.
-- `Supervisor`: acompanha producao, ordens, unidades, qualidade, racks, materiais, Grafana e playback; nao acede ao monitor FIWARE nem gere utilizadores.
-- `Operator`: usa a bancada operacional, ve unidades/trace e pode registar transferencias controladas; nao ve racks, materiais, FIWARE, Grafana ou utilizadores.
-- `QualityTechnician`: ve unidades e trace, regista qualidade e decide nao conformidades/retrabalho/sucata; nao ve logistica de racks nem FIWARE.
-- `Logistics`: gere racks, atribuicoes rack-suporte, suportes e materiais; nao ve qualidade nem FIWARE.
+- `Supervisor`: acompanha producao, ordens, unidades, qualidade, recuperacao/recondicionamento, racks, materiais, Grafana e playback; nao acede ao monitor FIWARE nem gere utilizadores.
+- `Operator`: usa a bancada operacional, ve unidades/trace e consulta recuperacao/recondicionamento; pode registar transferencias controladas; nao ve racks, materiais, FIWARE, Grafana ou utilizadores.
+- `QualityTechnician`: ve unidades e trace, regista qualidade e decide nao conformidades/retrabalho/recuperacao/recondicionamento/sucata; nao ve logistica de racks nem FIWARE.
+- `Logistics`: gere racks, atribuicoes rack-suporte, suportes e materiais; consulta recuperacao/recondicionamento, mas nao decide qualidade nem ve FIWARE.
 - `Customer`: apenas consulta o portal publico por `publicTrackingCode`; nao ve dados internos, logs tecnicos, FIWARE, Grafana, utilizadores, unidades internas ou ordens CRUD.
 - `DemoViewer`: perfil de demonstracao em leitura, com acesso a vistas operacionais, FIWARE/Grafana e portal de cliente, mas sem escritas.
+
+## Recuperacao / Recondicionamento
+
+A Fase D acrescenta as permissoes:
+
+- `Reconditioning.Read`
+- `Reconditioning.Write`
+- `Reconditioning.Decide`
+
+Distribuicao por papel:
+
+- `Administrator`, `Supervisor` e `QualityTechnician`: leitura, escrita e decisao.
+- `Operator`, `Logistics` e `DemoViewer`: leitura.
+- `Customer`: sem acesso interno.
+
+O cliente continua limitado ao portal publico. As decisoes internas de recuperacao, severidade, retrabalho e validacao funcional nao sao expostas na vista publica.
+
+## Simulador de producao
+
+A Fase E acrescenta a vista `Simulador de produção`.
+
+- `Administrator`: leitura, criacao, pausa, retoma, paragem e reset demo.
+- `Supervisor`: leitura, criacao, execucao e gestao.
+- `Operator`: leitura e execucao de passos manuais.
+- `QualityTechnician`: leitura e execucao de passos quando o fluxo inclui qualidade.
+- `Logistics`: leitura.
+- `DemoViewer`: leitura.
+- `Customer`: sem acesso ao simulador interno.
+
+## Mapa de rastreabilidade
+
+A Fase C acrescenta a vista `Mapa de rastreabilidade` para perfis internos com `ProductUnits.View`.
+
+- `Administrator` e `DemoViewer`: leitura ampla do grafo operacional.
+- `Supervisor`: leitura operacional de fabrica, unidades e ordens, sem estado FIWARE tecnico.
+- `Operator`: grafo filtrado pela linha/seccao atribuida ao perfil demo.
+- `QualityTechnician`: rota de unidades e evidencias de qualidade; sem logistica de racks quando a permissao nao existe.
+- `Logistics`: unidades, suportes, racks e materiais; sem qualidade.
+- `Customer`: nao ve o mapa interno; a API permite apenas grafo sanitizado da propria ordem via `CustomerPortal.View`.
 
 ## Backend
 

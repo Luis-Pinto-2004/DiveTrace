@@ -31,6 +31,9 @@ builder.Services.AddDbContext<DriveTraceDbContext>(options =>
 builder.Services.AddScoped<DemoEventService>();
 builder.Services.AddScoped<OperationalEventService>();
 builder.Services.AddScoped<ProductionFlowService>();
+builder.Services.AddScoped<ProductionSimulationService>();
+builder.Services.AddScoped<TraceGraphService>();
+builder.Services.AddScoped<ReconditioningService>();
 builder.Services.AddSingleton<PermissionCatalogService>();
 builder.Services.AddHttpClient<IFiwareContextService, FiwareContextService>(client =>
 {

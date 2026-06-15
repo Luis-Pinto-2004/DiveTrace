@@ -470,6 +470,8 @@ export const en: Record<string, string> = {
   'Administration': 'Administration',
   'Industrial WIP command center': 'Industrial WIP command center',
   'Line overview subtitle': 'Fast reading of line status, WIP, quality and context.',
+  'Traceability Map': 'Traceability Map',
+  'Traceability map subtitle': 'Operational graph for factory floor, routes and WIP.',
   'Manufacturing orders subtitle': 'Order planning and operational state.',
   'Product units subtitle': 'Traceable units and quality status.',
   'Supports tracking subtitle': 'Physical supports as intra-line anchor.',

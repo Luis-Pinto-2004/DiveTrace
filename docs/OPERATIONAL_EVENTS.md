@@ -10,7 +10,7 @@ Campos principais:
 
 - `EventCode`: codigo unico e idempotente do evento.
 - `EventType`: tipo funcional do evento.
-- referencias opcionais: `ProductUnitId`, `SupportId`, `ManufacturingOrderId`, linhas, secoes, `CheckpointId`, `QualityResultId`, `NonconformityId`, `ReworkRecordId`, `ScrapRecordId`, `RackId`.
+- referencias opcionais: `ProductUnitId`, `SupportId`, `ManufacturingOrderId`, linhas, secoes, `CheckpointId`, `QualityResultId`, `NonconformityId`, `ReworkRecordId`, `ReconditionRecordId`, `ScrapRecordId`, `RackId`.
 - `ReasonCode`, `Severity`, `Source`, `PerformedByUserId`, `OccurredAt`, `Notes`, `IsDemo`, `MetadataJson`.
 
 Tipos suportados:
@@ -23,6 +23,11 @@ Tipos suportados:
 - `NonconformityOpened`
 - `ReworkStarted`
 - `ReworkCompleted`
+- `ReconditioningCandidateMarked`
+- `ReconditioningStarted`
+- `ReconditioningCompleted`
+- `ReconditioningRejected`
+- `ProductUnitMarkedReconditioned`
 - `ScrapRecorded`
 - `RackAssigned`
 - `RackReleased`
@@ -43,10 +48,10 @@ Tipos suportados:
 
 ## Integracoes
 
-- Seed demo cria eventos idempotentes para unidades, suportes, movimentos, qualidade, nao conformidades, retrabalho, sucata e `DemoSeeded`.
+- Seed demo cria eventos idempotentes para unidades, suportes, movimentos, qualidade, nao conformidades, retrabalho, recuperacao/recondicionamento, sucata e `DemoSeeded`.
 - Transferencias `POST /api/product-units/{id}/transfer` criam `LineTransfer` ou `SectionMovement`.
 - Eventos manuais/playback criam eventos operacionais com `Source` `Manual` ou `Playback`.
-- CRUD direto de qualidade, nao conformidades, retrabalho, sucata e racks cria eventos de dominio correspondentes.
+- CRUD direto de qualidade, nao conformidades, retrabalho, recuperacao/recondicionamento, sucata e racks cria eventos de dominio correspondentes.
 - Publicacao FIWARE bem-sucedida cria `FiwarePublished`.
 
 ## Dashboard

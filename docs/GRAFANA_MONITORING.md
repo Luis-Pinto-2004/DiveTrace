@@ -40,7 +40,7 @@ Dashboards provisionados:
   - WIP por linha/secção, suportes por secção e estado, ordens por estado e histórico de movimentos.
   - A tabela recente combina transferências `ProductUnitLocationHistory` e movimentos `SupportLocalizationHistory`.
 - `DriveTrace Core - Qualidade e rastreabilidade`
-  - Resultados `Aprovado/Reprovado`, não conformidades por severidade/estado, retrabalho, sucata e genealogia de lotes.
+  - Resultados `Aprovado/Reprovado`, não conformidades por severidade/estado, retrabalho, recuperação/recondicionamento, sucata e genealogia de lotes.
 - `DriveTrace Core - Estado FIWARE / infraestrutura`
   - Entidades publicáveis estimadas, contagens de suportes/unidades/racks, tipos FIWARE apresentados em PT.
 - `DriveTrace Core - Visão geral WIP`
@@ -64,7 +64,7 @@ Access path:
 
 The hub combines two data surfaces:
 
-- current operational values already loaded by the Vue application from the DriveTrace Core API
+- current operational values already loaded by the Vue application from the DriveTrace Core API, including recovery/reconditioning KPIs
 - provisioned Grafana dashboards backed by the `DriveTrace TimescaleDB` datasource
 
 No new production-line transfer logic, FIWARE publication logic or relational model changes are required by this layer. The hub is a presentation and observability improvement over the existing data model.
@@ -87,6 +87,7 @@ Changed at application level:
 - Improved `FIWARE Context Monitor` with context coherence cards and clearer entity table
 - Improved local `Users` administration with profile metrics, clearer form/list separation and consistent actions
 - `Grafana Analytics` now prioritizes snapshot, decision panel, dashboard catalogue questions, selected embedded panels and an optional full-dashboard embed
+- `Grafana Analytics` includes recovery/reconditioning metrics from `DashboardController` and `ProductionFlowService`
 
 Grafana provisioning was intentionally kept stable:
 
@@ -94,6 +95,15 @@ Grafana provisioning was intentionally kept stable:
 - Dashboard UIDs remain unchanged
 - Existing dashboard JSON files remain the source of provisioned dashboards
 - The frontend improves the integration and interpretation layer around those dashboards
+
+## Phase D Recovery / Reconditioning Panels
+
+The quality dashboard `drivetrace-quality-traceability` includes two recovery panels:
+
+- panel `12`: `Estado de recuperação / recondicionamento`, based on `ReconditionRecords.Status`
+- panel `13`: `Unidades recuperadas e recondicionadas`, with unit, severity, reason, functional validation and completion date
+
+These panels keep the existing datasource UID and dashboard UID. They only read PostgreSQL/TimescaleDB operational tables.
 
 Manual visual checks recommended:
 

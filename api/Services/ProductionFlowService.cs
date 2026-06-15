@@ -247,6 +247,7 @@ public sealed class ProductionFlowService
         var quality = await _db.QualityResults.AsNoTracking().Where(x => x.ProductUnitId == productUnitId).OrderBy(x => x.RecordedAt).ToListAsync(cancellationToken);
         var nonconformities = await _db.Nonconformities.AsNoTracking().Where(x => x.ProductUnitId == productUnitId).OrderBy(x => x.CreatedAt).ToListAsync(cancellationToken);
         var rework = await _db.ReworkRecords.AsNoTracking().Where(x => x.ProductUnitId == productUnitId).OrderBy(x => x.StartedAt).ToListAsync(cancellationToken);
+        var reconditioning = await _db.ReconditionRecords.AsNoTracking().Where(x => x.ProductUnitId == productUnitId).OrderBy(x => x.RecordedAt).ToListAsync(cancellationToken);
         var scrap = await _db.ScrapRecords.AsNoTracking().Where(x => x.ProductUnitId == productUnitId).OrderBy(x => x.ScrappedAt).ToListAsync(cancellationToken);
         var operationalEvents = await _operationalEvents.GetForProductUnitAsync(productUnitId, cancellationToken: cancellationToken);
 
@@ -262,6 +263,11 @@ public sealed class ProductionFlowService
                 unit.UnitType,
                 unit.Status,
                 unit.QualityStatus,
+                unit.IsReconditioned,
+                unit.ReconditionedAt,
+                unit.ReconditionReason,
+                unit.RecoveryStatus,
+                unit.QualityDisposition,
                 unit.CreatedAt,
                 unit.CompletedAt,
                 currentSupport = Ref(unit.CurrentSupportId, unit.CurrentSupportId.HasValue && supportById.TryGetValue(unit.CurrentSupportId.Value, out var currentSupport) ? currentSupport.SupportCode : null, null),
@@ -316,6 +322,7 @@ public sealed class ProductionFlowService
             quality,
             nonconformities,
             rework,
+            reconditioning,
             scrap,
             operationalEvents,
             timeline
@@ -335,6 +342,14 @@ public sealed class ProductionFlowService
         var lineById = lines.ToDictionary(x => x.Id);
         var supportById = supports.ToDictionary(x => x.Id);
         var activeUnits = units.Where(IsFlowUnit).ToList();
+        var reconditionedUnits = units.Count(unit => unit.IsReconditioned);
+        var recoveryCandidates = units.Count(unit =>
+            !unit.IsReconditioned &&
+            !unit.Status.Equals("Scrap", StringComparison.OrdinalIgnoreCase) &&
+            (Matches(unit.RecoveryStatus, ReconditioningStatuses.Candidate)
+                || Matches(unit.RecoveryStatus, ReconditioningStatuses.Recoverable)
+                || Matches(unit.RecoveryStatus, ReconditioningStatuses.InRecovery)));
+        var closedRecoveryDecisions = Math.Max(1, reconditionedUnits + units.Count(unit => Matches(unit.RecoveryStatus, ReconditioningStatuses.Rejected)));
         var lastMovementByUnit = histories
             .GroupBy(x => x.ProductUnitId)
             .ToDictionary(x => x.Key, x => x.Max(item => item.OccurredAt));
@@ -412,7 +427,10 @@ public sealed class ProductionFlowService
                 transfers = await _db.ProductUnitLocationHistory.CountAsync(cancellationToken),
                 transfersLast24h = await _db.ProductUnitLocationHistory.CountAsync(x => x.OccurredAt >= DateTime.UtcNow.AddHours(-24), cancellationToken),
                 operationalEvents = await _db.OperationalEvents.CountAsync(cancellationToken),
-                operationalEventsLast24h = await _db.OperationalEvents.CountAsync(x => x.OccurredAt >= DateTime.UtcNow.AddHours(-24), cancellationToken)
+                operationalEventsLast24h = await _db.OperationalEvents.CountAsync(x => x.OccurredAt >= DateTime.UtcNow.AddHours(-24), cancellationToken),
+                reconditionedUnits,
+                recoveryCandidates,
+                recoveryRate = Math.Round(reconditionedUnits * 100.0 / closedRecoveryDecisions, 1)
             },
             routeStates = activeUnits
                 .Select(unit => new { state = RouteState(unit, unit.CurrentSectionId.HasValue ? Find(sectionById, unit.CurrentSectionId.Value) : null) })
@@ -474,6 +492,9 @@ public sealed class ProductionFlowService
                     unit.UnitCode,
                     unit.Status,
                     unit.QualityStatus,
+                    unit.IsReconditioned,
+                    unit.RecoveryStatus,
+                    unit.QualityDisposition,
                     currentSection = SectionRef(section),
                     currentProductionLine = LineRef(section?.LineId is null ? null : Find(lineById, section.LineId.Value)),
                     currentSupport = SupportRef(unit.CurrentSupportId.HasValue ? Find(supportById, unit.CurrentSupportId.Value) : null),
@@ -531,6 +552,7 @@ public sealed class ProductionFlowService
             {
                 units = units.Count,
                 completed = units.Count(unit => unit.Status.Equals("Completed", StringComparison.OrdinalIgnoreCase)),
+                reconditioned = units.Count(unit => unit.IsReconditioned),
                 inFlow = units.Count(IsFlowUnit),
                 attention = units.Count(IsAttentionUnit),
                 lastMovementAt = histories.Count == 0 ? (DateTime?)null : histories.Max(x => x.OccurredAt)
@@ -545,6 +567,7 @@ public sealed class ProductionFlowService
                     unit.UnitCode,
                     unit.Status,
                     unit.QualityStatus,
+                    customerState = CustomerState(unit),
                     currentProductionLine = LineRef(line),
                     currentSection = SectionRef(section),
                     currentSupport = SupportRef(unit.CurrentSupportId.HasValue ? Find(supportById, unit.CurrentSupportId.Value) : null),
@@ -655,6 +678,7 @@ public sealed class ProductionFlowService
     {
         return unit.Status.Equals("Blocked", StringComparison.OrdinalIgnoreCase)
             || unit.Status.Equals("Rework", StringComparison.OrdinalIgnoreCase)
+            || Matches(unit.RecoveryStatus, ReconditioningStatuses.InRecovery)
             || unit.QualityStatus.Equals("FAIL", StringComparison.OrdinalIgnoreCase);
     }
 
@@ -673,6 +697,7 @@ public sealed class ProductionFlowService
 
     private static string RouteState(ProductUnit unit, ProductionLineSection? section)
     {
+        if (unit.IsReconditioned) return "Reconditioned";
         if (unit.Status.Equals("Completed", StringComparison.OrdinalIgnoreCase)) return "Completed";
         if (unit.Status.Equals("Scrap", StringComparison.OrdinalIgnoreCase)) return "Scrap";
         if (IsAttentionUnit(unit)) return "Attention";
@@ -680,6 +705,22 @@ public sealed class ProductionFlowService
         if (IsPostLineSection(section)) return "PostLine";
         if (section.IsTransferPoint) return "TransferPoint";
         return section.LineId.HasValue ? "InLine" : "Unassigned";
+    }
+
+    private static string CustomerState(ProductUnit unit)
+    {
+        if (unit.IsReconditioned) return "Concluído após validação";
+        if (unit.Status.Equals("Completed", StringComparison.OrdinalIgnoreCase)) return "Concluído";
+        if (unit.Status.Equals("Blocked", StringComparison.OrdinalIgnoreCase) || unit.Status.Equals("Rework", StringComparison.OrdinalIgnoreCase)) return "Em validação";
+        if (unit.Status.Equals("Scrap", StringComparison.OrdinalIgnoreCase)) return "Retido";
+        if (unit.Status.Equals("Planned", StringComparison.OrdinalIgnoreCase)) return "Planeado";
+        return "Em produção";
+    }
+
+    private static bool Matches(string? value, string expected)
+    {
+        return !string.IsNullOrWhiteSpace(value)
+            && value.Trim().Equals(expected, StringComparison.OrdinalIgnoreCase);
     }
 
     private static DateTime? LastMovementAt(IReadOnlyList<ProductUnitLocationHistory> history)

@@ -149,6 +149,13 @@ public sealed class ProductUnit : IEntity
     public int? CurrentSupportId { get; set; }
     public int? CurrentSectionId { get; set; }
     [MaxLength(40)] public string QualityStatus { get; set; } = "Pending";
+    public bool IsReconditioned { get; set; }
+    public DateTime? ReconditionedAt { get; set; }
+    public string? ReconditionReason { get; set; }
+    public int? ReconditionedFromNonconformityId { get; set; }
+    public int? ReconditionedByResourceId { get; set; }
+    [MaxLength(40)] public string? RecoveryStatus { get; set; } = "None";
+    [MaxLength(40)] public string? QualityDisposition { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? CompletedAt { get; set; }
     [JsonIgnore] public ManufacturingOrder? ManufacturingOrder { get; set; }
@@ -156,8 +163,11 @@ public sealed class ProductUnit : IEntity
     [JsonIgnore] public ProductUnit? ParentUnit { get; set; }
     [JsonIgnore] public Support? CurrentSupport { get; set; }
     [JsonIgnore] public ProductionLineSection? CurrentSection { get; set; }
+    [JsonIgnore] public Nonconformity? ReconditionedFromNonconformity { get; set; }
+    [JsonIgnore] public Resource? ReconditionedByResource { get; set; }
     [JsonIgnore] public ICollection<ProductUnit> ChildUnits { get; set; } = new List<ProductUnit>();
     [JsonIgnore] public ICollection<ProductUnitLocationHistory> LocationHistory { get; set; } = new List<ProductUnitLocationHistory>();
+    [JsonIgnore] public ICollection<ReconditionRecord> ReconditionRecords { get; set; } = new List<ReconditionRecord>();
 }
 
 public sealed class ProductUnitLocationHistory : IEntity
@@ -202,6 +212,7 @@ public sealed class OperationalEvent : IEntity
     public int? QualityResultId { get; set; }
     public int? NonconformityId { get; set; }
     public int? ReworkRecordId { get; set; }
+    public int? ReconditionRecordId { get; set; }
     public int? ScrapRecordId { get; set; }
     public int? RackId { get; set; }
     [MaxLength(80)] public string? ReasonCode { get; set; }
@@ -223,6 +234,7 @@ public sealed class OperationalEvent : IEntity
     [JsonIgnore] public QualityResult? QualityResult { get; set; }
     [JsonIgnore] public Nonconformity? Nonconformity { get; set; }
     [JsonIgnore] public ReworkRecord? ReworkRecord { get; set; }
+    [JsonIgnore] public ReconditionRecord? ReconditionRecord { get; set; }
     [JsonIgnore] public ScrapRecord? ScrapRecord { get; set; }
     [JsonIgnore] public Rack? Rack { get; set; }
 }
@@ -345,6 +357,29 @@ public sealed class ReworkRecord : IEntity
     public string? Notes { get; set; }
     [JsonIgnore] public ProductUnit? ProductUnit { get; set; }
     [JsonIgnore] public Nonconformity? Nonconformity { get; set; }
+}
+
+public sealed class ReconditionRecord : IEntity
+{
+    public int Id { get; set; }
+    public int ProductUnitId { get; set; }
+    public int? NonconformityId { get; set; }
+    public int? ReworkRecordId { get; set; }
+    [MaxLength(40)] public string Status { get; set; } = "Candidate";
+    [MaxLength(40)] public string Decision { get; set; } = "Pending";
+    public string? Reason { get; set; }
+    public string? Notes { get; set; }
+    public bool FunctionalValidation { get; set; }
+    public DateTime RecordedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? CompletedAt { get; set; }
+    public DateTime? RejectedAt { get; set; }
+    public int? RecordedByResourceId { get; set; }
+    [MaxLength(120)] public string? PerformedByUserId { get; set; }
+    [MaxLength(40)] public string? NextDisposition { get; set; }
+    [JsonIgnore] public ProductUnit? ProductUnit { get; set; }
+    [JsonIgnore] public Nonconformity? Nonconformity { get; set; }
+    [JsonIgnore] public ReworkRecord? ReworkRecord { get; set; }
+    [JsonIgnore] public Resource? RecordedByResource { get; set; }
 }
 
 public sealed class ScrapRecord : IEntity

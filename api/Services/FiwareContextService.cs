@@ -78,6 +78,10 @@ public sealed class FiwareContextService : IFiwareContextService
         ["unitType"] = "https://uri.drivolution.local/ns/unitType",
         ["status"] = "https://uri.drivolution.local/ns/status",
         ["qualityStatus"] = "https://uri.drivolution.local/ns/qualityStatus",
+        ["isReconditioned"] = "https://uri.drivolution.local/ns/isReconditioned",
+        ["qualityDisposition"] = "https://uri.drivolution.local/ns/qualityDisposition",
+        ["recoveryStatus"] = "https://uri.drivolution.local/ns/recoveryStatus",
+        ["reconditionedAt"] = "https://uri.drivolution.local/ns/reconditionedAt",
         ["currentSupport"] = "https://uri.drivolution.local/ns/currentSupport",
         ["currentSection"] = "https://uri.drivolution.local/ns/currentSection",
         ["currentProductionLine"] = "https://uri.drivolution.local/ns/currentProductionLine",
@@ -417,6 +421,14 @@ public sealed class FiwareContextService : IFiwareContextService
             AddProperty(entity, "unitType", DisplayUnitType(unit.UnitType));
             AddProperty(entity, "status", DisplayStatus(unit.Status));
             AddProperty(entity, "qualityStatus", DisplayQualityStatus(unit.QualityStatus));
+            AddProperty(entity, "isReconditioned", unit.IsReconditioned);
+            AddProperty(entity, "qualityDisposition", DisplayQualityDisposition(unit.QualityDisposition, unit.IsReconditioned));
+            AddProperty(entity, "recoveryStatus", DisplayRecoveryStatus(unit.RecoveryStatus, unit.IsReconditioned));
+            if (unit.ReconditionedAt.HasValue)
+            {
+                AddProperty(entity, "reconditionedAt", unit.ReconditionedAt.Value);
+            }
+
             var currentSection = unit.CurrentSectionId.HasValue && sectionsById.TryGetValue(unit.CurrentSectionId.Value, out var sectionValue)
                 ? sectionValue
                 : null;
@@ -426,7 +438,7 @@ public sealed class FiwareContextService : IFiwareContextService
                 AddProperty(entity, "lastMovementAt", lastMovementAt);
             }
 
-            AddProperty(entity, "routeState", DisplayRouteState(RouteState(unit.Status, unit.QualityStatus, currentSection)));
+            AddProperty(entity, "routeState", DisplayRouteState(RouteState(unit, currentSection)));
             AddRelationship(entity, "currentSupport", SupportUrn(supportsById, unit.CurrentSupportId));
             AddRelationship(entity, "currentSection", SectionUrn(sectionsById, unit.CurrentSectionId));
             AddRelationship(entity, "currentProductionLine", LineUrn(linesById, currentLineId));
@@ -549,13 +561,14 @@ public sealed class FiwareContextService : IFiwareContextService
             : null;
     }
 
-    private static string RouteState(string status, string qualityStatus, DriveTraceCore.Api.Models.ProductionLineSection? section)
+    private static string RouteState(DriveTraceCore.Api.Models.ProductUnit unit, DriveTraceCore.Api.Models.ProductionLineSection? section)
     {
-        if (status.Equals("Completed", StringComparison.OrdinalIgnoreCase)) return "Completed";
-        if (status.Equals("Scrap", StringComparison.OrdinalIgnoreCase)) return "Scrap";
-        if (status.Equals("Blocked", StringComparison.OrdinalIgnoreCase)
-            || status.Equals("Rework", StringComparison.OrdinalIgnoreCase)
-            || qualityStatus.Equals("FAIL", StringComparison.OrdinalIgnoreCase))
+        if (unit.IsReconditioned) return "Reconditioned";
+        if (unit.Status.Equals("Completed", StringComparison.OrdinalIgnoreCase)) return "Completed";
+        if (unit.Status.Equals("Scrap", StringComparison.OrdinalIgnoreCase)) return "Scrap";
+        if (unit.Status.Equals("Blocked", StringComparison.OrdinalIgnoreCase)
+            || unit.Status.Equals("Rework", StringComparison.OrdinalIgnoreCase)
+            || unit.QualityStatus.Equals("FAIL", StringComparison.OrdinalIgnoreCase))
         {
             return "Attention";
         }
@@ -579,6 +592,7 @@ public sealed class FiwareContextService : IFiwareContextService
             "Completed" => "Concluída",
             "Blocked" => "Bloqueada",
             "Rework" => "Em retrabalho",
+            "Reconditioned" => "Recondicionada",
             "Scrap" => "Sucata",
             "Stored" => "Armazenado",
             "Loaded" => "Carregado",
@@ -603,6 +617,37 @@ public sealed class FiwareContextService : IFiwareContextService
         };
     }
 
+    private static string DisplayQualityDisposition(string? disposition, bool isReconditioned)
+    {
+        if (isReconditioned) return "Recondicionada";
+        return disposition switch
+        {
+            QualityDispositions.Normal => "Normal",
+            QualityDispositions.Pending => "Pendente",
+            QualityDispositions.Failed => "Reprovada",
+            QualityDispositions.Recoverable => "Recuperável",
+            QualityDispositions.Reconditioned => "Recondicionada",
+            QualityDispositions.Scrap => "Sucata",
+            QualityDispositions.Blocked => "Bloqueada",
+            _ => string.IsNullOrWhiteSpace(disposition) ? "Sem disposição" : disposition
+        };
+    }
+
+    private static string DisplayRecoveryStatus(string? recoveryStatus, bool isReconditioned)
+    {
+        if (isReconditioned) return "Recondicionada";
+        return recoveryStatus switch
+        {
+            ReconditioningStatuses.None => "Sem recuperação",
+            ReconditioningStatuses.Candidate => "Candidata",
+            ReconditioningStatuses.Recoverable => "Recuperável",
+            ReconditioningStatuses.InRecovery => "Em recuperação",
+            ReconditioningStatuses.Reconditioned => "Recondicionada",
+            ReconditioningStatuses.Rejected => "Rejeitada",
+            _ => string.IsNullOrWhiteSpace(recoveryStatus) ? "Sem recuperação" : recoveryStatus
+        };
+    }
+
     private static string DisplayUnitType(string unitType)
     {
         return unitType switch
@@ -618,6 +663,7 @@ public sealed class FiwareContextService : IFiwareContextService
         return routeState switch
         {
             "Completed" => "Concluída",
+            "Reconditioned" => "Recondicionada",
             "Scrap" => "Sucata",
             "Attention" => "Atenção",
             "Unassigned" => "Sem atribuição",

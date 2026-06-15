@@ -581,6 +581,100 @@
           "rawSql": "SELECT COALESCE(pls.\"Name\", 'Secção desconhecida') AS section, COUNT(q.\"Id\") FILTER (WHERE COALESCE(q.\"Result\", '') = 'FAIL') AS resultados_reprovados, COUNT(q.\"Id\") AS total_resultados FROM \"QualityResults\" q LEFT JOIN \"Checkpoints\" cp ON cp.\"Id\" = q.\"CheckpointId\" LEFT JOIN \"ProductionLineSections\" pls ON pls.\"Id\" = cp.\"SectionId\" GROUP BY COALESCE(pls.\"Name\", 'Secção desconhecida') ORDER BY resultados_reprovados DESC, total_resultados DESC;"
         }
       ]
+    },
+    {
+      "id": 12,
+      "type": "barchart",
+      "title": "Estado de recuperação / recondicionamento",
+      "description": "Decisões de recuperação produtiva por estado.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 54
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0,
+        "showValue": "auto",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.9,
+        "barRadius": 0,
+        "fullHighlight": false,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT CASE COALESCE(\"Status\", 'None') WHEN 'Candidate' THEN 'Candidata' WHEN 'Recoverable' THEN 'Recuperável' WHEN 'InRecovery' THEN 'Em recuperação' WHEN 'Reconditioned' THEN 'Recondicionada' WHEN 'Rejected' THEN 'Rejeitada' ELSE COALESCE(\"Status\", 'Sem recuperação') END AS estado, COUNT(*) AS total FROM \"ReconditionRecords\" GROUP BY COALESCE(\"Status\", 'None') ORDER BY estado;"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "table",
+      "title": "Unidades recuperadas e recondicionadas",
+      "description": "Histórico operacional das decisões de recuperação produtiva.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "drivetrace-timescaledb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 54
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": "",
+          "countRows": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "drivetrace-timescaledb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT rr.\"RecordedAt\" AS \"Registado em\", pu.\"UnitCode\" AS \"Unidade\", CASE COALESCE(rr.\"Status\", 'None') WHEN 'Candidate' THEN 'Candidata' WHEN 'Recoverable' THEN 'Recuperável' WHEN 'InRecovery' THEN 'Em recuperação' WHEN 'Reconditioned' THEN 'Recondicionada' WHEN 'Rejected' THEN 'Rejeitada' ELSE COALESCE(rr.\"Status\", 'Sem recuperação') END AS \"Estado\", CASE COALESCE(nc.\"Severity\", 'Unknown') WHEN 'Minor' THEN 'Menor' WHEN 'Medium' THEN 'Média' WHEN 'Major' THEN 'Maior' WHEN 'Critical' THEN 'Crítica' ELSE COALESCE(nc.\"Severity\", 'Desconhecida') END AS \"Severidade\", COALESCE(rr.\"Reason\", '-') AS \"Justificação\", COALESCE(rr.\"FunctionalValidation\", '-') AS \"Validação funcional\", rr.\"CompletedAt\" AS \"Concluído em\" FROM \"ReconditionRecords\" rr LEFT JOIN \"ProductUnits\" pu ON pu.\"Id\" = rr.\"ProductUnitId\" LEFT JOIN \"Nonconformities\" nc ON nc.\"Id\" = rr.\"NonconformityId\" ORDER BY COALESCE(rr.\"CompletedAt\", rr.\"RejectedAt\", rr.\"RecordedAt\") DESC LIMIT 30;"
+        }
+      ]
     }
   ],
   "refresh": "30s",
@@ -601,6 +695,6 @@
   "timezone": "browser",
   "title": "DriveTrace Core - Qualidade e rastreabilidade",
   "uid": "drivetrace-quality-traceability",
-  "version": 10,
+  "version": 11,
   "weekStart": ""
 }

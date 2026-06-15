@@ -22,9 +22,14 @@ public static class PermissionNames
     public const string GrafanaView = "Grafana.View";
     public const string FiwareView = "Fiware.View";
     public const string FiwareManage = "Fiware.Manage";
+    public const string SimulationRead = "Simulation.Read";
+    public const string SimulationRun = "Simulation.Run";
     public const string SimulationManage = "Simulation.Manage";
     public const string CustomerPortalView = "CustomerPortal.View";
     public const string OperationalEventsView = "OperationalEvents.View";
+    public const string ReconditioningRead = "Reconditioning.Read";
+    public const string ReconditioningWrite = "Reconditioning.Write";
+    public const string ReconditioningDecide = "Reconditioning.Decide";
 
     public static readonly IReadOnlyList<string> All =
     [
@@ -46,9 +51,14 @@ public static class PermissionNames
         GrafanaView,
         FiwareView,
         FiwareManage,
+        SimulationRead,
+        SimulationRun,
         SimulationManage,
         CustomerPortalView,
-        OperationalEventsView
+        OperationalEventsView,
+        ReconditioningRead,
+        ReconditioningWrite,
+        ReconditioningDecide
     ];
 }
 
@@ -123,7 +133,12 @@ public sealed class PermissionCatalogService
             PermissionNames.MaterialsView,
             PermissionNames.GrafanaView,
             PermissionNames.OperationalEventsView,
-            PermissionNames.SimulationManage
+            PermissionNames.SimulationRead,
+            PermissionNames.SimulationRun,
+            PermissionNames.SimulationManage,
+            PermissionNames.ReconditioningRead,
+            PermissionNames.ReconditioningWrite,
+            PermissionNames.ReconditioningDecide
         },
         [RoleNames.Operator] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -131,7 +146,10 @@ public sealed class PermissionCatalogService
             PermissionNames.ProductUnitsView,
             PermissionNames.ProductUnitsTransfer,
             PermissionNames.ProductUnitsTrace,
-            PermissionNames.OperationalEventsView
+            PermissionNames.OperationalEventsView,
+            PermissionNames.SimulationRead,
+            PermissionNames.SimulationRun,
+            PermissionNames.ReconditioningRead
         },
         [RoleNames.QualityTechnician] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -141,7 +159,12 @@ public sealed class PermissionCatalogService
             PermissionNames.QualityView,
             PermissionNames.QualityRecord,
             PermissionNames.QualityDecide,
-            PermissionNames.OperationalEventsView
+            PermissionNames.OperationalEventsView,
+            PermissionNames.SimulationRead,
+            PermissionNames.SimulationRun,
+            PermissionNames.ReconditioningRead,
+            PermissionNames.ReconditioningWrite,
+            PermissionNames.ReconditioningDecide
         },
         [RoleNames.Logistics] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -152,7 +175,10 @@ public sealed class PermissionCatalogService
             PermissionNames.MaterialsView,
             PermissionNames.MaterialsManage,
             PermissionNames.SupportsManage,
-            PermissionNames.OperationalEventsView
+            PermissionNames.OperationalEventsView,
+            PermissionNames.SimulationRead,
+            PermissionNames.SimulationRun,
+            PermissionNames.ReconditioningRead
         },
         [RoleNames.Customer] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -169,7 +195,10 @@ public sealed class PermissionCatalogService
             PermissionNames.FiwareView,
             PermissionNames.GrafanaView,
             PermissionNames.CustomerPortalView,
-            PermissionNames.OperationalEventsView
+            PermissionNames.OperationalEventsView,
+            PermissionNames.SimulationRead,
+            PermissionNames.SimulationRun,
+            PermissionNames.ReconditioningRead
         }
     };
 
@@ -337,9 +366,14 @@ public sealed class PermissionCatalogService
             PermissionNames.GrafanaView => "Ver Grafana",
             PermissionNames.FiwareView => "Ver FIWARE",
             PermissionNames.FiwareManage => "Gerir FIWARE",
+            PermissionNames.SimulationRead => "Ver simulação",
+            PermissionNames.SimulationRun => "Executar simulação",
             PermissionNames.SimulationManage => "Gerir simulação",
             PermissionNames.CustomerPortalView => "Ver portal de cliente",
             PermissionNames.OperationalEventsView => "Ver eventos operacionais",
+            PermissionNames.ReconditioningRead => "Ver recuperação e recondicionamento",
+            PermissionNames.ReconditioningWrite => "Marcar recuperação",
+            PermissionNames.ReconditioningDecide => "Decidir recondicionamento",
             _ => permission
         };
     }

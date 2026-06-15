@@ -25,6 +25,11 @@ Fase B aplica controlo funcional real por permissoes no backend, mantendo autent
 - `Quality.View`
 - `Quality.Record`
 - `Quality.Decide`
+- `Reconditioning.Read`
+- `Reconditioning.Write`
+- `Reconditioning.Decide`
+- `Simulation.Read`
+- `Simulation.Run`
 - `Racks.View`
 - `Racks.Manage`
 - `Materials.View`
@@ -41,12 +46,12 @@ Fase B aplica controlo funcional real por permissoes no backend, mantendo autent
 | Perfil | Permissoes principais |
 | --- | --- |
 | `Administrator` | Todas |
-| `Supervisor` | Ordens, unidades, transferencias, trace, suportes, qualidade, racks, materiais, Grafana, eventos e simulacao |
-| `Operator` | Ordens em leitura, unidades, transferencias, trace e eventos |
-| `QualityTechnician` | Ordens em leitura, unidades, trace, qualidade, decisao de qualidade e eventos |
-| `Logistics` | Unidades, trace, racks, materiais, suportes e eventos |
+| `Supervisor` | Ordens, unidades, transferencias, trace, suportes, qualidade, recuperacao/recondicionamento, racks, materiais, Grafana, eventos e simulacao |
+| `Operator` | Ordens em leitura, unidades, transferencias, trace, simulacao, recuperacao em leitura e eventos |
+| `QualityTechnician` | Ordens em leitura, unidades, trace, qualidade, decisao de qualidade, simulacao, recuperacao/recondicionamento e eventos |
+| `Logistics` | Unidades, trace, racks, materiais, suportes, simulacao, recuperacao em leitura e eventos |
 | `Customer` | Apenas `CustomerPortal.View` |
-| `DemoViewer` | Leitura demo: ordens, unidades, trace, qualidade, racks, materiais, FIWARE, Grafana, portal cliente e eventos |
+| `DemoViewer` | Leitura demo: ordens, unidades, trace, qualidade, racks, materiais, FIWARE, Grafana, simulacao, portal cliente e eventos |
 
 ## API
 
@@ -75,9 +80,13 @@ Se nenhum cabecalho for enviado, o ambiente local assume `Administrator` para ma
 - Transferencia de unidade: `ProductUnits.Transfer`.
 - Suportes: leitura `ProductUnits.View`, escrita `Supports.Manage`.
 - Qualidade: leitura `Quality.View`, registo `Quality.Record`, decisoes `Quality.Decide`.
+- Recuperacao/recondicionamento: leitura `Reconditioning.Read`, marcacao `Reconditioning.Write`, conclusao/rejeicao `Reconditioning.Decide`.
 - Racks e atribuicoes rack-suporte: leitura `Racks.View`, escrita `Racks.Manage`.
 - Materiais e lotes: leitura `Materials.View`, escrita `Materials.Manage`.
 - Playback: `Simulation.Manage`.
+- Simulacao leitura: `Simulation.Read`.
+- Simulacao execucao: `Simulation.Run`.
+- Simulacao gestao: `Simulation.Manage`.
 - FIWARE leitura: `Fiware.View`.
 - FIWARE publicacao: `Fiware.Manage`.
 - Eventos operacionais recentes/listagem: `OperationalEvents.View`.

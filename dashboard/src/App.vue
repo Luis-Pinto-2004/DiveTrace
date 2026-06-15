@@ -5,6 +5,9 @@ import lineDoorUrl from './assets/branding/production-line-door.png'
 import lineCarUrl from './assets/branding/production-line-car.png'
 import CrudPanel from './components/CrudPanel.vue'
 import GrafanaAnalyticsView from './components/GrafanaAnalyticsView.vue'
+import ProductionSimulatorView from './components/ProductionSimulatorView.vue'
+import ReconditioningView from './components/ReconditioningView.vue'
+import TraceGraphView from './components/TraceGraphView.vue'
 import { api, apiGet, apiPost, baseURL as apiBaseUrl, createEntity, deleteEntity, getApiErrorMessage, updateEntity } from './services/api'
 import {
   demoCheckpoints,
@@ -117,9 +120,14 @@ const fallbackPermissionCatalog: PermissionCatalog = {
     'Grafana.View',
     'Fiware.View',
     'Fiware.Manage',
+    'Simulation.Read',
+    'Simulation.Run',
     'Simulation.Manage',
     'CustomerPortal.View',
     'OperationalEvents.View',
+    'Reconditioning.Read',
+    'Reconditioning.Write',
+    'Reconditioning.Decide',
   ],
 }
 
@@ -138,7 +146,12 @@ const frontendRolePermissions: Record<RoleKey, string[]> = {
     'Materials.View',
     'Grafana.View',
     'OperationalEvents.View',
+    'Simulation.Read',
+    'Simulation.Run',
     'Simulation.Manage',
+    'Reconditioning.Read',
+    'Reconditioning.Write',
+    'Reconditioning.Decide',
   ],
   operator: [
     'Orders.View',
@@ -146,6 +159,9 @@ const frontendRolePermissions: Record<RoleKey, string[]> = {
     'ProductUnits.Transfer',
     'ProductUnits.Trace',
     'OperationalEvents.View',
+    'Simulation.Read',
+    'Simulation.Run',
+    'Reconditioning.Read',
   ],
   quality: [
     'Orders.View',
@@ -155,6 +171,11 @@ const frontendRolePermissions: Record<RoleKey, string[]> = {
     'Quality.Record',
     'Quality.Decide',
     'OperationalEvents.View',
+    'Simulation.Read',
+    'Simulation.Run',
+    'Reconditioning.Read',
+    'Reconditioning.Write',
+    'Reconditioning.Decide',
   ],
   logistics: [
     'ProductUnits.View',
@@ -165,6 +186,9 @@ const frontendRolePermissions: Record<RoleKey, string[]> = {
     'Materials.Manage',
     'Supports.Manage',
     'OperationalEvents.View',
+    'Simulation.Read',
+    'Simulation.Run',
+    'Reconditioning.Read',
   ],
   client: ['CustomerPortal.View'],
   demoViewer: [
@@ -178,6 +202,9 @@ const frontendRolePermissions: Record<RoleKey, string[]> = {
     'Grafana.View',
     'CustomerPortal.View',
     'OperationalEvents.View',
+    'Simulation.Read',
+    'Simulation.Run',
+    'Reconditioning.Read',
   ],
 }
 
@@ -705,11 +732,14 @@ type ViewKey =
   | 'overview'
   | 'operator'
   | 'customer'
+  | 'traceGraph'
   | 'orders'
   | 'units'
   | 'supports'
   | 'materials'
   | 'quality'
+  | 'reconditioning'
+  | 'simulation'
   | 'racks'
   | 'events'
   | 'fiware'
@@ -721,6 +751,8 @@ type ViewKey =
   | 'predictions'
 
 const activeView = ref<ViewKey>('overview')
+const traceGraphInitialUnitId = ref<number | null>(null)
+const traceGraphInitialOrderId = ref<number | null>(null)
 const loading = ref(true)
 const apiStatus = ref('Connecting to API...')
 const eventStatus = ref('')
@@ -1018,11 +1050,14 @@ const nav = [
   { key: 'overview', label: 'Dashboard / Line Overview', icon: '⌁' },
   { key: 'operator', label: 'Operator Workbench', icon: 'OP' },
   { key: 'customer', label: 'Customer Lookup', icon: 'CU' },
+  { key: 'traceGraph', label: 'Traceability Map', icon: 'MAP' },
   { key: 'orders', label: 'Manufacturing Orders', icon: 'MO' },
   { key: 'units', label: 'Product Units', icon: 'PU' },
   { key: 'supports', label: 'Supports / WIP Tracking', icon: 'SUP' },
   { key: 'materials', label: 'Materials and Lots', icon: 'LOT' },
   { key: 'quality', label: 'Quality', icon: 'QC' },
+  { key: 'reconditioning', label: 'Recuperação / Recondicionamento', icon: 'RC' },
+  { key: 'simulation', label: 'Simulador de produção', icon: 'SIM' },
   { key: 'racks', label: 'Racks / Post-line Logistics', icon: 'RK' },
   { key: 'events', label: 'Event Playback', icon: 'EV' },
   { key: 'fiware', label: 'FIWARE Context Monitor', icon: 'LD' },
@@ -1039,6 +1074,8 @@ const viewPermissions: Partial<Record<ViewKey, string>> = {
   supports: 'ProductUnits.View',
   materials: 'Materials.View',
   quality: 'Quality.View',
+  reconditioning: 'Reconditioning.Read',
+  simulation: 'Simulation.Read',
   racks: 'Racks.View',
   events: 'OperationalEvents.View',
   fiware: 'Fiware.View',
@@ -1048,21 +1085,22 @@ const viewPermissions: Partial<Record<ViewKey, string>> = {
   parameters: 'MasterData.Manage',
   operator: 'ProductUnits.Transfer',
   customer: 'CustomerPortal.View',
+  traceGraph: 'ProductUnits.View',
 }
 
 const roleHomeViews: Record<RoleKey, ViewKey> = {
   admin: 'overview',
   supervisor: 'overview',
   operator: 'operator',
-  quality: 'quality',
+  quality: 'reconditioning',
   logistics: 'racks',
   client: 'customer',
   demoViewer: 'overview',
 }
 
 const navGroups = [
-  { key: 'Operation', items: ['overview', 'operator', 'orders', 'racks'] },
-  { key: 'Traceability', items: ['units', 'supports', 'materials', 'quality', 'customer'] },
+  { key: 'Operation', items: ['overview', 'operator', 'orders', 'racks', 'simulation'] },
+  { key: 'Traceability', items: ['traceGraph', 'units', 'supports', 'materials', 'quality', 'reconditioning', 'customer'] },
   { key: 'Monitoring', items: ['events', 'fiware', 'analytics', 'predictions'] },
   { key: 'Administration', items: ['parameters', 'users'] },
 ] as const
@@ -1091,15 +1129,32 @@ function ensureAccessibleView() {
   if (!canShowNav(activeView.value)) activeView.value = homeViewForRole(user.value?.roleKey)
 }
 
+function openTraceGraphForUnit(unitId: number) {
+  traceGraphInitialUnitId.value = unitId
+  traceGraphInitialOrderId.value = null
+  activeView.value = 'traceGraph'
+  closeMobileSidebar()
+}
+
+function openTraceGraphForOrder(orderId: number) {
+  traceGraphInitialUnitId.value = null
+  traceGraphInitialOrderId.value = orderId
+  activeView.value = 'traceGraph'
+  closeMobileSidebar()
+}
+
 const viewTitles: Record<ViewKey, string> = {
   overview: 'Dashboard / Line Overview',
   operator: 'Operator Workbench',
   customer: 'Customer Lookup',
+  traceGraph: 'Traceability Map',
   orders: 'Manufacturing Orders',
   units: 'Product Units',
   supports: 'Supports / WIP Tracking',
   materials: 'Materials and Lots',
   quality: 'Quality',
+  reconditioning: 'Recuperação / Recondicionamento',
+  simulation: 'Simulador de produção',
   racks: 'Racks / Post-line Logistics',
   events: 'Event Playback',
   fiware: 'FIWARE Context Monitor',
@@ -1116,11 +1171,14 @@ const viewSubtitles: Record<ViewKey, string> = {
   overview: 'Line overview subtitle',
   operator: 'Operator workbench subtitle',
   customer: 'Customer lookup subtitle',
+  traceGraph: 'Traceability map subtitle',
   orders: 'Manufacturing orders subtitle',
   units: 'Product units subtitle',
   supports: 'Supports tracking subtitle',
   materials: 'Materials subtitle',
   quality: 'Quality subtitle',
+  reconditioning: 'Recuperação produtiva após não conformidade menor ou recuperável',
+  simulation: 'Simulador operacional da linha de produção',
   racks: 'Racks subtitle',
   events: 'Events subtitle',
   fiware: 'FIWARE subtitle',
@@ -2868,6 +2926,24 @@ onBeforeUnmount(() => {
             </p>
             <div v-if="loading" class="card p-6 text-center text-slate-600 dark:bg-slate-800 dark:text-slate-200 sm:p-8">{{ t('Loading DriveTrace Core data...') }}</div>
             <template v-else>
+              <div v-if="activeView === 'traceGraph'">
+                <TraceGraphView :initial-product-unit-id="traceGraphInitialUnitId" :initial-order-id="traceGraphInitialOrderId" />
+              </div>
+
+              <div v-if="activeView === 'reconditioning'">
+                <ReconditioningView @open-trace-graph="openTraceGraphForUnit" />
+              </div>
+
+              <div v-if="activeView === 'simulation'">
+                <ProductionSimulatorView
+                  @open-trace-graph-unit="openTraceGraphForUnit"
+                  @open-trace-graph-order="openTraceGraphForOrder"
+                  @open-analytics="navigateTo('analytics')"
+                  @open-fiware="navigateTo('fiware')"
+                  @refresh="loadData(false)"
+                />
+              </div>
+
               <!-- PROFILE VIEW -->
               <div v-if="activeView === 'profile'" class="mx-auto w-full max-w-4xl">
                 <section class="card p-5 sm:p-6 lg:p-8">

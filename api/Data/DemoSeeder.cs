@@ -80,8 +80,12 @@ public static class DemoSeeder
         await SeedReworkAndScrapAsync(db, now, units, nonconformities);
         await db.SaveChangesAsync();
 
-        await SeedOperationalEventsAsync(db, now, orders, units, supports, racks, sections, quality, nonconformities);
+        var reconditioning = await SeedReconditioningAsync(db, now, units, nonconformities, resources);
+        await db.SaveChangesAsync();
+
+        await SeedOperationalEventsAsync(db, now, orders, units, supports, racks, sections, quality, nonconformities, reconditioning);
         await SeedPredictionsAsync(db, now, orders);
+        await SeedSimulationDemoAsync(db, now, customers, products, variants, process, lines, sections);
         await NormalizeAdHocLegacyDemoRowsAsync(db, now, customers, products, variants, process, lines, sections);
 
         await db.SaveChangesAsync();
@@ -256,7 +260,8 @@ public static class DemoSeeder
             ["sup5"] = await EnsureSupportAsync(db, "SUP-005", "Loaded", sections["corte"]),
             ["sup6"] = await EnsureSupportAsync(db, "SUP-006", "Stored", sections["rack"]),
             ["sup7"] = await EnsureSupportAsync(db, "SUP-007", "Loaded", sections["pintB"]),
-            ["sup8"] = await EnsureSupportAsync(db, "SUP-008", "Available", sections["atrib"])
+            ["sup8"] = await EnsureSupportAsync(db, "SUP-008", "Available", sections["atrib"]),
+            ["sup9"] = await EnsureSupportAsync(db, "SUP-009", "Stored", sections["rack"])
         };
     }
 
@@ -292,8 +297,63 @@ public static class DemoSeeder
             ["u7"] = await EnsureProductUnitAsync(db, orders["of2"], variants["prm"], "UP-PORTA-007", "Subproduto", "Active", "Pending", sections["pintB"], supports["sup7"], now.AddHours(-2), null),
             ["u8"] = await EnsureProductUnitAsync(db, orders["of4"], variants["lev"], "UP-PORTA-008", "Subproduto", "Active", "Pending", sections["atrib"], supports["sup8"], now.AddHours(-1), null),
             ["u9"] = await EnsureProductUnitAsync(db, orders["of4"], variants["std"], "UP-PORTA-009", "Subproduto", "Planned", "Pending", sections["mp"], null, now.AddMinutes(-45), null),
-            ["u10"] = await EnsureProductUnitAsync(db, orders["of4"], variants["ref"], "UP-PORTA-010", "Subproduto", "Planned", "Pending", sections["mp"], null, now.AddMinutes(-30), null)
+            ["u10"] = await EnsureProductUnitAsync(db, orders["of4"], variants["ref"], "UP-PORTA-010", "Subproduto", "Planned", "Pending", sections["mp"], null, now.AddMinutes(-30), null),
+            ["u11"] = await EnsureProductUnitAsync(db, orders["of2"], variants["std"], "UP-PORTA-011", "Subproduto", "Completed", "PASS", sections["rack"], supports["sup9"], now.AddHours(-9), now.AddMinutes(-10), "DU-011")
         };
+    }
+
+    private static async Task SeedSimulationDemoAsync(
+        DriveTraceDbContext db,
+        DateTime now,
+        IReadOnlyDictionary<string, Customer> customers,
+        IReadOnlyDictionary<string, Product> products,
+        IReadOnlyDictionary<string, Variant> variants,
+        ManufacturingProcess process,
+        IReadOnlyDictionary<string, ProductionLine> lines,
+        IReadOnlyDictionary<string, ProductionLineSection> sections)
+    {
+        var simulationOrders = new Dictionary<string, ManufacturingOrder>
+        {
+            ["normal"] = await EnsureOrderAsync(db, "OF-SIM-PORTA-001", customers["auto"], products["porta"], variants["std"], process, lines["montagem"], 1, now.Date.AddDays(2).AddHours(12), "Planned", "SIM-AUTO-001", "TRC-SIM-001", "Cenário de fluxo normal", "OF-SIM-PORTA-001-LEGACY", "TRC-SIM-001-LEGACY"),
+            ["recovery"] = await EnsureOrderAsync(db, "OF-SIM-PORTA-002", customers["oem"], products["porta"], variants["prm"], process, lines["montagem"], 1, now.Date.AddDays(2).AddHours(13), "Planned", "SIM-OEM-002", "TRC-SIM-002", "Cenário de falha menor e recondicionamento", "OF-SIM-PORTA-002-LEGACY", "TRC-SIM-002-LEGACY"),
+            ["scrap"] = await EnsureOrderAsync(db, "OF-SIM-PORTA-003", customers["piloto"], products["porta"], variants["ref"], process, lines["montagem"], 1, now.Date.AddDays(2).AddHours(14), "Planned", "SIM-PILOTO-003", "TRC-SIM-003", "Cenário de falha crítica e sucata", "OF-SIM-PORTA-003-LEGACY", "TRC-SIM-003-LEGACY")
+        };
+
+        var simulationSupports = new Dictionary<string, Support>
+        {
+            ["normal"] = await EnsureSupportAsync(db, "SUP-SIM-001", "Available", sections["atrib"]),
+            ["recovery"] = await EnsureSupportAsync(db, "SUP-SIM-002", "Available", sections["atrib"]),
+            ["scrap"] = await EnsureSupportAsync(db, "SUP-SIM-003", "Available", sections["atrib"])
+        };
+
+        var simulationRacks = new Dictionary<string, Rack>
+        {
+            ["normal"] = await EnsureRackAsync(db, "RACK-SIM-001", "Available", sections["rack"]),
+            ["recovery"] = await EnsureRackAsync(db, "RACK-SIM-002", "Available", sections["rack"]),
+            ["scrap"] = await EnsureRackAsync(db, "RACK-SIM-003", "Available", sections["rack"])
+        };
+
+        var simulationUnits = new Dictionary<string, ProductUnit>
+        {
+            ["normal"] = await EnsureProductUnitAsync(db, simulationOrders["normal"], variants["std"], "UP-SIM-001", "Subproduto", "Planned", "Pending", sections["mp"], null, now.AddHours(-2), null, "UP-SIM-001-LEGACY"),
+            ["recovery"] = await EnsureProductUnitAsync(db, simulationOrders["recovery"], variants["prm"], "UP-SIM-002", "Subproduto", "Planned", "Pending", sections["mp"], null, now.AddHours(-2).AddMinutes(-10), null, "UP-SIM-002-LEGACY"),
+            ["scrap"] = await EnsureProductUnitAsync(db, simulationOrders["scrap"], variants["ref"], "UP-SIM-003", "Subproduto", "Planned", "Pending", sections["mp"], null, now.AddHours(-2).AddMinutes(-20), null, "UP-SIM-003-LEGACY")
+        };
+
+        foreach (var pair in simulationUnits)
+        {
+            await EnsureOpenSupportAssignmentAsync(db, pair.Value, simulationSupports[pair.Key], now.AddHours(-1));
+        }
+
+        foreach (var pair in simulationSupports)
+        {
+            await EnsureSupportLocalizationAsync(db, pair.Value, sections["atrib"], "SimulationSeed", now.AddMinutes(-30));
+        }
+
+        foreach (var key in simulationRacks.Keys)
+        {
+            await EnsureRackAssignmentAsync(db, simulationRacks[key], simulationSupports[key], now.AddMinutes(-20));
+        }
     }
 
     private static async Task SeedSupportAssignmentsAsync(
@@ -310,6 +370,7 @@ public static class DemoSeeder
         await EnsureOpenSupportAssignmentAsync(db, units["u6"], supports["sup6"], now.AddHours(-3).AddMinutes(5));
         await EnsureOpenSupportAssignmentAsync(db, units["u7"], supports["sup7"], now.AddHours(-2).AddMinutes(5));
         await EnsureOpenSupportAssignmentAsync(db, units["u8"], supports["sup8"], now.AddHours(-1).AddMinutes(5));
+        await EnsureOpenSupportAssignmentAsync(db, units["u11"], supports["sup9"], now.AddHours(-9).AddMinutes(5));
     }
 
     private static async Task SeedMovementHistoryAsync(
@@ -342,6 +403,11 @@ public static class DemoSeeder
         await EnsureSupportLocalizationAsync(db, supports["sup6"], sections["cq"], "LineTransfer", now.AddHours(-2).AddMinutes(-15));
         await EnsureSupportLocalizationAsync(db, supports["sup6"], sections["rack"], "TransferToRack", now.AddHours(-1).AddMinutes(-30));
 
+        await EnsureSupportLocalizationAsync(db, supports["sup9"], sections["pintA"], "LineTransfer", now.AddHours(-8).AddMinutes(-35));
+        await EnsureSupportLocalizationAsync(db, supports["sup9"], sections["cq"], "LineTransfer", now.AddHours(-7).AddMinutes(-45));
+        await EnsureSupportLocalizationAsync(db, supports["sup9"], sections["retrabalho"], "LineTransfer", now.AddHours(-6).AddMinutes(-45));
+        await EnsureSupportLocalizationAsync(db, supports["sup9"], sections["rack"], "TransferToRack", now.AddMinutes(-12));
+
         await EnsureProductTransferHistoryAsync(db, units["u1"], null, sections["corte"], null, supports["sup1"], "SupportAssigned", "Entrada da unidade em corte e estampagem.", now.AddHours(-7).AddMinutes(-50));
         await EnsureProductTransferHistoryAsync(db, units["u1"], sections["corte"], sections["sold"], supports["sup1"], supports["sup1"], "Movement", "Transferência da estampagem para soldadura.", now.AddHours(-7).AddMinutes(-10));
         await EnsureProductTransferHistoryAsync(db, units["u1"], sections["sold"], sections["pintA"], supports["sup1"], supports["sup1"], "LineTransfer", "Transferência da soldadura para pintura A.", now.AddHours(-6).AddMinutes(-20));
@@ -357,6 +423,10 @@ public static class DemoSeeder
         await EnsureProductTransferHistoryAsync(db, units["u4"], sections["corte"], sections["sold"], supports["sup4"], supports["sup4"], "Movement", "Movimento para soldadura com desalinhamento estrutural detetado.", now.AddHours(-4).AddMinutes(-5));
         await EnsureProductTransferHistoryAsync(db, units["u5"], sections["atrib"], sections["corte"], supports["sup5"], supports["sup5"], "Movement", "Unidade em produção, ainda sem controlo final.", now.AddHours(-3).AddMinutes(-20));
         await EnsureProductTransferHistoryAsync(db, units["u6"], sections["cq"], sections["rack"], supports["sup6"], supports["sup6"], "TransferToRack", "Unidade aprovada e associada a rack pós-linha.", now.AddHours(-1).AddMinutes(-30));
+        await EnsureProductTransferHistoryAsync(db, units["u11"], sections["sold"], sections["pintA"], supports["sup9"], supports["sup9"], "LineTransfer", "Transferência para pintura A antes de deteção de defeito superficial.", now.AddHours(-8).AddMinutes(-35));
+        await EnsureProductTransferHistoryAsync(db, units["u11"], sections["pintA"], sections["cq"], supports["sup9"], supports["sup9"], "LineTransfer", "Transferência para controlo de qualidade após pintura.", now.AddHours(-7).AddMinutes(-45));
+        await EnsureProductTransferHistoryAsync(db, units["u11"], sections["cq"], sections["retrabalho"], supports["sup9"], supports["sup9"], "LineTransfer", "Encaminhamento para retrabalho por risco superficial recuperável.", now.AddHours(-6).AddMinutes(-45));
+        await EnsureProductTransferHistoryAsync(db, units["u11"], sections["retrabalho"], sections["rack"], supports["sup9"], supports["sup9"], "TransferToRack", "Unidade recondicionada e validada para rack pós-linha.", now.AddMinutes(-12));
         await EnsureProductLocationSnapshotAsync(db, units["u7"], sections["pintB"], supports["sup7"], now.AddHours(-1).AddMinutes(-15));
         await EnsureProductLocationSnapshotAsync(db, units["u8"], sections["atrib"], supports["sup8"], now.AddMinutes(-55));
     }
@@ -368,6 +438,7 @@ public static class DemoSeeder
         IReadOnlyDictionary<string, Support> supports)
     {
         await EnsureRackAssignmentAsync(db, racks["rack1"], supports["sup6"], now.AddHours(-1).AddMinutes(-25));
+        await EnsureRackAssignmentAsync(db, racks["rack2"], supports["sup9"], now.AddMinutes(-10));
     }
 
     private static async Task<Dictionary<string, RawMaterial>> SeedRawMaterialsAsync(DriveTraceDbContext db)
@@ -435,7 +506,9 @@ public static class DemoSeeder
             ["q3"] = await EnsureQualityResultAsync(db, units["u3"], checkpoints["pint"], "FAIL", now.AddMinutes(-70), "Espessura de pintura fora de tolerância."),
             ["q4"] = await EnsureQualityResultAsync(db, units["u4"], checkpoints["sold"], "FAIL", now.AddMinutes(-65), "Desalinhamento estrutural detetado na soldadura."),
             ["q5"] = await EnsureQualityResultAsync(db, units["u6"], checkpoints["cq"], "PASS", now.AddMinutes(-55), "Unidade aprovada para armazenamento pós-linha."),
-            ["q6"] = await EnsureQualityResultAsync(db, units["u7"], checkpoints["pintB"], "PASS", now.AddMinutes(-35), "Inspeção visual da pintura sem defeitos críticos.")
+            ["q6"] = await EnsureQualityResultAsync(db, units["u7"], checkpoints["pintB"], "PASS", now.AddMinutes(-35), "Inspeção visual da pintura sem defeitos críticos."),
+            ["q7"] = await EnsureQualityResultAsync(db, units["u11"], checkpoints["pint"], "FAIL", now.AddMinutes(-50), "Risco superficial na pintura, recuperável por polimento controlado."),
+            ["q8"] = await EnsureQualityResultAsync(db, units["u11"], checkpoints["retrabalho"], "PASS", now.AddMinutes(-12), "Validação pós-retrabalho aprovada.")
         };
     }
 
@@ -447,9 +520,10 @@ public static class DemoSeeder
     {
         return new Dictionary<string, Nonconformity>
         {
-            ["nc1"] = await EnsureNonconformityAsync(db, units["u3"], quality["q3"], "Maior", "Rework", "Espessura de pintura fora de tolerância; encaminhar para retrabalho controlado.", now.AddMinutes(-68)),
+            ["nc1"] = await EnsureNonconformityAsync(db, units["u3"], quality["q3"], "Média", "Rework", "Espessura de pintura fora de tolerância; encaminhar para retrabalho controlado.", now.AddMinutes(-68)),
             ["nc2"] = await EnsureNonconformityAsync(db, units["u4"], quality["q4"], "Crítica", "Blocked", "Desalinhamento estrutural na zona de soldadura; decisão de qualidade obrigatória.", now.AddMinutes(-63)),
-            ["nc3"] = await EnsureNonconformityAsync(db, units["u7"], quality["q6"], "Menor", "Open", "Marcas superficiais ligeiras para acompanhamento na próxima inspeção.", now.AddMinutes(-30))
+            ["nc3"] = await EnsureNonconformityAsync(db, units["u7"], quality["q6"], "Menor", "Open", "Marcas superficiais ligeiras para acompanhamento na próxima inspeção.", now.AddMinutes(-30)),
+            ["nc4"] = await EnsureNonconformityAsync(db, units["u11"], quality["q7"], "Menor", "Closed", "Risco superficial na pintura recuperado com polimento controlado e validação funcional.", now.AddMinutes(-48))
         };
     }
 
@@ -461,7 +535,115 @@ public static class DemoSeeder
     {
         await EnsureReworkRecordAsync(db, units["u3"], nonconformities["nc1"], now.AddMinutes(-45), "Open", "Rever espessura de pintura, corrigir camada e repetir ponto de controlo.");
         await EnsureReworkRecordAsync(db, units["u4"], nonconformities["nc2"], now.AddMinutes(-40), "Open", "Validar desalinhamento estrutural antes de decidir recuperação ou sucata.");
+        await EnsureReworkRecordAsync(db, units["u11"], nonconformities["nc4"], now.AddMinutes(-42), "Completed", "Polimento controlado e reinspeção visual concluídos.", now.AddMinutes(-12));
         await EnsureScrapRecordAsync(db, units["u4"], nonconformities["nc2"], now.AddMinutes(-20), "Cenário demonstrativo de decisão de sucata por desalinhamento estrutural.");
+    }
+
+    private static async Task<Dictionary<string, ReconditionRecord>> SeedReconditioningAsync(
+        DriveTraceDbContext db,
+        DateTime now,
+        IReadOnlyDictionary<string, ProductUnit> units,
+        IReadOnlyDictionary<string, Nonconformity> nonconformities,
+        IReadOnlyDictionary<string, Resource> resources)
+    {
+        var u3Rework = await db.ReworkRecords.FirstAsync(x => x.ProductUnitId == units["u3"].Id);
+        var u11Rework = await db.ReworkRecords.FirstAsync(x => x.ProductUnitId == units["u11"].Id);
+        var u4Rework = await db.ReworkRecords.FirstAsync(x => x.ProductUnitId == units["u4"].Id);
+
+        var records = new Dictionary<string, ReconditionRecord>
+        {
+            ["candidate"] = await EnsureReconditionRecordAsync(
+                db,
+                units["u7"],
+                nonconformities["nc3"],
+                null,
+                ReconditioningStatuses.Candidate,
+                "Pending",
+                "Marcas superficiais ligeiras elegíveis para recuperação produtiva.",
+                "A aguardar decisão de qualidade.",
+                false,
+                now.AddMinutes(-28),
+                null,
+                null,
+                resources["inspetor"],
+                "qualidade",
+                null),
+            ["inRecovery"] = await EnsureReconditionRecordAsync(
+                db,
+                units["u3"],
+                nonconformities["nc1"],
+                u3Rework,
+                ReconditioningStatuses.InRecovery,
+                ReconditioningStatuses.Recoverable,
+                "Espessura de pintura recuperável por correção de camada.",
+                "Retrabalho aberto; validação final ainda pendente.",
+                false,
+                now.AddMinutes(-44),
+                null,
+                null,
+                resources["retrabalho"],
+                "qualidade",
+                null),
+            ["reconditioned"] = await EnsureReconditionRecordAsync(
+                db,
+                units["u11"],
+                nonconformities["nc4"],
+                u11Rework,
+                ReconditioningStatuses.Reconditioned,
+                ReconditioningStatuses.Reconditioned,
+                "Risco superficial recuperado por polimento controlado.",
+                "Validação pós-retrabalho aprovada antes de rack.",
+                true,
+                now.AddMinutes(-42),
+                now.AddMinutes(-12),
+                null,
+                resources["retrabalho"],
+                "qualidade",
+                QualityDispositions.Reconditioned),
+            ["rejected"] = await EnsureReconditionRecordAsync(
+                db,
+                units["u4"],
+                nonconformities["nc2"],
+                u4Rework,
+                ReconditioningStatuses.Rejected,
+                ReconditioningStatuses.Rejected,
+                "Desalinhamento estrutural não recuperável para produto conforme.",
+                "Encaminhada para sucata no cenário demonstrativo.",
+                false,
+                now.AddMinutes(-39),
+                null,
+                now.AddMinutes(-20),
+                resources["inspetor"],
+                "qualidade",
+                QualityDispositions.Scrap)
+        };
+
+        units["u7"].RecoveryStatus = ReconditioningStatuses.Candidate;
+        units["u7"].QualityDisposition = QualityDispositions.Recoverable;
+
+        units["u3"].RecoveryStatus = ReconditioningStatuses.InRecovery;
+        units["u3"].QualityDisposition = QualityDispositions.Recoverable;
+        units["u3"].IsReconditioned = false;
+        nonconformities["nc1"].Status = "Rework";
+
+        units["u11"].IsReconditioned = true;
+        units["u11"].ReconditionedAt = now.AddMinutes(-12);
+        units["u11"].ReconditionReason = "Risco superficial recuperado por polimento controlado.";
+        units["u11"].ReconditionedFromNonconformityId = nonconformities["nc4"].Id;
+        units["u11"].ReconditionedByResourceId = resources["retrabalho"].Id;
+        units["u11"].RecoveryStatus = ReconditioningStatuses.Reconditioned;
+        units["u11"].QualityDisposition = QualityDispositions.Reconditioned;
+        units["u11"].Status = "Completed";
+        units["u11"].QualityStatus = "PASS";
+        units["u11"].CompletedAt = now.AddMinutes(-10);
+        nonconformities["nc4"].Status = "Closed";
+
+        units["u4"].RecoveryStatus = ReconditioningStatuses.Rejected;
+        units["u4"].QualityDisposition = QualityDispositions.Scrap;
+        units["u4"].IsReconditioned = false;
+        nonconformities["nc2"].Status = "Scrap";
+
+        return records;
     }
 
     private static async Task SeedOperationalEventsAsync(
@@ -473,7 +655,8 @@ public static class DemoSeeder
         IReadOnlyDictionary<string, Rack> racks,
         IReadOnlyDictionary<string, ProductionLineSection> sections,
         IReadOnlyDictionary<string, QualityResult> quality,
-        IReadOnlyDictionary<string, Nonconformity> nonconformities)
+        IReadOnlyDictionary<string, Nonconformity> nonconformities,
+        IReadOnlyDictionary<string, ReconditionRecord> reconditioning)
     {
         await EnsureOperationalEventAsync(db, new OperationalEvent
         {
@@ -616,6 +799,131 @@ public static class DemoSeeder
                 Notes = item.Notes,
                 IsDemo = true
             });
+        }
+
+        foreach (var item in reconditioning.Values)
+        {
+            var unit = units.Values.First(x => x.Id == item.ProductUnitId);
+            var nonconformity = nonconformities.Values.FirstOrDefault(x => x.Id == item.NonconformityId);
+            var rework = reworkRecords.FirstOrDefault(x => x.Id == item.ReworkRecordId);
+
+            if (!item.Status.Equals(ReconditioningStatuses.Rejected, StringComparison.OrdinalIgnoreCase))
+            {
+                await EnsureOperationalEventAsync(db, new OperationalEvent
+                {
+                    EventCode = $"SEED-RECOND-CANDIDATE-{item.Id}",
+                    EventType = OperationalEventTypes.ReconditioningCandidateMarked,
+                    ProductUnitId = item.ProductUnitId,
+                    ManufacturingOrderId = unit.ManufacturingOrderId,
+                    NonconformityId = item.NonconformityId,
+                    ReworkRecordId = item.ReworkRecordId,
+                    ReconditionRecordId = item.Id,
+                    ReasonCode = item.Decision,
+                    Severity = nonconformity?.Severity,
+                    Source = OperationalEventSources.Seed,
+                    PerformedByUserId = item.PerformedByUserId,
+                    OccurredAt = item.RecordedAt,
+                    Notes = item.Reason,
+                    IsDemo = true,
+                    MetadataJson = SerializeMetadata(new Dictionary<string, object?>
+                    {
+                        ["recoveryStatus"] = item.Status,
+                        ["functionalValidation"] = item.FunctionalValidation
+                    })
+                });
+            }
+
+            if (item.Status.Equals(ReconditioningStatuses.InRecovery, StringComparison.OrdinalIgnoreCase)
+                || item.Status.Equals(ReconditioningStatuses.Reconditioned, StringComparison.OrdinalIgnoreCase))
+            {
+                await EnsureOperationalEventAsync(db, new OperationalEvent
+                {
+                    EventCode = $"SEED-RECOND-START-{item.Id}",
+                    EventType = OperationalEventTypes.ReconditioningStarted,
+                    ProductUnitId = item.ProductUnitId,
+                    ManufacturingOrderId = unit.ManufacturingOrderId,
+                    NonconformityId = item.NonconformityId,
+                    ReworkRecordId = rework?.Id,
+                    ReconditionRecordId = item.Id,
+                    ReasonCode = item.Decision,
+                    Severity = nonconformity?.Severity,
+                    Source = OperationalEventSources.Seed,
+                    PerformedByUserId = item.PerformedByUserId,
+                    OccurredAt = item.RecordedAt.AddMilliseconds(1),
+                    Notes = item.Notes,
+                    IsDemo = true
+                });
+            }
+
+            if (item.Status.Equals(ReconditioningStatuses.Reconditioned, StringComparison.OrdinalIgnoreCase))
+            {
+                await EnsureOperationalEventAsync(db, new OperationalEvent
+                {
+                    EventCode = $"SEED-RECOND-COMPLETE-{item.Id}",
+                    EventType = OperationalEventTypes.ReconditioningCompleted,
+                    ProductUnitId = item.ProductUnitId,
+                    ManufacturingOrderId = unit.ManufacturingOrderId,
+                    NonconformityId = item.NonconformityId,
+                    ReworkRecordId = rework?.Id,
+                    ReconditionRecordId = item.Id,
+                    ReasonCode = item.Decision,
+                    Severity = nonconformity?.Severity,
+                    Source = OperationalEventSources.Seed,
+                    PerformedByUserId = item.PerformedByUserId,
+                    OccurredAt = item.CompletedAt ?? item.RecordedAt,
+                    Notes = "Recuperação concluída com validação funcional.",
+                    IsDemo = true,
+                    MetadataJson = SerializeMetadata(new Dictionary<string, object?>
+                    {
+                        ["functionalValidation"] = item.FunctionalValidation,
+                        ["qualityDisposition"] = QualityDispositions.Reconditioned
+                    })
+                });
+
+                await EnsureOperationalEventAsync(db, new OperationalEvent
+                {
+                    EventCode = $"SEED-RECOND-MARKED-{item.Id}",
+                    EventType = OperationalEventTypes.ProductUnitMarkedReconditioned,
+                    ProductUnitId = item.ProductUnitId,
+                    ManufacturingOrderId = unit.ManufacturingOrderId,
+                    NonconformityId = item.NonconformityId,
+                    ReworkRecordId = rework?.Id,
+                    ReconditionRecordId = item.Id,
+                    ReasonCode = item.Decision,
+                    Severity = nonconformity?.Severity,
+                    Source = OperationalEventSources.Seed,
+                    PerformedByUserId = item.PerformedByUserId,
+                    OccurredAt = (item.CompletedAt ?? item.RecordedAt).AddMilliseconds(1),
+                    Notes = "Unidade marcada como produto recondicionado.",
+                    IsDemo = true
+                });
+            }
+
+            if (item.Status.Equals(ReconditioningStatuses.Rejected, StringComparison.OrdinalIgnoreCase))
+            {
+                await EnsureOperationalEventAsync(db, new OperationalEvent
+                {
+                    EventCode = $"SEED-RECOND-REJECT-{item.Id}",
+                    EventType = OperationalEventTypes.ReconditioningRejected,
+                    ProductUnitId = item.ProductUnitId,
+                    ManufacturingOrderId = unit.ManufacturingOrderId,
+                    NonconformityId = item.NonconformityId,
+                    ReworkRecordId = rework?.Id,
+                    ReconditionRecordId = item.Id,
+                    ReasonCode = item.NextDisposition,
+                    Severity = nonconformity?.Severity,
+                    Source = OperationalEventSources.Seed,
+                    PerformedByUserId = item.PerformedByUserId,
+                    OccurredAt = item.RejectedAt ?? item.RecordedAt,
+                    Notes = item.Reason,
+                    IsDemo = true,
+                    MetadataJson = SerializeMetadata(new Dictionary<string, object?>
+                    {
+                        ["nextDisposition"] = item.NextDisposition,
+                        ["decision"] = item.Decision
+                    })
+                });
+            }
         }
 
         var scrapRecords = await db.ScrapRecords.AsNoTracking().Where(x => unitIds.Contains(x.ProductUnitId)).ToListAsync();
@@ -1351,6 +1659,7 @@ public static class DemoSeeder
         item.QualityResultId = value.QualityResultId;
         item.NonconformityId = value.NonconformityId;
         item.ReworkRecordId = value.ReworkRecordId;
+        item.ReconditionRecordId = value.ReconditionRecordId;
         item.ScrapRecordId = value.ScrapRecordId;
         item.RackId = value.RackId;
         item.ReasonCode = value.ReasonCode;
@@ -1536,7 +1845,8 @@ public static class DemoSeeder
         Nonconformity nonconformity,
         DateTime startedAt,
         string status,
-        string notes)
+        string notes,
+        DateTime? endedAt = null)
     {
         var rework = await db.ReworkRecords.FirstOrDefaultAsync(x => x.ProductUnitId == unit.Id);
         if (rework is null)
@@ -1547,8 +1857,55 @@ public static class DemoSeeder
 
         rework.NonconformityId = nonconformity.Id;
         rework.StartedAt = startedAt;
+        rework.EndedAt = endedAt;
         rework.Status = status;
         rework.Notes = notes;
+    }
+
+    private static async Task<ReconditionRecord> EnsureReconditionRecordAsync(
+        DriveTraceDbContext db,
+        ProductUnit unit,
+        Nonconformity nonconformity,
+        ReworkRecord? rework,
+        string status,
+        string decision,
+        string reason,
+        string notes,
+        bool functionalValidation,
+        DateTime recordedAt,
+        DateTime? completedAt,
+        DateTime? rejectedAt,
+        Resource recordedBy,
+        string performedByUserId,
+        string? nextDisposition)
+    {
+        var record = await db.ReconditionRecords.FirstOrDefaultAsync(x =>
+            x.ProductUnitId == unit.Id &&
+            x.NonconformityId == nonconformity.Id);
+
+        if (record is null)
+        {
+            record = new ReconditionRecord
+            {
+                ProductUnitId = unit.Id,
+                NonconformityId = nonconformity.Id
+            };
+            db.ReconditionRecords.Add(record);
+        }
+
+        record.ReworkRecordId = rework?.Id;
+        record.Status = status;
+        record.Decision = decision;
+        record.Reason = reason;
+        record.Notes = notes;
+        record.FunctionalValidation = functionalValidation;
+        record.RecordedAt = recordedAt;
+        record.CompletedAt = completedAt;
+        record.RejectedAt = rejectedAt;
+        record.RecordedByResourceId = recordedBy.Id;
+        record.PerformedByUserId = performedByUserId;
+        record.NextDisposition = nextDisposition;
+        return record;
     }
 
     private static async Task EnsureScrapRecordAsync(

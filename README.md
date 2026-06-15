@@ -41,6 +41,9 @@ Este comando arranca a stack principal completa, incluindo `db`, `mongo-db`, `or
 - Dashboard summary: http://localhost:5181/api/dashboard/summary
 - Flow summary: http://localhost:5181/api/operations/flow-summary
 - Operator workbench: http://localhost:5181/api/operator/workbench
+- Mapa de rastreabilidade: http://localhost:5181/api/trace-graph/factory
+- Opções do mapa de rastreabilidade: http://localhost:5181/api/trace-graph/options
+- Recuperação / recondicionamento: http://localhost:5181/api/reconditioning
 - Perfil ativo demo: http://localhost:5181/api/auth/me
 - Acompanhamento público do cliente: http://localhost:5181/api/customer/orders/TRC-PORTA-001
 - Orion-LD: http://localhost:1026/version
@@ -54,6 +57,8 @@ Para testes detalhados, troubleshooting e validação ponta-a-ponta da integraç
 
 - `docs/FIWARE_TESTING.md`
 - `docs/PRODUCTION_FLOW.md`
+- `docs/TRACE_GRAPH.md`
+- `docs/RECONDITIONING.md`
 - `docs/USER_ROLES.md`
 - `docs/PERMISSIONS.md`
 
@@ -177,6 +182,48 @@ O admin pode gerir pela dashboard ordens de fabrico, unidades de produto, suport
 
 A autenticação continua a ser demo/local, mas a Fase B aplica guardas funcionais reais no backend através de `X-DriveTrace-Role` e `X-DriveTrace-User`. O histórico de localização de suportes é apresentado apenas para consulta, porque deve ser gerado por eventos/movimentos e não editado manualmente.
 
+## Mapa de rastreabilidade
+
+A Fase C adiciona a vista `Mapa de rastreabilidade` na dashboard. A vista usa um grafo nativo em Vue Flow para chão de fábrica, rota de unidade e ordem de fabrico. O backend expõe `GET /api/trace-graph/factory`, `GET /api/trace-graph/product-unit/{id}`, `GET /api/trace-graph/manufacturing-order/{id}` e `GET /api/trace-graph/options`.
+
+O mapa respeita os perfis da Fase B: perfis internos veem apenas os domínios autorizados, o operador fica limitado à linha/secção atribuída e o cliente continua isolado na consulta pública.
+
+Guia detalhado:
+
+- `docs/TRACE_GRAPH.md`
+
+## Recuperação / Recondicionamento
+
+A Fase D adiciona a vista `Recuperação / Recondicionamento` para gerir recuperação produtiva após não conformidade menor ou recuperável. A funcionalidade cria `ReconditionRecord`, marca unidades recuperáveis, conclui produto recondicionado apenas com validação funcional final e rejeita casos para nova disposição quando necessário.
+
+Endpoints principais:
+
+- `GET /api/reconditioning`
+- `GET /api/reconditioning/candidates`
+- `GET /api/reconditioning/{id}`
+- `POST /api/product-units/{id}/mark-reconditionable`
+- `POST /api/product-units/{id}/complete-reconditioning`
+- `POST /api/product-units/{id}/reject-reconditioning`
+
+Guia detalhado:
+
+- `docs/RECONDITIONING.md`
+
+## Simulador de producao
+
+A Fase E adiciona a vista `Simulador de produção` para avançar unidades pela linha, gerar eventos operacionais, passar por qualidade, retrabalho, recondicionamento, sucata e rack, e manter o grafo/FIWARE/Grafana coerentes.
+
+Endpoint principal:
+
+- `GET /api/simulation/scenarios`
+- `GET /api/simulation/state`
+- `POST /api/simulation/runs`
+- `POST /api/simulation/runs/{id}/tick`
+
+Guia detalhado:
+
+- `docs/PRODUCTION_SIMULATOR.md`
+
 ## Autenticação demo
 
 - `admin/admin`
@@ -193,24 +240,26 @@ A autenticação continua a ser demo/local, mas a Fase B aplica guardas funciona
 
 ## Dados demo
 
-O cenário demo representa um fluxo automóvel de portas em PT-PT com várias linhas: `ProductUnit` como unidade rastreável, `Support` como transporte/âncora física, `Rack` para logística pós-linha, materiais/lotes de matéria-prima, qualidade, não conformidades, retrabalho, sucata e previsões demonstrativas.
+O cenário demo representa um fluxo automóvel de portas em PT-PT com várias linhas: `ProductUnit` como unidade rastreável, `Support` como transporte/âncora física, `Rack` para logística pós-linha, materiais/lotes de matéria-prima, qualidade, não conformidades, retrabalho, recuperação/recondicionamento, sucata e previsões demonstrativas.
 
 ## Dados demonstrativos PT-PT
 
 - Idioma predefinido: `pt-PT`; inglês continua disponível no seletor de idioma.
 - Ordens de fabrico: `OF-PORTA-001` a `OF-PORTA-004`.
-- Unidades de produto: `UP-PORTA-001` a `UP-PORTA-010`.
+- Unidades de produto: `UP-PORTA-001` a `UP-PORTA-011`.
 - Pontos de controlo: `PC-ESTAMP-001`, `PC-SOLD-001`, `PC-PINT-001`, `PC-CQ-001`.
 - Linhas demo: `LINHA-01` a `LINHA-04`.
 - Secções demo: `SEC-MP`, `SEC-ATRIB-SUP`, `SEC-CORTE-ESTAMP`, `SEC-SOLD`, `SEC-PINT-A`, `SEC-PINT-B`, `SEC-CQ`, `SEC-RETRAB`, `SEC-RACK`.
 - Consulta pública de cliente: `TRC-PORTA-001`.
 - Utilizadores locais demo: `admin/admin`, `supervisor/supervisor`, `operador/operador`, `qualidade/qualidade`, `logistica/logistica`, `cliente/cliente`, `demo/demo`.
+- Cenários de recuperação: unidade candidata, unidade em recuperação, unidade recondicionada e unidade rejeitada para sucata.
 
 Validação rápida do fluxo multi-linha:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\test-production-flow.ps1 -PublishFiware
 powershell -ExecutionPolicy Bypass -File .\scripts\test-phase-b-roles.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\test-phase-c-trace-graph.ps1
 ```
 
 Se os dados antigos persistirem em volumes Docker, usar:

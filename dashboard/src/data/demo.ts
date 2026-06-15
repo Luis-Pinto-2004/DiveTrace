@@ -4,7 +4,7 @@ export interface DashboardSummary {
   appName: string
   subtitle: string
   generatedAt: string
-  counts: { openOrders: number; activeUnits: number; activeSupports: number; qualityIssues: number; rackAssignments: number }
+  counts: { openOrders: number; activeUnits: number; activeSupports: number; qualityIssues: number; rackAssignments: number; reconditionedUnits?: number; recoveryCandidates?: number; inRecovery?: number; recoveryRate?: number }
   wipBySection: Array<{ sectionId: number; section: string; sectionCode: string; sectionType: string; activeSupports: number; productUnits: number }>
   recentEvents: Array<{ supportCode: string; section: string; eventType: string; dateTime: string }>
   qualityAlerts: Array<{ unitCode: string; severity: string; status: string; description: string; createdAt: string }>
@@ -20,7 +20,7 @@ export interface ManufacturingSectionPhase { id: number; sectionId: number; phas
 export interface ManufacturingProcessPhase { id: number; manufacturingProcessId: number; manufacturingPhaseId: number; resourceId?: number; numberStepOrder: number }
 export interface Checkpoint { id: number; checkpointCode: string; name: string; status: Status | string; sectionId: number }
 export interface ManufacturingOrder { id: number; orderNumber: string; productId: number; variantId?: number; customerId?: number; manufacturingProcessId: number; productionLineId: number; plannedQty: number; scheduledUntil: string; status: Status | string; customerReference?: string; publicTrackingCode?: string; observations?: string }
-export interface ProductUnit { id: number; unitCode: string; unitType: string; status: Status | string; qualityStatus: Status | string; currentSupportId?: number; currentSectionId?: number; manufacturingOrderId: number; variantId?: number; parentUnitId?: number; createdAt?: string; completedAt?: string }
+export interface ProductUnit { id: number; unitCode: string; unitType: string; status: Status | string; qualityStatus: Status | string; currentSupportId?: number; currentSectionId?: number; manufacturingOrderId: number; variantId?: number; parentUnitId?: number; createdAt?: string; completedAt?: string; isReconditioned?: boolean; reconditionedAt?: string; reconditionReason?: string; recoveryStatus?: string; qualityDisposition?: string }
 export interface Support { id: number; supportCode: string; status: Status | string; currentSectionId?: number }
 export interface Rack { id: number; rackCode: string; status: Status | string; sectionId?: number }
 export interface RawMaterial { id: number; name: string; info?: string }
@@ -40,7 +40,7 @@ export const demoDashboard: DashboardSummary = {
   appName: 'DriveTrace Core',
   subtitle: 'Plataforma de rastreabilidade e monitorização WIP',
   generatedAt: now,
-  counts: { openOrders: 3, activeUnits: 5, activeSupports: 7, qualityIssues: 3, rackAssignments: 1 },
+  counts: { openOrders: 3, activeUnits: 5, activeSupports: 7, qualityIssues: 3, rackAssignments: 1, reconditionedUnits: 1, recoveryCandidates: 1, inRecovery: 1, recoveryRate: 50 },
   wipBySection: [
     { sectionId: 1, section: 'Matérias-primas', sectionCode: 'SEC-MP', sectionType: 'Armazém', activeSupports: 0, productUnits: 2 },
     { sectionId: 2, section: 'Atribuição de suporte', sectionCode: 'SEC-ATRIB-SUP', sectionType: 'Rastreio', activeSupports: 1, productUnits: 1 },
@@ -165,6 +165,7 @@ export const demoUnits: ProductUnit[] = [
   { id: 8, manufacturingOrderId: 4, variantId: 4, unitCode: 'UP-PORTA-008', unitType: 'Subproduto', status: 'Active', qualityStatus: 'Pending', currentSupportId: 8, currentSectionId: 2, createdAt: now },
   { id: 9, manufacturingOrderId: 4, variantId: 1, unitCode: 'UP-PORTA-009', unitType: 'Subproduto', status: 'Planned', qualityStatus: 'Pending', currentSectionId: 1, createdAt: now },
   { id: 10, manufacturingOrderId: 4, variantId: 3, unitCode: 'UP-PORTA-010', unitType: 'Subproduto', status: 'Planned', qualityStatus: 'Pending', currentSectionId: 1, createdAt: now },
+  { id: 11, manufacturingOrderId: 2, variantId: 1, unitCode: 'UP-PORTA-011', unitType: 'Subproduto', status: 'Completed', qualityStatus: 'PASS', currentSupportId: 9, currentSectionId: 7, createdAt: now, completedAt: now, isReconditioned: true, reconditionedAt: now, reconditionReason: 'Risco superficial recuperado por polimento controlado.', recoveryStatus: 'Reconditioned', qualityDisposition: 'Reconditioned' },
 ]
 
 export const demoSupports: Support[] = [
@@ -176,6 +177,7 @@ export const demoSupports: Support[] = [
   { id: 6, supportCode: 'SUP-006', status: 'Stored', currentSectionId: 7 },
   { id: 7, supportCode: 'SUP-007', status: 'Loaded', currentSectionId: 11 },
   { id: 8, supportCode: 'SUP-008', status: 'Available', currentSectionId: 2 },
+  { id: 9, supportCode: 'SUP-009', status: 'Stored', currentSectionId: 7 },
 ]
 
 export const demoRacks: Rack[] = [

@@ -15,11 +15,27 @@ public static class OperationalEventTypes
     public const string NonconformityOpened = nameof(NonconformityOpened);
     public const string ReworkStarted = nameof(ReworkStarted);
     public const string ReworkCompleted = nameof(ReworkCompleted);
+    public const string ReconditioningCandidateMarked = nameof(ReconditioningCandidateMarked);
+    public const string ReconditioningStarted = nameof(ReconditioningStarted);
+    public const string ReconditioningCompleted = nameof(ReconditioningCompleted);
+    public const string ReconditioningRejected = nameof(ReconditioningRejected);
+    public const string ProductUnitMarkedReconditioned = nameof(ProductUnitMarkedReconditioned);
     public const string ScrapRecorded = nameof(ScrapRecorded);
     public const string RackAssigned = nameof(RackAssigned);
     public const string RackReleased = nameof(RackReleased);
     public const string FiwarePublished = nameof(FiwarePublished);
     public const string DemoSeeded = nameof(DemoSeeded);
+    public const string SimulationRunCreated = nameof(SimulationRunCreated);
+    public const string SimulationStepExecuted = nameof(SimulationStepExecuted);
+    public const string SimulationPaused = nameof(SimulationPaused);
+    public const string SimulationResumed = nameof(SimulationResumed);
+    public const string SimulationStopped = nameof(SimulationStopped);
+    public const string SimulationCompleted = nameof(SimulationCompleted);
+    public const string SimulationProductUnitAdvanced = nameof(SimulationProductUnitAdvanced);
+    public const string SimulationQualityFailureInjected = nameof(SimulationQualityFailureInjected);
+    public const string SimulationReconditioningPathExecuted = nameof(SimulationReconditioningPathExecuted);
+    public const string SimulationScrapPathExecuted = nameof(SimulationScrapPathExecuted);
+    public const string SimulationLineTransferExecuted = nameof(SimulationLineTransferExecuted);
 
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
@@ -31,11 +47,27 @@ public static class OperationalEventTypes
         NonconformityOpened,
         ReworkStarted,
         ReworkCompleted,
+        ReconditioningCandidateMarked,
+        ReconditioningStarted,
+        ReconditioningCompleted,
+        ReconditioningRejected,
+        ProductUnitMarkedReconditioned,
         ScrapRecorded,
         RackAssigned,
         RackReleased,
         FiwarePublished,
-        DemoSeeded
+        DemoSeeded,
+        SimulationRunCreated,
+        SimulationStepExecuted,
+        SimulationPaused,
+        SimulationResumed,
+        SimulationStopped,
+        SimulationCompleted,
+        SimulationProductUnitAdvanced,
+        SimulationQualityFailureInjected,
+        SimulationReconditioningPathExecuted,
+        SimulationScrapPathExecuted,
+        SimulationLineTransferExecuted
     };
 }
 
@@ -64,6 +96,7 @@ public sealed class OperationalEventCreateRequest
     public int? QualityResultId { get; set; }
     public int? NonconformityId { get; set; }
     public int? ReworkRecordId { get; set; }
+    public int? ReconditionRecordId { get; set; }
     public int? ScrapRecordId { get; set; }
     public int? RackId { get; set; }
     public string? ReasonCode { get; set; }
@@ -104,6 +137,7 @@ public sealed class OperationalEventDto
     public object? QualityResult { get; init; }
     public object? Nonconformity { get; init; }
     public object? ReworkRecord { get; init; }
+    public object? ReconditionRecord { get; init; }
     public object? ScrapRecord { get; init; }
     public object? Rack { get; init; }
     public string? ReasonCode { get; init; }
@@ -162,6 +196,7 @@ public sealed class OperationalEventService
             QualityResultId = request.QualityResultId,
             NonconformityId = request.NonconformityId,
             ReworkRecordId = request.ReworkRecordId,
+            ReconditionRecordId = request.ReconditionRecordId,
             ScrapRecordId = request.ScrapRecordId,
             RackId = request.RackId,
             ReasonCode = CleanNullable(request.ReasonCode, 80),
@@ -269,6 +304,7 @@ public sealed class OperationalEventService
         var qualityResults = await LoadDictionaryAsync(_db.QualityResults, events.Select(x => x.QualityResultId), cancellationToken);
         var nonconformities = await LoadDictionaryAsync(_db.Nonconformities, events.Select(x => x.NonconformityId), cancellationToken);
         var reworkRecords = await LoadDictionaryAsync(_db.ReworkRecords, events.Select(x => x.ReworkRecordId), cancellationToken);
+        var reconditionRecords = await LoadDictionaryAsync(_db.ReconditionRecords, events.Select(x => x.ReconditionRecordId), cancellationToken);
         var scrapRecords = await LoadDictionaryAsync(_db.ScrapRecords, events.Select(x => x.ScrapRecordId), cancellationToken);
         var racks = await LoadDictionaryAsync(_db.Racks, events.Select(x => x.RackId), cancellationToken);
 
@@ -285,6 +321,7 @@ public sealed class OperationalEventService
             var quality = Find(qualityResults, item.QualityResultId);
             var nonconformity = Find(nonconformities, item.NonconformityId);
             var rework = Find(reworkRecords, item.ReworkRecordId);
+            var reconditioning = Find(reconditionRecords, item.ReconditionRecordId);
             var scrap = Find(scrapRecords, item.ScrapRecordId);
             var rack = Find(racks, item.RackId);
 
@@ -304,6 +341,7 @@ public sealed class OperationalEventService
                 QualityResult = quality is null ? null : new { id = quality.Id, result = quality.Result, recordedAt = quality.RecordedAt },
                 Nonconformity = nonconformity is null ? null : new { id = nonconformity.Id, status = nonconformity.Status, severity = nonconformity.Severity },
                 ReworkRecord = rework is null ? null : new { id = rework.Id, status = rework.Status, startedAt = rework.StartedAt, endedAt = rework.EndedAt },
+                ReconditionRecord = reconditioning is null ? null : new { id = reconditioning.Id, status = reconditioning.Status, decision = reconditioning.Decision, completedAt = reconditioning.CompletedAt },
                 ScrapRecord = scrap is null ? null : new { id = scrap.Id, scrappedAt = scrap.ScrappedAt, reason = scrap.Reason },
                 Rack = rack is null ? null : new { id = rack.Id, code = rack.RackCode, status = rack.Status },
                 ReasonCode = item.ReasonCode,
@@ -332,6 +370,7 @@ public sealed class OperationalEventService
         await EnsureExistsAsync(_db.QualityResults, request.QualityResultId, "resultado de qualidade", cancellationToken);
         await EnsureExistsAsync(_db.Nonconformities, request.NonconformityId, "não conformidade", cancellationToken);
         await EnsureExistsAsync(_db.ReworkRecords, request.ReworkRecordId, "registo de retrabalho", cancellationToken);
+        await EnsureExistsAsync(_db.ReconditionRecords, request.ReconditionRecordId, "registo de recondicionamento", cancellationToken);
         await EnsureExistsAsync(_db.ScrapRecords, request.ScrapRecordId, "registo de sucata", cancellationToken);
         await EnsureExistsAsync(_db.Racks, request.RackId, "rack", cancellationToken);
     }
@@ -445,11 +484,27 @@ public sealed class OperationalEventService
             OperationalEventTypes.NonconformityOpened => $"Não conformidade aberta para {target}",
             OperationalEventTypes.ReworkStarted => $"Retrabalho iniciado para {target}",
             OperationalEventTypes.ReworkCompleted => $"Retrabalho concluído para {target}",
+            OperationalEventTypes.ReconditioningCandidateMarked => $"Unidade {target} marcada como recuperável",
+            OperationalEventTypes.ReconditioningStarted => $"Recuperação iniciada para {target}",
+            OperationalEventTypes.ReconditioningCompleted => $"Recuperação concluída para {target}",
+            OperationalEventTypes.ReconditioningRejected => $"Recuperação rejeitada para {target}",
+            OperationalEventTypes.ProductUnitMarkedReconditioned => $"Unidade {target} marcada como recondicionada",
             OperationalEventTypes.ScrapRecorded => $"Sucata registada para {target}",
             OperationalEventTypes.RackAssigned => $"Rack {rack?.RackCode} atribuída a {support?.SupportCode ?? target}",
             OperationalEventTypes.RackReleased => $"Rack {rack?.RackCode} libertada",
             OperationalEventTypes.FiwarePublished => "Contexto FIWARE publicado",
             OperationalEventTypes.DemoSeeded => "Dados demonstrativos inicializados",
+            OperationalEventTypes.SimulationRunCreated => $"Simulação criada para {target}",
+            OperationalEventTypes.SimulationStepExecuted => $"Passo de simulação executado para {target}",
+            OperationalEventTypes.SimulationPaused => $"Simulação pausada para {target}",
+            OperationalEventTypes.SimulationResumed => $"Simulação retomada para {target}",
+            OperationalEventTypes.SimulationStopped => $"Simulação terminada para {target}",
+            OperationalEventTypes.SimulationCompleted => $"Simulação concluída para {target}",
+            OperationalEventTypes.SimulationProductUnitAdvanced => $"Unidade avançada por simulação: {target}",
+            OperationalEventTypes.SimulationQualityFailureInjected => $"Falha de qualidade injetada para {target}",
+            OperationalEventTypes.SimulationReconditioningPathExecuted => $"Percurso de recondicionamento executado para {target}",
+            OperationalEventTypes.SimulationScrapPathExecuted => $"Percurso de sucata executado para {target}",
+            OperationalEventTypes.SimulationLineTransferExecuted => $"Transferência de linha executada para {target}",
             _ => item.EventType
         };
     }

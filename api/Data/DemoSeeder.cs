@@ -318,6 +318,8 @@ public static class DemoSeeder
             ["recovery"] = await EnsureOrderAsync(db, "OF-SIM-PORTA-002", customers["oem"], products["porta"], variants["prm"], process, lines["montagem"], 1, now.Date.AddDays(2).AddHours(13), "Planned", "SIM-OEM-002", "TRC-SIM-002", "Cenário de falha menor e recondicionamento", "OF-SIM-PORTA-002-LEGACY", "TRC-SIM-002-LEGACY"),
             ["scrap"] = await EnsureOrderAsync(db, "OF-SIM-PORTA-003", customers["piloto"], products["porta"], variants["ref"], process, lines["montagem"], 1, now.Date.AddDays(2).AddHours(14), "Planned", "SIM-PILOTO-003", "TRC-SIM-003", "Cenário de falha crítica e sucata", "OF-SIM-PORTA-003-LEGACY", "TRC-SIM-003-LEGACY")
         };
+        await db.SaveChangesAsync();
+        EnsurePersisted(simulationOrders.Values, "ordens de simulacao");
 
         var simulationSupports = new Dictionary<string, Support>
         {
@@ -332,6 +334,9 @@ public static class DemoSeeder
             ["recovery"] = await EnsureRackAsync(db, "RACK-SIM-002", "Available", sections["rack"]),
             ["scrap"] = await EnsureRackAsync(db, "RACK-SIM-003", "Available", sections["rack"])
         };
+        await db.SaveChangesAsync();
+        EnsurePersisted(simulationSupports.Values, "suportes de simulacao");
+        EnsurePersisted(simulationRacks.Values, "racks de simulacao");
 
         var simulationUnits = new Dictionary<string, ProductUnit>
         {
@@ -339,6 +344,8 @@ public static class DemoSeeder
             ["recovery"] = await EnsureProductUnitAsync(db, simulationOrders["recovery"], variants["prm"], "UP-SIM-002", "Subproduto", "Planned", "Pending", sections["mp"], null, now.AddHours(-2).AddMinutes(-10), null, "UP-SIM-002-LEGACY"),
             ["scrap"] = await EnsureProductUnitAsync(db, simulationOrders["scrap"], variants["ref"], "UP-SIM-003", "Subproduto", "Planned", "Pending", sections["mp"], null, now.AddHours(-2).AddMinutes(-20), null, "UP-SIM-003-LEGACY")
         };
+        await db.SaveChangesAsync();
+        EnsurePersisted(simulationUnits.Values, "unidades de simulacao");
 
         foreach (var pair in simulationUnits)
         {
@@ -354,6 +361,7 @@ public static class DemoSeeder
         {
             await EnsureRackAssignmentAsync(db, simulationRacks[key], simulationSupports[key], now.AddMinutes(-20));
         }
+        await db.SaveChangesAsync();
     }
 
     private static async Task SeedSupportAssignmentsAsync(
@@ -1524,6 +1532,16 @@ public static class DemoSeeder
         unit.CreatedAt = unit.CreatedAt == default ? createdAt : unit.CreatedAt;
         unit.CompletedAt = completedAt;
         return unit;
+    }
+
+    private static void EnsurePersisted<T>(IEnumerable<T> entities, string description)
+        where T : IEntity
+    {
+        var pending = entities.Where(entity => entity.Id <= 0).ToList();
+        if (pending.Count > 0)
+        {
+            throw new InvalidOperationException($"Seed demo: {description} ainda sem Id persistido antes de criar dependencias.");
+        }
     }
 
     private static async Task EnsureOpenSupportAssignmentAsync(

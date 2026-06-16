@@ -1,10 +1,37 @@
-import axios from 'axios'
+import axios, { AxiosHeaders } from 'axios'
 
 export const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:5181/api'
 
 export const api = axios.create({
   baseURL,
   timeout: 6000,
+})
+
+const roleMap: Record<string, string> = {
+  admin: 'Administrator',
+  supervisor: 'Supervisor',
+  operator: 'Operator',
+  quality: 'QualityTechnician',
+  logistics: 'Logistics',
+  client: 'Customer',
+  demoViewer: 'DemoViewer',
+}
+
+api.interceptors.request.use((config) => {
+  try {
+    const rawUser = localStorage.getItem('user')
+    if (rawUser) {
+      const profile = JSON.parse(rawUser) as { username?: string; roleKey?: string }
+      const role = roleMap[profile.roleKey || ''] || 'DemoViewer'
+      const headers = AxiosHeaders.from(config.headers)
+      headers.set('X-DriveTrace-Role', role)
+      if (profile.username) headers.set('X-DriveTrace-User', profile.username)
+      config.headers = headers
+    }
+  } catch {
+    // Local demo authentication must never block API access.
+  }
+  return config
 })
 
 export async function apiGet<T>(path: string, fallback: T): Promise<T> {

@@ -35,7 +35,7 @@ The source ZIP contained these main areas:
 
 - Legacy mobile-side module.
 - Legacy human monitoring functionality.
-- Legacy conversational AI and advanced prediction services.
+- Legacy conversational AI and advanced out-of-scope analytics services.
 - Legacy final output batch model.
 - Legacy branding and old visual identity.
 

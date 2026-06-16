@@ -5,35 +5,35 @@
   },
   "item": [
     {
-      "name": "Dashboard summary",
+      "name": "Resumo da dashboard",
       "request": {
         "method": "GET",
         "url": "http://localhost:5181/api/dashboard/summary"
       }
     },
     {
-      "name": "Product units",
+      "name": "Unidades de produto",
       "request": {
         "method": "GET",
         "url": "http://localhost:5181/api/product-units"
       }
     },
     {
-      "name": "Supports",
+      "name": "Suportes",
       "request": {
         "method": "GET",
         "url": "http://localhost:5181/api/supports"
       }
     },
     {
-      "name": "Traceability for DU-001 by id",
+      "name": "Rastreabilidade da UP-PORTA-001 por id",
       "request": {
         "method": "GET",
         "url": "http://localhost:5181/api/traceability/product-units/1"
       }
     },
     {
-      "name": "Execute playback",
+      "name": "Executar reprodução",
       "request": {
         "method": "POST",
         "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -42,16 +42,16 @@
       }
     },
     {
-      "name": "Manual support movement",
+      "name": "Movimento manual de suporte",
       "request": {
         "method": "POST",
         "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": { "mode": "raw", "raw": "{\n  \"eventType\": \"MoveSupport\",\n  \"supportCode\": \"SUP-005\",\n  \"sectionCode\": \"SEC-WELD\",\n  \"productUnitCode\": \"DU-005\",\n  \"notes\": \"Manual controlled event from Postman.\"\n}" },
+        "body": { "mode": "raw", "raw": "{\n  \"eventType\": \"MoveSupport\",\n  \"supportCode\": \"SUP-005\",\n  \"sectionCode\": \"SEC-SOLD\",\n  \"productUnitCode\": \"UP-PORTA-005\",\n  \"notes\": \"Evento manual controlado a partir do Postman.\"\n}" },
         "url": "http://localhost:5181/api/events/manual"
       }
     },
     {
-      "name": "Current FIWARE context",
+      "name": "Contexto FIWARE atual",
       "request": {
         "method": "GET",
         "url": "http://localhost:5181/api/fiware/context"

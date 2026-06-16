@@ -26,20 +26,34 @@ public sealed class Variant : IEntity
     [JsonIgnore] public Product? Product { get; set; }
 }
 
+public sealed class Customer : IEntity
+{
+    public int Id { get; set; }
+    [MaxLength(80)] public string CustomerCode { get; set; } = string.Empty;
+    [MaxLength(160)] public string Name { get; set; } = string.Empty;
+    [MaxLength(180)] public string? ContactEmail { get; set; }
+    public bool IsActive { get; set; } = true;
+    [JsonIgnore] public ICollection<ManufacturingOrder> ManufacturingOrders { get; set; } = new List<ManufacturingOrder>();
+}
+
 public sealed class ManufacturingOrder : IEntity
 {
     public int Id { get; set; }
     [MaxLength(80)] public string OrderNumber { get; set; } = string.Empty;
     public int ProductId { get; set; }
     public int? VariantId { get; set; }
+    public int? CustomerId { get; set; }
     public int ManufacturingProcessId { get; set; }
     public int ProductionLineId { get; set; }
     public int PlannedQty { get; set; }
     public DateTime ScheduledUntil { get; set; }
     [MaxLength(40)] public string Status { get; set; } = "Planned";
+    [MaxLength(120)] public string? CustomerReference { get; set; }
+    [MaxLength(80)] public string? PublicTrackingCode { get; set; }
     public string? Observations { get; set; }
     [JsonIgnore] public Product? Product { get; set; }
     [JsonIgnore] public Variant? Variant { get; set; }
+    [JsonIgnore] public Customer? Customer { get; set; }
     [JsonIgnore] public ManufacturingProcess? ManufacturingProcess { get; set; }
     [JsonIgnore] public ProductionLine? ProductionLine { get; set; }
     [JsonIgnore] public ICollection<ProductUnit> ProductUnits { get; set; } = new List<ProductUnit>();
@@ -50,6 +64,8 @@ public sealed class ProductionLine : IEntity
     public int Id { get; set; }
     [MaxLength(80)] public string LineCode { get; set; } = string.Empty;
     [MaxLength(140)] public string Name { get; set; } = string.Empty;
+    public int DisplayOrder { get; set; }
+    [MaxLength(80)] public string? VisualGroup { get; set; }
     [JsonIgnore] public ICollection<ProductionLineSection> Sections { get; set; } = new List<ProductionLineSection>();
 }
 
@@ -60,6 +76,13 @@ public sealed class ProductionLineSection : IEntity
     [MaxLength(140)] public string Name { get; set; } = string.Empty;
     [MaxLength(80)] public string SectionType { get; set; } = string.Empty;
     public int? LineId { get; set; }
+    public int DisplayOrder { get; set; }
+    public int? LayoutColumn { get; set; }
+    public int? LayoutRow { get; set; }
+    [MaxLength(80)] public string? VisualZone { get; set; }
+    public bool IsTransferPoint { get; set; }
+    public bool AllowsLineTransferIn { get; set; }
+    public bool AllowsLineTransferOut { get; set; }
     [JsonIgnore] public ProductionLine? Line { get; set; }
     [JsonIgnore] public ICollection<Checkpoint> Checkpoints { get; set; } = new List<Checkpoint>();
     [JsonIgnore] public ICollection<SupportLocalizationHistory> SupportLocalizationHistory { get; set; } = new List<SupportLocalizationHistory>();
@@ -126,6 +149,13 @@ public sealed class ProductUnit : IEntity
     public int? CurrentSupportId { get; set; }
     public int? CurrentSectionId { get; set; }
     [MaxLength(40)] public string QualityStatus { get; set; } = "Pending";
+    public bool IsReconditioned { get; set; }
+    public DateTime? ReconditionedAt { get; set; }
+    public string? ReconditionReason { get; set; }
+    public int? ReconditionedFromNonconformityId { get; set; }
+    public int? ReconditionedByResourceId { get; set; }
+    [MaxLength(40)] public string? RecoveryStatus { get; set; } = "None";
+    [MaxLength(40)] public string? QualityDisposition { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? CompletedAt { get; set; }
     [JsonIgnore] public ManufacturingOrder? ManufacturingOrder { get; set; }
@@ -133,7 +163,80 @@ public sealed class ProductUnit : IEntity
     [JsonIgnore] public ProductUnit? ParentUnit { get; set; }
     [JsonIgnore] public Support? CurrentSupport { get; set; }
     [JsonIgnore] public ProductionLineSection? CurrentSection { get; set; }
+    [JsonIgnore] public Nonconformity? ReconditionedFromNonconformity { get; set; }
+    [JsonIgnore] public Resource? ReconditionedByResource { get; set; }
     [JsonIgnore] public ICollection<ProductUnit> ChildUnits { get; set; } = new List<ProductUnit>();
+    [JsonIgnore] public ICollection<ProductUnitLocationHistory> LocationHistory { get; set; } = new List<ProductUnitLocationHistory>();
+    [JsonIgnore] public ICollection<ReconditionRecord> ReconditionRecords { get; set; } = new List<ReconditionRecord>();
+}
+
+public sealed class ProductUnitLocationHistory : IEntity
+{
+    public int Id { get; set; }
+    public int ProductUnitId { get; set; }
+    public int? FromProductionLineId { get; set; }
+    public int? ToProductionLineId { get; set; }
+    public int? FromSectionId { get; set; }
+    public int ToSectionId { get; set; }
+    public int? FromSupportId { get; set; }
+    public int? ToSupportId { get; set; }
+    [MaxLength(80)] public string EventType { get; set; } = "Transfer";
+    [MaxLength(160)] public string Reason { get; set; } = "Operational movement";
+    public string? Notes { get; set; }
+    [MaxLength(120)] public string? OperatorUserId { get; set; }
+    public DateTime OccurredAt { get; set; } = DateTime.UtcNow;
+    [MaxLength(80)] public string Source { get; set; } = "api";
+    [MaxLength(80)] public string? CorrelationId { get; set; }
+    [JsonIgnore] public ProductUnit? ProductUnit { get; set; }
+    [JsonIgnore] public ProductionLine? FromProductionLine { get; set; }
+    [JsonIgnore] public ProductionLine? ToProductionLine { get; set; }
+    [JsonIgnore] public ProductionLineSection? FromSection { get; set; }
+    [JsonIgnore] public ProductionLineSection? ToSection { get; set; }
+    [JsonIgnore] public Support? FromSupport { get; set; }
+    [JsonIgnore] public Support? ToSupport { get; set; }
+}
+
+public sealed class OperationalEvent : IEntity
+{
+    public int Id { get; set; }
+    [MaxLength(80)] public string EventCode { get; set; } = string.Empty;
+    [MaxLength(80)] public string EventType { get; set; } = string.Empty;
+    public int? ProductUnitId { get; set; }
+    public int? SupportId { get; set; }
+    public int? ManufacturingOrderId { get; set; }
+    public int? FromProductionLineId { get; set; }
+    public int? ToProductionLineId { get; set; }
+    public int? FromSectionId { get; set; }
+    public int? ToSectionId { get; set; }
+    public int? CheckpointId { get; set; }
+    public int? QualityResultId { get; set; }
+    public int? NonconformityId { get; set; }
+    public int? ReworkRecordId { get; set; }
+    public int? ReconditionRecordId { get; set; }
+    public int? ScrapRecordId { get; set; }
+    public int? RackId { get; set; }
+    [MaxLength(80)] public string? ReasonCode { get; set; }
+    [MaxLength(40)] public string? Severity { get; set; }
+    [MaxLength(40)] public string Source { get; set; } = "Api";
+    [MaxLength(120)] public string? PerformedByUserId { get; set; }
+    public DateTime OccurredAt { get; set; } = DateTime.UtcNow;
+    public string? Notes { get; set; }
+    public bool IsDemo { get; set; }
+    public string? MetadataJson { get; set; }
+    [JsonIgnore] public ProductUnit? ProductUnit { get; set; }
+    [JsonIgnore] public Support? Support { get; set; }
+    [JsonIgnore] public ManufacturingOrder? ManufacturingOrder { get; set; }
+    [JsonIgnore] public ProductionLine? FromProductionLine { get; set; }
+    [JsonIgnore] public ProductionLine? ToProductionLine { get; set; }
+    [JsonIgnore] public ProductionLineSection? FromSection { get; set; }
+    [JsonIgnore] public ProductionLineSection? ToSection { get; set; }
+    [JsonIgnore] public Checkpoint? Checkpoint { get; set; }
+    [JsonIgnore] public QualityResult? QualityResult { get; set; }
+    [JsonIgnore] public Nonconformity? Nonconformity { get; set; }
+    [JsonIgnore] public ReworkRecord? ReworkRecord { get; set; }
+    [JsonIgnore] public ReconditionRecord? ReconditionRecord { get; set; }
+    [JsonIgnore] public ScrapRecord? ScrapRecord { get; set; }
+    [JsonIgnore] public Rack? Rack { get; set; }
 }
 
 public sealed class Support : IEntity
@@ -256,6 +359,29 @@ public sealed class ReworkRecord : IEntity
     [JsonIgnore] public Nonconformity? Nonconformity { get; set; }
 }
 
+public sealed class ReconditionRecord : IEntity
+{
+    public int Id { get; set; }
+    public int ProductUnitId { get; set; }
+    public int? NonconformityId { get; set; }
+    public int? ReworkRecordId { get; set; }
+    [MaxLength(40)] public string Status { get; set; } = "Candidate";
+    [MaxLength(40)] public string Decision { get; set; } = "Pending";
+    public string? Reason { get; set; }
+    public string? Notes { get; set; }
+    public bool FunctionalValidation { get; set; }
+    public DateTime RecordedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? CompletedAt { get; set; }
+    public DateTime? RejectedAt { get; set; }
+    public int? RecordedByResourceId { get; set; }
+    [MaxLength(120)] public string? PerformedByUserId { get; set; }
+    [MaxLength(40)] public string? NextDisposition { get; set; }
+    [JsonIgnore] public ProductUnit? ProductUnit { get; set; }
+    [JsonIgnore] public Nonconformity? Nonconformity { get; set; }
+    [JsonIgnore] public ReworkRecord? ReworkRecord { get; set; }
+    [JsonIgnore] public Resource? RecordedByResource { get; set; }
+}
+
 public sealed class ScrapRecord : IEntity
 {
     public int Id { get; set; }
@@ -265,18 +391,6 @@ public sealed class ScrapRecord : IEntity
     public string? Reason { get; set; }
     [JsonIgnore] public ProductUnit? ProductUnit { get; set; }
     [JsonIgnore] public Nonconformity? Nonconformity { get; set; }
-}
-
-public sealed class Prediction : IEntity
-{
-    public int Id { get; set; }
-    public int? ManufacturingOrderId { get; set; }
-    public byte[]? Model { get; set; }
-    [MaxLength(80)] public string ModelVersion { get; set; } = "future-v1";
-    [MaxLength(80)] public string ModelType { get; set; } = "Placeholder";
-    public DateTime? LastDate { get; set; }
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-    [JsonIgnore] public ManufacturingOrder? ManufacturingOrder { get; set; }
 }
 
 public sealed class ManualEventRequest

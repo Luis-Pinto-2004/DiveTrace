@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { t } from '../prefs'
 
 type CrudOption = {
@@ -35,6 +36,9 @@ type CrudConfig = {
   fields: CrudField[]
   columns: CrudColumn[]
   items: () => Record<string, unknown>[]
+  readOnly?: boolean
+  maxVisibleRows?: number
+  maxTableHeight?: string
   allowDelete?: boolean
   canDelete?: (item: Record<string, unknown>) => true | string
 }
@@ -69,6 +73,14 @@ function inputValue(key: string) {
   if (value === null || value === undefined) return ''
   return String(value)
 }
+
+const tableShellStyle = computed(() => {
+  if (props.config.maxTableHeight) return { '--table-shell-max-height': props.config.maxTableHeight }
+  if (props.config.maxVisibleRows) {
+    return { '--table-shell-max-height': `calc(${props.config.maxVisibleRows} * 2.55rem + 2.75rem)` }
+  }
+  return undefined
+})
 </script>
 
 <template>
@@ -78,8 +90,9 @@ function inputValue(key: string) {
         <p>{{ t('CRUD operations') }}</p>
         <h3>{{ t(config.title) }}</h3>
         <p v-if="config.description" class="mt-2 max-w-3xl normal-case tracking-normal text-slate-500 dark:text-slate-400">{{ t(config.description) }}</p>
+        <p v-if="config.readOnly" class="mt-2 max-w-3xl normal-case tracking-normal text-amber-700 dark:text-amber-200">Não tem permissão para criar, editar ou eliminar nesta vista.</p>
       </div>
-      <button class="btn-primary w-full shrink-0 sm:w-auto" type="button" @click="emit('add')">{{ t('Add') }}</button>
+      <button class="btn-primary w-full shrink-0 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto" type="button" :disabled="config.readOnly" @click="emit('add')">{{ t('Add') }}</button>
     </div>
 
     <p
@@ -123,13 +136,13 @@ function inputValue(key: string) {
         </label>
 
         <div class="sticky bottom-0 lg:col-span-2 -mx-4 -mb-4 mt-2 flex flex-wrap items-center gap-3 border-t border-slate-200 bg-white/95 px-4 py-4 backdrop-blur dark:border-slate-700 dark:bg-slate-800/95 sm:-mx-5 sm:-mb-5 sm:px-5">
-          <button class="btn-primary w-full sm:w-auto" type="submit">{{ editing ? t('Save') : t('Add') }}</button>
+          <button class="btn-primary w-full disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto" type="submit" :disabled="config.readOnly">{{ editing ? t('Save') : t('Add') }}</button>
           <button class="btn-secondary w-full sm:w-auto" type="button" @click="emit('cancel')">{{ t('Cancel') }}</button>
         </div>
       </form>
     </div>
 
-    <div class="table-shell">
+    <div class="table-shell" :style="tableShellStyle">
       <table class="data-table">
         <thead>
           <tr>
@@ -140,17 +153,17 @@ function inputValue(key: string) {
         <tbody>
           <tr v-for="item in config.items()" :key="String(item.id)">
             <td v-for="column in config.columns" :key="column.key">
-              <span v-if="column.badge" :class="statusClass(String(item[column.key] || ''))">{{ cellValue(column, item) }}</span>
-              <span v-else>{{ cellValue(column, item) }}</span>
+              <span v-if="column.badge" :class="statusClass(String(item[column.key] || ''))" :title="cellValue(column, item)">{{ cellValue(column, item) }}</span>
+              <span v-else class="cell-clamp" :title="cellValue(column, item)">{{ cellValue(column, item) }}</span>
             </td>
             <td>
               <div class="flex flex-wrap gap-2">
-                <button class="btn-secondary btn-compact" type="button" @click="emit('edit', item)">{{ t('Edit') }}</button>
+                <button class="btn-secondary btn-compact disabled:cursor-not-allowed disabled:opacity-50" type="button" :disabled="config.readOnly" @click="emit('edit', item)">{{ t('Edit') }}</button>
                 <button
                   v-if="config.allowDelete !== false"
                   class="btn-danger btn-compact disabled:cursor-not-allowed disabled:opacity-50"
                   type="button"
-                  :disabled="config.canDelete?.(item) !== true && config.canDelete?.(item) !== undefined"
+                  :disabled="config.readOnly || (config.canDelete?.(item) !== true && config.canDelete?.(item) !== undefined)"
                   :title="typeof config.canDelete?.(item) === 'string' ? t(String(config.canDelete?.(item))) : t('Delete')"
                   @click="emit('delete', item)"
                 >

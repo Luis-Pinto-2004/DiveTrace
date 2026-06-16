@@ -24,8 +24,8 @@
     {
       "id": 1,
       "type": "stat",
-      "title": "Estimated publishable context entities",
-      "description": "Derived from relational entities managed by the FIWARE sync process.",
+      "title": "Entidades de contexto publicáveis estimadas",
+      "description": "Valor calculado a partir das entidades relacionais geridas pela sincronização FIWARE.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -92,8 +92,8 @@
     {
       "id": 2,
       "type": "stat",
-      "title": "Current supports count",
-      "description": "Current supports in PostgreSQL/TimescaleDB.",
+      "title": "Número atual de suportes",
+      "description": "Suportes atuais em PostgreSQL/TimescaleDB.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -160,8 +160,8 @@
     {
       "id": 3,
       "type": "stat",
-      "title": "Current product units count",
-      "description": "Current product units in PostgreSQL/TimescaleDB.",
+      "title": "Número atual de unidades de produto",
+      "description": "Unidades de produto atuais em PostgreSQL/TimescaleDB.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -228,8 +228,8 @@
     {
       "id": 4,
       "type": "stat",
-      "title": "Current racks count",
-      "description": "Current racks in PostgreSQL/TimescaleDB.",
+      "title": "Número atual de racks",
+      "description": "Racks atuais em PostgreSQL/TimescaleDB.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -296,8 +296,8 @@
     {
       "id": 5,
       "type": "table",
-      "title": "Context entity candidates by type",
-      "description": "Candidate entity totals by type for FIWARE publish operations.",
+      "title": "Candidatos a entidades de contexto por tipo",
+      "description": "Totais de entidades candidatas por tipo para publicação FIWARE.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -334,15 +334,15 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT entity_type, total FROM (SELECT 'Support' AS entity_type, COUNT(*) AS total FROM \"Supports\" UNION ALL SELECT 'ProductUnit' AS entity_type, COUNT(*) AS total FROM \"ProductUnits\" UNION ALL SELECT 'Rack' AS entity_type, COUNT(*) AS total FROM \"Racks\" UNION ALL SELECT 'ProductionLineSection' AS entity_type, COUNT(*) AS total FROM \"ProductionLineSections\" UNION ALL SELECT 'Checkpoint' AS entity_type, COUNT(*) AS total FROM \"Checkpoints\") source ORDER BY total DESC, entity_type;"
+          "rawSql": "SELECT entity_type, total FROM (SELECT 'Suporte' AS entity_type, COUNT(*) AS total FROM \"Supports\" UNION ALL SELECT 'Unidade de produto' AS entity_type, COUNT(*) AS total FROM \"ProductUnits\" UNION ALL SELECT 'Rack' AS entity_type, COUNT(*) AS total FROM \"Racks\" UNION ALL SELECT 'Secção da linha' AS entity_type, COUNT(*) AS total FROM \"ProductionLineSections\" UNION ALL SELECT 'Ponto de controlo' AS entity_type, COUNT(*) AS total FROM \"Checkpoints\") source ORDER BY total DESC, entity_type;"
         }
       ]
     },
     {
       "id": 6,
       "type": "table",
-      "title": "Recent support movement events",
-      "description": "Latest movement events from relational history.",
+      "title": "Eventos recentes de movimento de suportes",
+      "description": "Eventos recentes do histórico relacional.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -379,15 +379,15 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT slh.\"DateTime\", s.\"SupportCode\", COALESCE(pls.\"Name\", 'Unknown section') AS section, slh.\"EventType\" FROM \"SupportLocalizationHistory\" slh LEFT JOIN \"Supports\" s ON s.\"Id\" = slh.\"SupportId\" LEFT JOIN \"ProductionLineSections\" pls ON pls.\"Id\" = slh.\"SectionId\" ORDER BY slh.\"DateTime\" DESC LIMIT 30;"
+          "rawSql": "SELECT slh.\"DateTime\", s.\"SupportCode\", COALESCE(pls.\"Name\", 'Secção desconhecida') AS section, slh.\"EventType\" FROM \"SupportLocalizationHistory\" slh LEFT JOIN \"Supports\" s ON s.\"Id\" = slh.\"SupportId\" LEFT JOIN \"ProductionLineSections\" pls ON pls.\"Id\" = slh.\"SectionId\" ORDER BY slh.\"DateTime\" DESC LIMIT 30;"
         }
       ]
     },
     {
       "id": 7,
       "type": "text",
-      "title": "Datasource health note and FIWARE scope",
-      "description": "Operational note for demo context.",
+      "title": "Nota de saúde da fonte de dados e âmbito FIWARE",
+      "description": "Nota operacional para o contexto demonstrativo.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -425,7 +425,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "DriveTrace Core - FIWARE / Infrastructure Status",
+  "title": "DriveTrace Core - Estado FIWARE / infraestrutura",
   "uid": "drivetrace-fiware-infra-status",
   "version": 10,
   "weekStart": ""

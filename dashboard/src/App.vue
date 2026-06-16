@@ -5,9 +5,13 @@ import lineDoorUrl from './assets/branding/production-line-door.png'
 import lineCarUrl from './assets/branding/production-line-car.png'
 import CrudPanel from './components/CrudPanel.vue'
 import GrafanaAnalyticsView from './components/GrafanaAnalyticsView.vue'
+import ProductionSimulatorView from './components/ProductionSimulatorView.vue'
+import ReconditioningView from './components/ReconditioningView.vue'
+import TraceGraphView from './components/TraceGraphView.vue'
 import { api, apiGet, apiPost, baseURL as apiBaseUrl, createEntity, deleteEntity, getApiErrorMessage, updateEntity } from './services/api'
 import {
   demoCheckpoints,
+  demoCustomers,
   demoDashboard,
   demoLots,
   demoManufacturingProcesses,
@@ -20,7 +24,6 @@ import {
   demoProductionLineSections,
   demoProducts,
   demoQuality,
-  demoPredictions,
   demoRackSupportAssignments,
   demoRacks,
   demoResources,
@@ -32,6 +35,7 @@ import {
   demoUnits,
   demoVariants,
   type Checkpoint,
+  type Customer,
   type DashboardSummary,
   type LotRawMaterial,
   type ManufacturingOrder,
@@ -44,7 +48,6 @@ import {
   type ProductionLine,
   type ProductionLineSection,
   type QualityRecord,
-  type PredictionRecord,
   type Rack,
   type RackSupportAssignment,
   type RawMaterial,
@@ -73,7 +76,151 @@ import {
 // ===== Authentication and user management =====
 const isAuthenticated = ref(false)
 
-type RoleKey = 'admin' | 'operator' | 'client'
+type RoleKey = 'admin' | 'supervisor' | 'operator' | 'quality' | 'logistics' | 'client' | 'demoViewer'
+
+type PermissionCatalog = {
+  roles: Array<{ key: string; label: string; permissions: string[] }>
+  permissions: Array<{ key: string; label: string }>
+  activeRole: string
+  activePermissions: string[]
+}
+
+const roleProfiles: Partial<Record<RoleKey, { label: string; backendRole: string; jobTitle: string }>> = {
+  admin: { label: 'Administrador', backendRole: 'Administrator', jobTitle: 'Administrador do sistema' },
+  supervisor: { label: 'Supervisor', backendRole: 'Supervisor', jobTitle: 'Supervisor de produção' },
+  operator: { label: 'Operador', backendRole: 'Operator', jobTitle: 'Operador de produção' },
+  quality: { label: 'Técnico de qualidade', backendRole: 'QualityTechnician', jobTitle: 'Técnico de qualidade' },
+  logistics: { label: 'Logística', backendRole: 'Logistics', jobTitle: 'Técnico de logística' },
+  client: { label: 'Cliente', backendRole: 'Customer', jobTitle: 'Cliente' },
+}
+
+const fallbackPermissionCatalog: PermissionCatalog = {
+  roles: Object.entries(roleProfiles).map(([key, value]) => ({ key: value.backendRole, label: value.label, permissions: [] })),
+  permissions: [],
+  activeRole: 'Administrator',
+  activePermissions: [
+    'Users.Manage',
+    'MasterData.Manage',
+    'Orders.View',
+    'Orders.Manage',
+    'ProductUnits.View',
+    'ProductUnits.Transfer',
+    'ProductUnits.Trace',
+    'Supports.Manage',
+    'Quality.View',
+    'Quality.Record',
+    'Quality.Decide',
+    'Racks.View',
+    'Racks.Manage',
+    'Materials.View',
+    'Materials.Manage',
+    'Grafana.View',
+    'Fiware.View',
+    'Fiware.Manage',
+    'Simulation.Read',
+    'Simulation.Run',
+    'Simulation.Manage',
+    'CustomerPortal.View',
+    'OperationalEvents.View',
+    'Reconditioning.Read',
+    'Reconditioning.Write',
+    'Reconditioning.Decide',
+  ],
+}
+
+const frontendRolePermissions: Record<RoleKey, string[]> = {
+  admin: fallbackPermissionCatalog.activePermissions,
+  supervisor: [
+    'Orders.View',
+    'Orders.Manage',
+    'ProductUnits.View',
+    'ProductUnits.Transfer',
+    'ProductUnits.Trace',
+    'Supports.Manage',
+    'Quality.View',
+    'Racks.View',
+    'Racks.Manage',
+    'Materials.View',
+    'Grafana.View',
+    'OperationalEvents.View',
+    'Simulation.Read',
+    'Simulation.Run',
+    'Simulation.Manage',
+    'Reconditioning.Read',
+    'Reconditioning.Write',
+    'Reconditioning.Decide',
+  ],
+  operator: [
+    'Orders.View',
+    'ProductUnits.View',
+    'ProductUnits.Transfer',
+    'ProductUnits.Trace',
+    'OperationalEvents.View',
+    'Simulation.Read',
+    'Simulation.Run',
+    'Reconditioning.Read',
+  ],
+  quality: [
+    'Orders.View',
+    'ProductUnits.View',
+    'ProductUnits.Trace',
+    'Quality.View',
+    'Quality.Record',
+    'Quality.Decide',
+    'OperationalEvents.View',
+    'Simulation.Read',
+    'Simulation.Run',
+    'Reconditioning.Read',
+    'Reconditioning.Write',
+    'Reconditioning.Decide',
+  ],
+  logistics: [
+    'ProductUnits.View',
+    'ProductUnits.Trace',
+    'Racks.View',
+    'Racks.Manage',
+    'Materials.View',
+    'Materials.Manage',
+    'Supports.Manage',
+    'OperationalEvents.View',
+    'Simulation.Read',
+    'Simulation.Run',
+    'Reconditioning.Read',
+  ],
+  client: ['CustomerPortal.View'],
+  demoViewer: [
+    'Orders.View',
+    'ProductUnits.View',
+    'ProductUnits.Trace',
+    'Quality.View',
+    'Racks.View',
+    'Materials.View',
+    'Fiware.View',
+    'Grafana.View',
+    'CustomerPortal.View',
+    'OperationalEvents.View',
+    'Simulation.Read',
+    'Simulation.Run',
+    'Reconditioning.Read',
+  ],
+}
+
+type AuthUserContext = {
+  id: string
+  name: string
+  username: string
+  email?: string
+  role: string
+  roleKey: RoleKey
+  permissions: string[]
+  preferredLanguage?: string
+  preferredTheme?: string
+  department?: string
+  associatedEntity?: { type?: string; id?: number; code?: string }
+  customer?: { id?: number; customerCode?: string; name?: string; defaultPublicTrackingCode?: string }
+  assignedLine?: { id?: number; code?: string; name?: string }
+  assignedSection?: { id?: number; code?: string; name?: string; sectionType?: string }
+}
 
 type UserProfile = {
   id: string
@@ -104,6 +251,74 @@ const defaultUser: UserProfile = {
   active: true,
 }
 
+const defaultDemoUsers: UserProfile[] = [
+  {
+    id: 'operador',
+    name: 'Operador de linha',
+    username: 'operador',
+    email: 'operador@drivetrace.local',
+    role: 'Operador',
+    roleKey: 'operator',
+    organization: 'DRIVOLUTION WP3',
+    project: 'DriveTrace Core',
+    jobTitle: 'Operador de produção',
+    password: 'operador',
+    active: true,
+  },
+  {
+    id: 'supervisor',
+    name: 'Supervisor de produção',
+    username: 'supervisor',
+    email: 'supervisor@drivetrace.local',
+    role: 'Supervisor',
+    roleKey: 'supervisor',
+    organization: 'DRIVOLUTION WP3',
+    project: 'DriveTrace Core',
+    jobTitle: 'Supervisor de produção',
+    password: 'supervisor',
+    active: true,
+  },
+  {
+    id: 'qualidade',
+    name: 'Técnico de qualidade',
+    username: 'qualidade',
+    email: 'qualidade@drivetrace.local',
+    role: 'Técnico de qualidade',
+    roleKey: 'quality',
+    organization: 'DRIVOLUTION WP3',
+    project: 'DriveTrace Core',
+    jobTitle: 'Técnico de qualidade',
+    password: 'qualidade',
+    active: true,
+  },
+  {
+    id: 'logistica',
+    name: 'Técnico de logística',
+    username: 'logistica',
+    email: 'logistica@drivetrace.local',
+    role: 'Logística',
+    roleKey: 'logistics',
+    organization: 'DRIVOLUTION WP3',
+    project: 'DriveTrace Core',
+    jobTitle: 'Técnico de logística',
+    password: 'logistica',
+    active: true,
+  },
+  {
+    id: 'cliente',
+    name: 'Cliente industrial',
+    username: 'cliente',
+    email: 'cliente@drivetrace.local',
+    role: 'Cliente',
+    roleKey: 'client',
+    organization: 'AutoEuropa Demo',
+    project: 'DriveTrace Core',
+    jobTitle: 'Consulta de cliente',
+    password: 'cliente',
+    active: true,
+  },
+]
+
 const users = ref<UserProfile[]>([])
 const user = ref<UserProfile | null>(null)
 const isRegistering = ref(false)
@@ -129,24 +344,19 @@ function buildProfileForm(profile: UserProfile | null) {
 }
 
 function getRoleLabel(roleKey: RoleKey) {
-  if (roleKey === 'admin') return t('Administrator')
-  if (roleKey === 'client') return t('Client')
-  return t('Operator')
+  return t(roleProfiles[roleKey]?.label ?? roleKey)
 }
 
 function buildUserRole(roleKey: RoleKey) {
-  if (roleKey === 'admin') return 'Administrador'
-  if (roleKey === 'client') return 'Cliente'
-  return 'Funcionário/Operador'
+  return roleProfiles[roleKey]?.label ?? roleKey
 }
 
 function defaultJobTitle(roleKey: RoleKey) {
-  if (roleKey === 'admin') return 'Administrador do sistema'
-  if (roleKey === 'client') return 'Cliente'
-  return 'Operador'
+  return roleProfiles[roleKey]?.jobTitle ?? 'Operador'
 }
 
 function persistUsers() {
+  users.value = users.value.filter((profile) => profile.username !== 'demo' && profile.roleKey !== 'demoViewer')
   localStorage.setItem('users', JSON.stringify(users.value))
 }
 
@@ -160,10 +370,15 @@ function setAuthenticatedUser(profile: UserProfile | null) {
   isAuthenticated.value = profile !== null
   persistActiveUser(profile)
   profileForm.value = buildProfileForm(profile)
+  permissionNotice.value = ''
+  if (profile) {
+    activeView.value = homeViewForRole(profile.roleKey)
+  }
   if (!profile) {
     isEditingProfile.value = false
     profileError.value = ''
     profileSuccess.value = ''
+    serverUserContext.value = null
   }
 }
 
@@ -245,8 +460,14 @@ function ensureAdminUser() {
   } catch {
     users.value = []
   }
+  users.value = users.value.filter((profile) => profile.username !== 'demo' && profile.roleKey !== 'demoViewer')
   if (!users.value.some((u) => u.username === defaultUser.username)) {
     users.value.unshift({ ...defaultUser })
+  }
+  for (const demoUser of defaultDemoUsers) {
+    if (!users.value.some((u) => u.username === demoUser.username)) {
+      users.value.push({ ...demoUser })
+    }
   }
   persistUsers()
 }
@@ -255,7 +476,22 @@ function isAdmin(profile = user.value) {
   return profile?.roleKey === 'admin' || profile?.username === 'admin'
 }
 
-const canManageUsers = computed(() => isAdmin())
+const permissionCatalog = ref<PermissionCatalog>({ ...fallbackPermissionCatalog })
+const activePermissions = computed(() => new Set(permissionCatalog.value.activePermissions))
+
+function backendRoleFor(roleKey?: RoleKey) {
+  return roleProfiles[roleKey || 'admin']?.backendRole ?? 'DemoViewer'
+}
+
+function can(permission: string) {
+  if (isAdmin()) return true
+  if (!user.value) return activePermissions.value.has(permission)
+  const localPermissions = frontendRolePermissions[user.value.roleKey] ?? []
+  const catalogMatchesRole = permissionCatalog.value.activeRole === backendRoleFor(user.value.roleKey)
+  return localPermissions.includes(permission) || (catalogMatchesRole && activePermissions.value.has(permission))
+}
+
+const canManageUsers = computed(() => can('Users.Manage'))
 
 function activeAdminCount(nextUsers = users.value) {
   return nextUsers.filter((candidate) => candidate.roleKey === 'admin' && candidate.active !== false).length
@@ -282,6 +518,8 @@ function resetUserForm(clearMessages = true) {
   }
 }
 
+const demoLoginProfiles = computed(() => [defaultUser, ...defaultDemoUsers])
+
 /**
  * Attempt to log the user in using local/demo users.
  */
@@ -296,9 +534,16 @@ function login() {
     loginForm.value.username = ''
     loginForm.value.password = ''
     isRegistering.value = false
+    void loadData(false)
   } else {
     loginError.value = t('Invalid credentials')
   }
+}
+
+function loginAsDemo(profile: UserProfile) {
+  loginForm.value.username = profile.username
+  loginForm.value.password = profile.password
+  login()
 }
 
 function registerUser(autoLogin = false) {
@@ -471,11 +716,18 @@ onMounted(() => {
 // the user menu in the top bar.
 type ViewKey =
   | 'overview'
+  | 'operator'
+  | 'customerOrders'
+  | 'customerNewOrder'
+  | 'customer'
+  | 'traceGraph'
   | 'orders'
   | 'units'
   | 'supports'
   | 'materials'
   | 'quality'
+  | 'reconditioning'
+  | 'simulation'
   | 'racks'
   | 'events'
   | 'fiware'
@@ -484,16 +736,26 @@ type ViewKey =
   | 'settings'
   | 'users'
   | 'parameters'
-  | 'predictions'
 
 const activeView = ref<ViewKey>('overview')
+const traceGraphInitialUnitId = ref<number | null>(null)
+const traceGraphInitialOrderId = ref<number | null>(null)
 const loading = ref(true)
 const apiStatus = ref('Connecting to API...')
 const eventStatus = ref('')
+const permissionNotice = ref('')
+
+const sidebarMinWidth = 220
+const sidebarDefaultWidth = 280
+const sidebarMaxWidth = 380
+const sidebarWidth = ref(getStoredSidebarWidth())
+const sidebarResizing = ref(false)
+const appShellStyle = computed(() => ({ '--sidebar-width': `${sidebarWidth.value}px` }))
 
 const summary = ref<DashboardSummary>(demoDashboard)
 const products = ref<Product[]>(demoProducts)
 const variants = ref<Variant[]>(demoVariants)
+const customers = ref<Customer[]>(demoCustomers)
 const productionLines = ref<ProductionLine[]>(demoProductionLines)
 const productionLineSections = ref<ProductionLineSection[]>(demoProductionLineSections)
 const resources = ref<ResourceRecord[]>(demoResources)
@@ -513,7 +775,6 @@ const quality = ref<QualityRecord[]>(demoQuality)
 const nonconformities = ref<NonconformityRecord[]>(demoNonconformities)
 const reworkRecords = ref<ReworkRecord[]>(demoReworkRecords)
 const scrapRecords = ref<ScrapRecord[]>(demoScrapRecords)
-const predictions = ref<PredictionRecord[]>(demoPredictions)
 const supportHistory = ref<SupportLocalizationHistory[]>(demoSupportLocalizationHistory)
 
 type FiwareEntityRecord = {
@@ -548,6 +809,143 @@ type FiwarePublishResult = {
   errors: string[]
 }
 
+type ReferenceRecord = {
+  id?: number
+  code?: string
+  name?: string
+  type?: string
+  status?: string
+  lineId?: number
+}
+
+type OperationalEventRecord = {
+  id: number
+  eventCode: string
+  eventType: string
+  productUnit?: ReferenceRecord
+  support?: ReferenceRecord
+  manufacturingOrder?: ReferenceRecord
+  fromProductionLine?: ReferenceRecord
+  toProductionLine?: ReferenceRecord
+  fromSection?: ReferenceRecord
+  toSection?: ReferenceRecord
+  rack?: ReferenceRecord
+  reasonCode?: string
+  severity?: string
+  source: string
+  performedByUserId?: string
+  occurredAt: string
+  notes?: string
+  isDemo: boolean
+  label: string
+}
+
+type FlowSectionSummary = {
+  sectionId: number
+  sectionCode: string
+  name: string
+  sectionType: string
+  wipUnits: number
+  activeSupports: number
+  blockedUnits: number
+  isTransferPoint?: boolean
+  allowsLineTransferIn?: boolean
+  allowsLineTransferOut?: boolean
+}
+
+type FlowLineSummary = {
+  productionLineId: number
+  lineCode: string
+  name: string
+  wipUnits: number
+  activeSupports: number
+  blockedUnits: number
+  lastMovementAt?: string
+  sections: FlowSectionSummary[]
+}
+
+type FlowSummary = {
+  generatedAt: string
+  totals: {
+    productionLines: number
+    sections: number
+    activeUnits: number
+    activeSupports: number
+    transferPoints: number
+    transfers: number
+    transfersLast24h: number
+    operationalEvents?: number
+    operationalEventsLast24h?: number
+  }
+  routeStates: Array<{ routeState: string; count: number }>
+  lineSummaries: FlowLineSummary[]
+  recentTransfers: Array<{
+    id: number
+    unit?: ReferenceRecord
+    eventType: string
+    reason: string
+    occurredAt: string
+    fromProductionLine?: ReferenceRecord
+    toProductionLine?: ReferenceRecord
+    fromSection?: ReferenceRecord
+    toSection?: ReferenceRecord
+    toSupport?: ReferenceRecord
+  }>
+  recentOperationalEvents?: OperationalEventRecord[]
+}
+
+type OperatorWorkbench = {
+  generatedAt: string
+  queues: { transferReady: number; blocked: number; rework: number; noSupport: number }
+  transferTargets: Array<{ sectionId: number; sectionCode: string; name: string; sectionType: string; productionLine?: ReferenceRecord; currentWip: number }>
+  units: Array<{
+    id: number
+    unitCode: string
+    status: string
+    qualityStatus: string
+    currentSection?: ReferenceRecord
+    currentProductionLine?: ReferenceRecord
+    currentSupport?: ReferenceRecord
+    routeState: string
+    canTransfer: boolean
+    requiresAttention: boolean
+  }>
+  recentTransfers: FlowSummary['recentTransfers']
+}
+
+type ProductUnitTrace = {
+  unit?: {
+    id: number
+    unitCode: string
+    status: string
+    qualityStatus: string
+    currentSupport?: ReferenceRecord
+    currentSection?: ReferenceRecord
+    currentProductionLine?: ReferenceRecord
+    lastMovementAt?: string
+    routeState?: string
+  }
+  locationHistory?: FlowSummary['recentTransfers']
+  operationalEvents?: OperationalEventRecord[]
+  timeline?: Array<{ eventType: string; occurredAt: string; source: string; label: string; lineCode?: string; sectionCode?: string; supportCode?: string; result?: string }>
+}
+
+type CustomerOrderLookup = {
+  publicTrackingCode?: string
+  customer?: { customerCode?: string; name?: string }
+  order?: { status?: string; plannedQty?: number; scheduledUntil?: string; product?: string; variant?: string }
+  summary?: { units: number; completed: number; inFlow: number; attention: number; lastMovementAt?: string; progressPercent?: number; progressSummary?: string; lastMilestone?: string }
+  units?: Array<{
+    status: string
+    qualityStatus: string
+    customerState?: string
+    currentStage?: string
+    routeState?: string
+    lastMovementAt?: string
+  }>
+  milestones?: Array<{ eventType: string; occurredAt: string; stage?: string }>
+}
+
 function emptyFiwareContext(): FiwareContextSnapshot {
   return {
     timestamp: '',
@@ -562,46 +960,177 @@ function emptyFiwareContext(): FiwareContextSnapshot {
   }
 }
 
+function emptyFlowSummary(): FlowSummary {
+  return {
+    generatedAt: '',
+    totals: { productionLines: 0, sections: 0, activeUnits: 0, activeSupports: 0, transferPoints: 0, transfers: 0, transfersLast24h: 0, operationalEvents: 0, operationalEventsLast24h: 0 },
+    routeStates: [],
+    lineSummaries: [],
+    recentTransfers: [],
+    recentOperationalEvents: [],
+  }
+}
+
+function emptyOperatorWorkbench(): OperatorWorkbench {
+  return {
+    generatedAt: '',
+    queues: { transferReady: 0, blocked: 0, rework: 0, noSupport: 0 },
+    transferTargets: [],
+    units: [],
+    recentTransfers: [],
+  }
+}
+
+function emptyDashboardSummary(): DashboardSummary {
+  return {
+    appName: 'DriveTrace Core',
+    subtitle: 'Sem dados internos para este perfil',
+    generatedAt: '',
+    counts: { openOrders: 0, activeUnits: 0, activeSupports: 0, qualityIssues: 0, rackAssignments: 0 },
+    wipBySection: [],
+    recentEvents: [],
+    qualityAlerts: [],
+  }
+}
+
 const fiwareContext = ref<FiwareContextSnapshot>(emptyFiwareContext())
 const fiwareLoading = ref(false)
 const fiwareActionStatus = ref('')
 const fiwareLastPublish = ref<FiwarePublishResult | null>(null)
+const flowSummary = ref<FlowSummary>(emptyFlowSummary())
+const operatorWorkbench = ref<OperatorWorkbench>(emptyOperatorWorkbench())
+const operationalEvents = ref<OperationalEventRecord[]>([])
+const serverUserContext = ref<AuthUserContext | null>(null)
+const selectedUnitTrace = ref<ProductUnitTrace | null>(null)
+const traceLoading = ref(false)
+const transferStatus = ref('')
+const transferForm = ref({
+  productUnitId: '',
+  toSectionId: '',
+  toSupportId: '',
+  reason: 'Transferência operacional',
+  notes: '',
+  moveCurrentSupport: true,
+})
+const customerLookupCode = ref('TRC-PORTA-001')
+const customerLookup = ref<CustomerOrderLookup | null>(null)
+const customerLookupStatus = ref('')
+const customerOrders = ref<CustomerOrderLookup[]>([])
+const customerOrderStatus = ref('')
+const customerOrderForm = ref({ productId: '', variantId: '', quantity: 1, observations: '' })
+const customerOrderFilter = ref<'all' | 'active' | 'ready' | 'completed'>('all')
+const customerCreatedOrder = ref<CustomerOrderLookup | null>(null)
+const customerProductOptions = computed(() => (products.value.length ? products.value : demoProducts))
+const customerVariantOptions = computed(() => {
+  const source = variants.value.length ? variants.value : demoVariants
+  const productId = Number(customerOrderForm.value.productId)
+  return productId ? source.filter((variant) => variant.productId === productId) : source
+})
+const selectedCustomerProduct = computed(() => customerProductOptions.value.find((product) => product.id === Number(customerOrderForm.value.productId)))
+const selectedCustomerVariant = computed(() => customerVariantOptions.value.find((variant) => variant.id === Number(customerOrderForm.value.variantId)))
+const customerOrderSummary = computed(() => {
+  const counts = { total: customerOrders.value.length, active: 0, production: 0, ready: 0, completed: 0 }
+  for (const order of customerOrders.value) {
+    const bucket = customerOrderBucket(order)
+    if (bucket !== 'completed') counts.active++
+    if (bucket === 'production') counts.production++
+    if (bucket === 'ready') counts.ready++
+    if (bucket === 'completed') counts.completed++
+  }
+  return counts
+})
+const filteredCustomerOrders = computed(() => {
+  if (customerOrderFilter.value === 'all') return customerOrders.value
+  return customerOrders.value.filter((order) => {
+    const bucket = customerOrderBucket(order)
+    if (customerOrderFilter.value === 'active') return bucket !== 'completed'
+    return bucket === customerOrderFilter.value
+  })
+})
+const customerOrderFilters = computed(() => [
+  { key: 'all' as const, label: t('Todas'), count: customerOrderSummary.value.total },
+  { key: 'active' as const, label: t('Ativas'), count: customerOrderSummary.value.active },
+  { key: 'ready' as const, label: t('Prontas'), count: customerOrderSummary.value.ready },
+  { key: 'completed' as const, label: t('Concluídas'), count: customerOrderSummary.value.completed },
+])
+
+watch(() => customerOrderForm.value.productId, () => {
+  if (customerOrderForm.value.variantId && !customerVariantOptions.value.some((variant) => variant.id === Number(customerOrderForm.value.variantId))) {
+    customerOrderForm.value.variantId = ''
+  }
+})
 
 const manualEvent = ref({
   eventType: 'MoveSupport',
   supportCode: 'SUP-005',
-  sectionCode: 'SEC-WELD',
-  productUnitCode: 'DU-005',
+  sectionCode: 'SEC-SOLD',
+  productUnitCode: 'UP-PORTA-005',
   result: 'PASS',
   notes: '',
 })
 
 // The navigation items displayed in the sidebar. Each item has a key to
 // control which view is active, a label (in English) that will be
-// translated using the `t` function, and a simple icon. If you add
-// additional domain views in the future (e.g. users or predictions) include
-// them here.
+// translated using the `t` function, and a simple icon.
 const nav = [
   { key: 'overview', label: 'Dashboard / Line Overview', icon: '⌁' },
+  { key: 'operator', label: 'Operator Workbench', icon: 'OP' },
+  { key: 'customerOrders', label: 'As minhas encomendas', icon: 'EC' },
+  { key: 'customerNewOrder', label: 'Nova encomenda', icon: 'NE' },
+  { key: 'customer', label: 'Customer Lookup', icon: 'CU' },
+  { key: 'traceGraph', label: 'Traceability Map', icon: 'MAP' },
   { key: 'orders', label: 'Manufacturing Orders', icon: 'MO' },
   { key: 'units', label: 'Product Units', icon: 'PU' },
   { key: 'supports', label: 'Supports / WIP Tracking', icon: 'SUP' },
   { key: 'materials', label: 'Materials and Lots', icon: 'LOT' },
   { key: 'quality', label: 'Quality', icon: 'QC' },
+  { key: 'reconditioning', label: 'Recuperação / Recondicionamento', icon: 'RC' },
+  { key: 'simulation', label: 'Simulador de produção', icon: 'SIM' },
   { key: 'racks', label: 'Racks / Post-line Logistics', icon: 'RK' },
   { key: 'events', label: 'Event Playback', icon: 'EV' },
   { key: 'fiware', label: 'FIWARE Context Monitor', icon: 'LD' },
   { key: 'analytics', label: 'Grafana Analytics', icon: 'AN' },
-  { key: 'predictions', label: 'Predictions', icon: 'PR' },
   { key: 'parameters', label: 'System Parameters', icon: 'CFG' },
   { key: 'users', label: 'Users', icon: 'USR' },
 ] as const
 
-const adminOnlyViews = new Set<ViewKey>(['users', 'parameters'])
+const viewPermissions: Partial<Record<ViewKey, string>> = {
+  overview: 'ProductUnits.View',
+  orders: 'Orders.View',
+  units: 'ProductUnits.View',
+  supports: 'ProductUnits.View',
+  materials: 'Materials.View',
+  quality: 'Quality.View',
+  reconditioning: 'Reconditioning.Read',
+  simulation: 'Simulation.Read',
+  racks: 'Racks.View',
+  events: 'OperationalEvents.View',
+  fiware: 'Fiware.View',
+  analytics: 'Grafana.View',
+  users: 'Users.Manage',
+  parameters: 'MasterData.Manage',
+  operator: 'ProductUnits.Transfer',
+  customerOrders: 'CustomerPortal.View',
+  customerNewOrder: 'CustomerPortal.View',
+  customer: 'CustomerPortal.View',
+  traceGraph: 'ProductUnits.View',
+}
+
+const roleHomeViews: Record<RoleKey, ViewKey> = {
+  admin: 'overview',
+  supervisor: 'overview',
+  operator: 'operator',
+  quality: 'reconditioning',
+  logistics: 'racks',
+  client: 'customerOrders',
+  demoViewer: 'overview',
+}
+
 const navGroups = [
-  { key: 'Operation', items: ['overview', 'orders', 'racks'] },
-  { key: 'Traceability', items: ['units', 'supports', 'materials', 'quality'] },
-  { key: 'Monitoring', items: ['events', 'fiware', 'analytics', 'predictions'] },
+  { key: 'Cliente', items: ['customerOrders', 'customerNewOrder', 'customer'] },
+  { key: 'Operation', items: ['overview', 'operator', 'orders', 'racks', 'simulation'] },
+  { key: 'Traceability', items: ['traceGraph', 'units', 'supports', 'materials', 'quality', 'reconditioning', 'customer'] },
+  { key: 'Monitoring', items: ['events', 'fiware', 'analytics'] },
   { key: 'Administration', items: ['parameters', 'users'] },
 ] as const
 function navByGroup(groupKey: typeof navGroups[number]['key']) {
@@ -611,16 +1140,54 @@ function navByGroup(groupKey: typeof navGroups[number]['key']) {
 }
 
 function canShowNav(key: ViewKey) {
-  return !adminOnlyViews.has(key) || canManageUsers.value
+  if (key === 'customerOrders' || key === 'customerNewOrder') return user.value?.roleKey === 'client'
+  if (user.value?.roleKey === 'client') return false
+  const permission = viewPermissions[key]
+  return !permission || can(permission)
+}
+
+function firstAllowedDomainView() {
+  return nav.find((item) => canShowNav(item.key))?.key ?? 'settings'
+}
+
+function homeViewForRole(roleKey?: RoleKey) {
+  const preferred = roleHomeViews[roleKey || user.value?.roleKey || 'demoViewer']
+  return canShowNav(preferred) ? preferred : firstAllowedDomainView()
+}
+
+function ensureAccessibleView() {
+  if (activeView.value === 'profile' || activeView.value === 'settings') return
+  if (!canShowNav(activeView.value)) activeView.value = homeViewForRole(user.value?.roleKey)
+}
+
+function openTraceGraphForUnit(unitId: number) {
+  traceGraphInitialUnitId.value = unitId
+  traceGraphInitialOrderId.value = null
+  activeView.value = 'traceGraph'
+  closeMobileSidebar()
+}
+
+function openTraceGraphForOrder(orderId: number) {
+  traceGraphInitialUnitId.value = null
+  traceGraphInitialOrderId.value = orderId
+  activeView.value = 'traceGraph'
+  closeMobileSidebar()
 }
 
 const viewTitles: Record<ViewKey, string> = {
   overview: 'Dashboard / Line Overview',
+  operator: 'Operator Workbench',
+  customerOrders: 'As minhas encomendas',
+  customerNewOrder: 'Nova encomenda',
+  customer: 'Customer Lookup',
+  traceGraph: 'Traceability Map',
   orders: 'Manufacturing Orders',
   units: 'Product Units',
   supports: 'Supports / WIP Tracking',
   materials: 'Materials and Lots',
   quality: 'Quality',
+  reconditioning: 'Recuperação / Recondicionamento',
+  simulation: 'Simulador de produção',
   racks: 'Racks / Post-line Logistics',
   events: 'Event Playback',
   fiware: 'FIWARE Context Monitor',
@@ -629,17 +1196,23 @@ const viewTitles: Record<ViewKey, string> = {
   settings: 'Settings',
   users: 'Users',
   parameters: 'System Parameters',
-  predictions: 'Predictions',
 }
 
 const activeViewTitle = computed(() => viewTitles[activeView.value])
 const viewSubtitles: Record<ViewKey, string> = {
   overview: 'Line overview subtitle',
+  operator: 'Operator workbench subtitle',
+  customerOrders: 'Customer orders subtitle',
+  customerNewOrder: 'New customer order subtitle',
+  customer: 'Customer lookup subtitle',
+  traceGraph: 'Traceability map subtitle',
   orders: 'Manufacturing orders subtitle',
   units: 'Product units subtitle',
   supports: 'Supports tracking subtitle',
   materials: 'Materials subtitle',
   quality: 'Quality subtitle',
+  reconditioning: 'Recuperação produtiva após não conformidade menor ou recuperável',
+  simulation: 'Simulador operacional da linha de produção',
   racks: 'Racks subtitle',
   events: 'Events subtitle',
   fiware: 'FIWARE subtitle',
@@ -648,7 +1221,6 @@ const viewSubtitles: Record<ViewKey, string> = {
   settings: 'Settings subtitle',
   users: 'Users subtitle',
   parameters: 'Parameters subtitle',
-  predictions: 'Predictions subtitle',
 }
 const activeViewSubtitle = computed(() => viewSubtitles[activeView.value])
 
@@ -659,6 +1231,7 @@ function navIcon(key: ViewKey, icon: string) {
 
 const sectionsById = computed(() => new Map(productionLineSections.value.map((section) => [section.id, section])))
 const supportsById = computed(() => new Map(supports.value.map((support) => [support.id, support])))
+const racksById = computed(() => new Map(racks.value.map((rack) => [rack.id, rack])))
 const unitsById = computed(() => new Map(units.value.map((unit) => [unit.id, unit])))
 
 const activeUnits = computed(() => units.value.filter((unit) => ['Active', 'Blocked', 'Rework'].includes(unit.status)))
@@ -666,11 +1239,15 @@ const blockedUnits = computed(() => units.value.filter((unit) => ['Blocked', 'Re
 const loadedSupports = computed(() => supports.value.filter((support) => support.status === 'Loaded'))
 const racksAvailable = computed(() => racks.value.filter((rack) => rack.status === 'Available'))
 const activeRackAssignments = computed(() => rackSupportAssignments.value.filter((assignment) => !assignment.dateTimeOut))
+const recentRackAssignments = computed(() => [...rackSupportAssignments.value].sort((a, b) => new Date(b.dateTimeIn).getTime() - new Date(a.dateTimeIn).getTime()).slice(0, 8))
 const occupiedRacks = computed(() => new Set(activeRackAssignments.value.map((assignment) => assignment.rackId)).size)
 const postLineSupports = computed(() => supports.value.filter((support) => {
   const section = support.currentSectionId ? sectionsById.value.get(support.currentSectionId) : undefined
   return section?.sectionCode === 'SEC-RACK' || section?.sectionType?.toLowerCase().includes('log')
 }))
+const openNonconformities = computed(() => nonconformities.value.filter((item) => !['Closed', 'Completed'].includes(item.status)))
+const activeReworkRecords = computed(() => reworkRecords.value.filter((item) => !item.endedAt && !['Closed', 'Completed'].includes(item.status)))
+const recentQualityRecords = computed(() => [...quality.value].sort((a, b) => new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime()).slice(0, 8))
 const passQualityCount = computed(() => quality.value.filter((item) => item.result === 'PASS').length)
 const failQualityCount = computed(() => quality.value.filter((item) => item.result === 'FAIL').length)
 const passRate = computed(() => {
@@ -681,19 +1258,113 @@ const topWipSection = computed(() => {
   const sections = summary.value.wipBySection || []
   return sections.length ? [...sections].sort((a, b) => b.productUnits - a.productUnits)[0] : null
 })
-const latestDataUpdate = computed(() => summary.value.generatedAt ? formatDate(summary.value.generatedAt) : '-')
 const fiwareCoherenceOk = computed(() => fiwareContext.value.entityCount === fiwareContext.value.relationalSnapshotCount && fiwareContext.value.brokerReachable)
+const latestDataUpdateShort = computed(() => summary.value.generatedAt ? formatShortTime(summary.value.generatedAt) : '-')
+const apiHealthClass = computed(() => {
+  const value = apiStatus.value.toLowerCase()
+  if (value.includes('offline') || value.includes('error') || value.includes('fail')) return 'api-health-error'
+  if (value.includes('demo') || !fiwareCoherenceOk.value) return 'api-health-warn'
+  return ''
+})
+const apiHealthTitle = computed(() => t(apiStatus.value || 'API status'))
+const currentRoleLabel = computed(() => user.value ? getRoleLabel(user.value.roleKey) : '')
+const roleContextCards = computed(() => {
+  const roleKey = user.value?.roleKey ?? 'demoViewer'
+  if (roleKey === 'operator') {
+    return [
+      { key: 'area', label: 'Área atribuída', value: serverUserContext.value?.assignedSection?.code || 'SEC-SOLD', detail: serverUserContext.value?.assignedLine?.name || 'Linha operacional', tone: 'tone-info' },
+      { key: 'queue', label: 'Fila de execução', value: operatorWorkbench.value.units.length, detail: 'Unidades disponíveis na bancada operacional', tone: 'tone-muted' },
+      { key: 'blocked', label: 'Atenção imediata', value: operatorWorkbench.value.queues.blocked, detail: 'Unidades bloqueadas ou em retrabalho', tone: operatorWorkbench.value.queues.blocked ? 'tone-warning' : 'tone-success' },
+    ]
+  }
+  if (roleKey === 'quality') {
+    return [
+      { key: 'fail', label: 'Resultados reprovados', value: failQualityCount.value, detail: 'Registos reprovados sob análise', tone: failQualityCount.value ? 'tone-warning' : 'tone-success' },
+      { key: 'nc', label: 'Não conformidades abertas', value: openNonconformities.value.length, detail: 'Decisão de qualidade pendente', tone: openNonconformities.value.length ? 'tone-warning' : 'tone-success' },
+      { key: 'rework', label: 'Retrabalhos ativos', value: activeReworkRecords.value.length, detail: 'Unidades em recuperação controlada', tone: activeReworkRecords.value.length ? 'tone-info' : 'tone-muted' },
+    ]
+  }
+  if (roleKey === 'logistics') {
+    return [
+      { key: 'racks', label: 'Racks disponíveis', value: racksAvailable.value.length, detail: 'Capacidade pós-linha livre', tone: 'tone-success' },
+      { key: 'occupied', label: 'Ocupação', value: `${rackUtilization.value}%`, detail: 'Utilização atual de racks', tone: rackUtilization.value > 75 ? 'tone-warning' : 'tone-info' },
+      { key: 'assignments', label: 'Atribuições ativas', value: activeRackAssignments.value.length, detail: 'Suportes ligados a racks', tone: 'tone-muted' },
+    ]
+  }
+  if (roleKey === 'client') {
+    return [
+      { key: 'customer', label: 'Cliente', value: serverUserContext.value?.customer?.customerCode || 'CLI-AUTO-001', detail: serverUserContext.value?.customer?.name || 'Consulta externa', tone: 'tone-info' },
+      { key: 'tracking', label: 'Código público', value: serverUserContext.value?.customer?.defaultPublicTrackingCode || customerLookupCode.value, detail: 'Visível sem dados internos de fábrica', tone: 'tone-success' },
+      { key: 'scope', label: 'Âmbito', value: 'Portal', detail: 'Acesso limitado ao progresso da ordem', tone: 'tone-muted' },
+    ]
+  }
+  if (roleKey === 'demoViewer') {
+    return [
+      { key: 'mode', label: 'Modo', value: 'Leitura', detail: 'Perfil demo sem escrita operacional', tone: 'tone-muted' },
+      { key: 'events', label: 'Eventos', value: recentOperationalEvents.value.length, detail: 'Histórico operacional visível', tone: 'tone-info' },
+      { key: 'analytics', label: 'Analítica', value: can('Grafana.View') ? 'Ativa' : 'Sem acesso', detail: 'Vista de demonstração', tone: 'tone-success' },
+    ]
+  }
+  return [
+    { key: 'role', label: 'Perfil ativo', value: currentRoleLabel.value, detail: serverUserContext.value?.department || 'Operação interna', tone: 'tone-info' },
+    { key: 'users', label: 'Utilizadores ativos', value: activeUserCount.value, detail: 'Perfis locais disponíveis para demonstração', tone: 'tone-muted' },
+    { key: 'orders', label: 'Ordens abertas', value: summary.value.counts.openOrders, detail: 'Seguimento operacional da produção', tone: 'tone-info' },
+  ]
+})
 const activeUserCount = computed(() => users.value.filter((profile) => profile.active).length)
 const administratorCount = computed(() => users.value.filter((profile) => profile.roleKey === 'admin').length)
 const operatorCount = computed(() => users.value.filter((profile) => profile.roleKey === 'operator').length)
 const rackUtilization = computed(() => racks.value.length ? Math.round((occupiedRacks.value / racks.value.length) * 100) : 0)
 const overviewKpis = computed(() => [
   { key: 'orders', label: 'Open orders', value: summary.value.counts.openOrders, detail: 'Orders requiring operational follow-up', tone: 'tone-info' },
-  { key: 'active-units', label: 'Active units', value: summary.value.counts.activeUnits, detail: 'Traceable units currently in flow', tone: 'tone-info' },
+  { key: 'active-units', label: 'Active units', value: flowSummary.value.totals.activeUnits || summary.value.counts.activeUnits, detail: 'Traceable units currently in flow', tone: 'tone-info' },
   { key: 'supports', label: 'Active supports', value: summary.value.counts.activeSupports, detail: 'Supports carrying operational WIP', tone: 'tone-muted' },
   { key: 'attention', label: 'Units requiring attention', value: blockedUnits.value.length, detail: 'Blocked, rework or failed quality units.', tone: blockedUnits.value.length ? 'tone-warning' : 'tone-success' },
   { key: 'fiware', label: 'FIWARE coherence', value: fiwareCoherenceOk.value ? t('OK') : t('Review'), detail: fiwareContext.value.source || 'Orion-LD', tone: fiwareCoherenceOk.value ? 'tone-success' : 'tone-warning' },
 ])
+const flowKpis = computed(() => [
+  { key: 'lines', label: 'Production lines', value: flowSummary.value.totals.productionLines || productionLines.value.length, detail: 'Lines in the current route model', tone: 'tone-info' },
+  { key: 'transfer-points', label: 'Transfer points', value: flowSummary.value.totals.transferPoints, detail: 'Sections allowing controlled line transfer', tone: 'tone-muted' },
+  { key: 'transfers', label: 'Transfers today', value: flowSummary.value.totals.transfersLast24h, detail: `${flowSummary.value.totals.transfers} ${t('total product-unit movements')}`, tone: 'tone-info' },
+])
+const recentOperationalEvents = computed(() => {
+  return (flowSummary.value.recentOperationalEvents?.length ? flowSummary.value.recentOperationalEvents : operationalEvents.value).slice(0, 12)
+})
+const eventKpis = computed(() => [
+  { key: 'events-total', label: 'Eventos operacionais', value: flowSummary.value.totals.operationalEvents ?? operationalEvents.value.length, detail: 'Registo centralizado de eventos', tone: 'tone-info' },
+  { key: 'events-today', label: 'Eventos hoje', value: flowSummary.value.totals.operationalEventsLast24h ?? 0, detail: 'Eventos registados nas últimas 24 horas', tone: 'tone-muted' },
+  { key: 'event-types', label: 'Tipos de evento', value: new Set(operationalEvents.value.map((event) => event.eventType)).size, detail: 'Amostra recente atual', tone: 'tone-success' },
+])
+const transferTargetSections = computed(() => {
+  const targets = productionLineSections.value.filter((section) => section.allowsLineTransferIn || section.isTransferPoint)
+  return targets.length ? targets : productionLineSections.value
+})
+const selectedTransferUnit = computed(() => {
+  const id = Number(transferForm.value.productUnitId)
+  return Number.isFinite(id) ? unitsById.value.get(id) : undefined
+})
+const selectedTraceTimeline = computed(() => selectedUnitTrace.value?.timeline ?? [])
+const flowLineFilter = ref('all')
+const flowTransferFilter = ref<'all' | 'transfers' | 'attention'>('all')
+const flowLineFilterOptions = computed(() => [
+  { value: 'all', label: t('All lines') },
+  ...flowSummary.value.lineSummaries.map((line) => ({ value: String(line.productionLineId), label: `${line.lineCode} · ${line.name}` })),
+])
+const visibleFlowLineSummaries = computed(() => {
+  if (flowLineFilter.value === 'all') return flowSummary.value.lineSummaries
+  return flowSummary.value.lineSummaries.filter((line) => String(line.productionLineId) === flowLineFilter.value)
+})
+const attentionUnitCodes = computed(() => new Set(blockedUnits.value.map((unit) => unit.unitCode)))
+const filteredFlowTransfers = computed(() => {
+  return flowSummary.value.recentTransfers
+    .filter((movement) => flowLineFilter.value === 'all' || [movement.fromProductionLine?.id, movement.toProductionLine?.id].some((id) => String(id) === flowLineFilter.value))
+    .filter((movement) => {
+      if (flowTransferFilter.value === 'all') return true
+      if (flowTransferFilter.value === 'transfers') return isLineTransfer(movement)
+      return isAttentionMovement(movement)
+    })
+    .slice(0, 8)
+})
 const rackKpis = computed(() => [
   { key: 'available', label: 'Available racks', value: racksAvailable.value.length, detail: 'Racks available for post-line storage', tone: 'tone-success' },
   { key: 'occupied', label: 'Occupied racks', value: occupiedRacks.value, detail: `${rackUtilization.value}% ${t('Rack utilization')}`, tone: occupiedRacks.value ? 'tone-info' : 'tone-muted' },
@@ -714,6 +1385,8 @@ const userStatusCards = computed(() => [
 ])
 const analyticsOperationalData = computed(() => ({
   summary: summary.value,
+  flowSummary: flowSummary.value,
+  operatorWorkbench: operatorWorkbench.value,
   orders: orders.value,
   units: units.value,
   supports: supports.value,
@@ -727,10 +1400,10 @@ const analyticsOperationalData = computed(() => ({
 
 function statusClass(status: string | undefined) {
   const value = (status || '').toLowerCase()
-  if (value.includes('pass') || value.includes('active') || value.includes('loaded') || value.includes('progress')) return 'badge-blue'
-  if (value.includes('fail') || value.includes('blocked') || value.includes('scrap')) return 'badge-red'
-  if (value.includes('rework') || value.includes('pending')) return 'badge-amber'
-  if (value.includes('completed') || value.includes('stored')) return 'badge-green'
+  if (value.includes('fail') || value.includes('blocked') || value.includes('scrap') || value.includes('rejected')) return 'badge-red'
+  if (value.includes('rework') || value.includes('pending') || value.includes('recover') || value.includes('recondition')) return 'badge-amber'
+  if (value.includes('transfer') || value.includes('move') || value.includes('active') || value.includes('loaded') || value.includes('progress')) return 'badge-blue'
+  if (value.includes('pass') || value.includes('completed') || value.includes('stored') || value.includes('available')) return 'badge-green'
   return 'badge-gray'
 }
 
@@ -749,6 +1422,49 @@ const showUserMenu = ref(false)
 const mobileSidebarOpen = ref(false)
 let desktopMediaQuery: MediaQueryList | null = null
 
+function clampSidebarWidth(value: number) {
+  return Math.min(sidebarMaxWidth, Math.max(sidebarMinWidth, Math.round(value)))
+}
+
+function getStoredSidebarWidth() {
+  const stored = Number(localStorage.getItem('drivetrace.sidebar.width'))
+  return Number.isFinite(stored) ? clampSidebarWidth(stored) : sidebarDefaultWidth
+}
+
+function persistSidebarWidth(value: number) {
+  localStorage.setItem('drivetrace.sidebar.width', String(clampSidebarWidth(value)))
+}
+
+function startSidebarResize(event: PointerEvent) {
+  if (window.innerWidth < 1024) return
+  event.preventDefault()
+  sidebarResizing.value = true
+  document.body.classList.add('is-sidebar-resizing')
+  window.addEventListener('pointermove', resizeSidebar)
+  window.addEventListener('pointerup', stopSidebarResize)
+  window.addEventListener('pointercancel', stopSidebarResize)
+}
+
+function resizeSidebar(event: PointerEvent) {
+  if (!sidebarResizing.value) return
+  sidebarWidth.value = clampSidebarWidth(event.clientX)
+}
+
+function stopSidebarResize() {
+  if (!sidebarResizing.value) return
+  sidebarResizing.value = false
+  persistSidebarWidth(sidebarWidth.value)
+  document.body.classList.remove('is-sidebar-resizing')
+  window.removeEventListener('pointermove', resizeSidebar)
+  window.removeEventListener('pointerup', stopSidebarResize)
+  window.removeEventListener('pointercancel', stopSidebarResize)
+}
+
+function resetSidebarWidth() {
+  sidebarWidth.value = sidebarDefaultWidth
+  persistSidebarWidth(sidebarWidth.value)
+}
+
 function closeMobileSidebar() {
   mobileSidebarOpen.value = false
 }
@@ -758,6 +1474,14 @@ function toggleMobileSidebar() {
 }
 
 function navigateTo(view: ViewKey) {
+  if (view !== 'profile' && view !== 'settings' && !canShowNav(view)) {
+    permissionNotice.value = 'Não tem permissão para aceder a esta vista.'
+    activeView.value = homeViewForRole(user.value?.roleKey)
+    showUserMenu.value = false
+    closeMobileSidebar()
+    return
+  }
+  permissionNotice.value = ''
   activeView.value = view
   showUserMenu.value = false
   closeMobileSidebar()
@@ -775,6 +1499,10 @@ function supportCode(supportId?: number) {
   return supportId ? supportsById.value.get(supportId)?.supportCode || `SUP ${supportId}` : t('No support')
 }
 
+function rackCode(rackId?: number) {
+  return rackId ? racksById.value.get(rackId)?.rackCode || `RACK ${rackId}` : '-'
+}
+
 function unitCode(unitId?: number) {
   return unitId ? unitsById.value.get(unitId)?.unitCode || `Unit ${unitId}` : t('Unknown unit')
 }
@@ -788,8 +1516,9 @@ function formatDate(value?: string) {
   return new Date(value).toLocaleString(locale.value)
 }
 
-function formatConfidence(value?: number | null) {
-  return typeof value === 'number' ? `${Math.round(value * 100)}%` : '-'
+function formatShortTime(value?: string) {
+  if (!value) return '-'
+  return new Date(value).toLocaleTimeString(locale.value, { hour: '2-digit', minute: '2-digit' })
 }
 
 function normalizeToken(value: string) {
@@ -880,6 +1609,18 @@ function fiwareAttributesPreview(attributes: Record<string, unknown>) {
     .join(' | ')
 }
 
+function fiwareEntityTypeLabel(type: string) {
+  const labels: Record<string, string> = {
+    Support: 'Support',
+    ProductUnit: 'Product unit',
+    Rack: 'Rack',
+    ProductionLine: 'Production line',
+    ProductionLineSection: 'Production line section',
+    Checkpoint: 'Checkpoint',
+  }
+  return t(labels[type] || type)
+}
+
 function fiwareConnectionText() {
   return fiwareContext.value.brokerReachable ? t('Connected') : t('Unavailable')
 }
@@ -923,10 +1664,13 @@ type CrudConfig = {
   title: string
   description?: string
   path: string
+  writePermission?: string
   itemsRef: Ref<EntityRecord[]>
   fields: CrudField[]
   columns: CrudColumn[]
   newItem: () => EntityRecord
+  maxVisibleRows?: number
+  maxTableHeight?: string
   confirmDelete?: boolean
   allowDelete?: boolean
   validate?: (form: EntityRecord, editingId?: number) => string
@@ -968,8 +1712,8 @@ function entityOptions<T extends { id: number }>(items: T[], label: (item: T) =>
 
 const productOptions = () => entityOptions(products.value, (item) => translateMaterialName(item.name), false)
 const variantOptions = () => entityOptions(variants.value, (item) => `${item.variantCode} · ${translateMaterialName(item.name)}`)
+const customerOptions = () => entityOptions(customers.value, (item) => `${item.customerCode} · ${item.name}`)
 const orderOptions = () => entityOptions(orders.value, (item) => item.orderNumber, false)
-const optionalOrderOptions = () => entityOptions(orders.value, (item) => item.orderNumber)
 const processOptions = () => entityOptions(manufacturingProcesses.value, (item) => item.processName, false)
 const productionLineOptions = () => entityOptions(productionLines.value, (item) => `${item.lineCode} · ${item.name}`, false)
 const optionalProductionLineOptions = () => entityOptions(productionLines.value, (item) => `${item.lineCode} · ${item.name}`)
@@ -982,7 +1726,7 @@ const optionalUnitOptions = () => entityOptions(units.value, (item) => item.unit
 const materialOptions = () => entityOptions(materials.value, (item) => translateMaterialName(item.name), false)
 const lotOptions = () => entityOptions(lots.value, (item) => item.lotNumber, false)
 const qualityResultOptions = () => entityOptions(quality.value, (item) => `${unitCode(item.productUnitId)} · ${translateQualityResult(item.result)}`)
-const nonconformityOptions = () => entityOptions(nonconformities.value, (item) => `${unitCode(item.productUnitId)} · ${translateStatus(item.status)}`)
+const nonconformityOptions = () => entityOptions(nonconformities.value, (item) => `${unitCode(item.productUnitId)} · ${displayStatus(item.status)}`)
 const checkpointOptions = () => entityOptions(checkpoints.value, (item) => `${item.checkpointCode} · ${item.name}`)
 const rackOptions = () => entityOptions(racks.value, (item) => item.rackCode, false)
 const phaseOptions = () => entityOptions(manufacturingSectionPhases.value, (item) => item.phaseInfo, false)
@@ -1018,6 +1762,180 @@ function processLabel(id: unknown) {
 function lineLabel(id: unknown) {
   const line = getById(productionLines.value, id)
   return line ? `${line.lineCode} · ${line.name}` : '-'
+}
+
+function customerLabel(id: unknown) {
+  const customer = getById(customers.value, id)
+  return customer ? `${customer.customerCode} · ${customer.name}` : '-'
+}
+
+function referenceLabel(value?: ReferenceRecord | null) {
+  if (!value) return '-'
+  if (value.code && value.name) return `${value.code} · ${value.name}`
+  return value.name || value.code || '-'
+}
+
+const operationalEventDisplayLabels: Record<string, string> = {
+  Assign: 'Atribuição',
+  ASSIGN: 'Atribuição',
+  Blocked: 'Bloqueado',
+  Fail: 'Reprovado',
+  FAIL: 'Reprovado',
+  FiwarePublished: 'Contexto FIWARE publicado',
+  LineTransfer: 'Transferência entre linhas',
+  MoveSupport: 'Movimento de suporte',
+  Movement: 'Movimento',
+  PASS: 'Aprovado',
+  ProductUnitMarkedReconditioned: 'Unidade marcada como recondicionada',
+  QualityRecorded: 'Qualidade registada',
+  RackAssigned: 'Rack atribuída',
+  ReconditioningCompleted: 'Recondicionamento concluído',
+  ReconditioningRejected: 'Recondicionamento rejeitado',
+  ReworkCompleted: 'Retrabalho concluído',
+  ScrapRecorded: 'Sucata registada',
+  SeededCurrentLocation: 'Localização atual demonstrativa',
+  SupportAssigned: 'Suporte atribuído',
+  Transfer: 'Transferência',
+  TRANSFER: 'Transferência',
+  TransferToRack: 'Transferência para rack',
+}
+
+const demoTextDisplayLabels: Record<string, string> = {
+  'Alignment outside nominal tolerance; quality manager decision required.': 'Alinhamento fora da tolerância nominal; decisão do responsável de qualidade necessária.',
+}
+
+function displayStatus(value?: string | null) {
+  if (!value) return '-'
+  return operationalEventDisplayLabels[value] ?? translateStatus(value)
+}
+
+function displayOperationalEvent(value?: string | null) {
+  if (!value) return '-'
+  return operationalEventDisplayLabels[value] ?? translateStatus(value)
+}
+
+function displayDemoText(value?: string | null) {
+  if (!value) return '-'
+  return demoTextDisplayLabels[value] ?? t(value)
+}
+
+function customerOrderBucket(order: CustomerOrderLookup): 'received' | 'planning' | 'production' | 'validation' | 'ready' | 'completed' {
+  const status = `${order.order?.status || ''} ${order.summary?.progressSummary || ''} ${order.summary?.lastMilestone || ''}`.toLowerCase()
+  const progress = order.summary?.progressPercent ?? 0
+  if (status.includes('conclu') || status.includes('completed') || progress >= 100) return 'completed'
+  if (status.includes('pronta') || status.includes('entrega') || status.includes('expedi')) return 'ready'
+  if (status.includes('valida') || status.includes('qualidade') || order.summary?.attention) return 'validation'
+  if (status.includes('produção') || status.includes('producao') || status.includes('in progress') || progress > 0) return 'production'
+  if (status.includes('plane') || status.includes('planned')) return 'planning'
+  return 'received'
+}
+
+function customerOrderState(order: CustomerOrderLookup) {
+  const bucket = customerOrderBucket(order)
+  return {
+    received: t('Pedido recebido'),
+    planning: t('A preparar produção'),
+    production: t('Em produção'),
+    validation: t('Em validação'),
+    ready: t('Pronta'),
+    completed: t('Concluída'),
+  }[bucket]
+}
+
+function customerOrderTone(order: CustomerOrderLookup) {
+  const bucket = customerOrderBucket(order)
+  if (bucket === 'completed' || bucket === 'ready') return 'tone-success'
+  if (bucket === 'validation') return 'tone-warning'
+  if (bucket === 'production') return 'tone-info'
+  return 'tone-muted'
+}
+
+function customerNextStep(order: CustomerOrderLookup) {
+  const bucket = customerOrderBucket(order)
+  return {
+    received: t('Próximo passo: planeamento'),
+    planning: t('Próximo passo: produção'),
+    production: t('Próximo passo: controlo de qualidade'),
+    validation: t('Próximo passo: preparação para entrega'),
+    ready: t('Próximo passo: levantamento ou expedição'),
+    completed: t('Encomenda concluída'),
+  }[bucket]
+}
+
+function customerProgressPercent(order?: CustomerOrderLookup | null) {
+  if (!order) return 0
+  const explicit = order.summary?.progressPercent
+  if (typeof explicit === 'number' && Number.isFinite(explicit)) return Math.min(100, Math.max(0, explicit))
+  return {
+    received: 8,
+    planning: 20,
+    production: 55,
+    validation: 75,
+    ready: 92,
+    completed: 100,
+  }[customerOrderBucket(order)]
+}
+
+function customerProgressSteps(order?: CustomerOrderLookup | null) {
+  const steps = [
+    { key: 'received', label: t('Pedido recebido') },
+    { key: 'planning', label: t('Planeamento') },
+    { key: 'production', label: t('Produção') },
+    { key: 'validation', label: t('Controlo de qualidade') },
+    { key: 'ready', label: t('Pronta') },
+    { key: 'completed', label: t('Concluída') },
+  ]
+  if (!order) return steps.map((step) => ({ ...step, state: 'pending' }))
+  const currentIndex = steps.findIndex((step) => step.key === customerOrderBucket(order))
+  return steps.map((step, index) => ({
+    ...step,
+    state: index < currentIndex ? 'done' : index === currentIndex ? 'current' : 'pending',
+  }))
+}
+
+function movementText(value?: ReferenceRecord | null) {
+  if (!value) return '-'
+  return value.code || value.name || '-'
+}
+
+function isLineTransfer(movement: FlowSummary['recentTransfers'][number]) {
+  const fromLine = movement.fromProductionLine?.id || movement.fromProductionLine?.code
+  const toLine = movement.toProductionLine?.id || movement.toProductionLine?.code
+  const eventText = `${movement.eventType || ''} ${movement.reason || ''}`.toLowerCase()
+  return Boolean(fromLine && toLine && String(fromLine) !== String(toLine)) || eventText.includes('transfer')
+}
+
+function isAttentionMovement(movement: FlowSummary['recentTransfers'][number]) {
+  const unitCode = movement.unit?.code || ''
+  const eventText = `${movement.eventType || ''} ${movement.reason || ''}`.toLowerCase()
+  return attentionUnitCodes.value.has(unitCode) || ['quality', 'rework', 'blocked', 'fail'].some((token) => eventText.includes(token))
+}
+
+function movementBadge(movement: FlowSummary['recentTransfers'][number]) {
+  const eventText = `${movement.eventType || ''} ${movement.reason || ''}`.toLowerCase()
+  if (eventText.includes('rework')) return t('Rework')
+  if (eventText.includes('quality') || eventText.includes('fail')) return t('Quality')
+  if (eventText.includes('paint') || eventText.includes('pintura')) return t('Painting')
+  if (isLineTransfer(movement)) return t('Transfer')
+  return displayOperationalEvent(movement.eventType)
+}
+
+function movementTitle(movement: FlowSummary['recentTransfers'][number]) {
+  const from = `${referenceLabel(movement.fromProductionLine)} / ${referenceLabel(movement.fromSection)}`
+  const to = `${referenceLabel(movement.toProductionLine)} / ${referenceLabel(movement.toSection)}`
+  return `${movement.unit?.code || '-'}: ${from} -> ${to}`
+}
+
+function operationalEventTarget(event: OperationalEventRecord) {
+  return event.productUnit?.code || event.support?.code || event.rack?.code || event.manufacturingOrder?.code || '-'
+}
+
+function operationalEventLocation(event: OperationalEventRecord) {
+  return referenceLabel(event.toSection) !== '-' ? referenceLabel(event.toSection) : referenceLabel(event.toProductionLine)
+}
+
+function operationalEventDetail(event: OperationalEventRecord) {
+  return displayDemoText(event.notes || event.label || displayOperationalEvent(event.eventType))
 }
 
 function checkpointLabel(id: unknown) {
@@ -1057,7 +1975,15 @@ function prepareFormValue(field: CrudField, value: unknown) {
   return value
 }
 
+function canWriteCrud(config: CrudConfig) {
+  return !config.writePermission || can(config.writePermission)
+}
+
 function startCrudAdd(config: CrudConfig) {
+  if (!canWriteCrud(config)) {
+    crudMessages.value[config.key] = { type: 'error', text: 'Não tem permissão para criar ou editar nesta vista.' }
+    return
+  }
   crudForms.value[config.key] = { ...config.newItem() }
   crudEditingId.value[config.key] = null
   crudOpen.value[config.key] = true
@@ -1065,6 +1991,10 @@ function startCrudAdd(config: CrudConfig) {
 }
 
 function startCrudEdit(config: CrudConfig, item: EntityRecord) {
+  if (!canWriteCrud(config)) {
+    crudMessages.value[config.key] = { type: 'error', text: 'Não tem permissão para criar ou editar nesta vista.' }
+    return
+  }
   const form: EntityRecord = {}
   for (const field of config.fields) {
     form[field.key] = prepareFormValue(field, item[field.key])
@@ -1101,6 +2031,10 @@ function payloadFor(config: CrudConfig) {
 }
 
 async function saveCrud(config: CrudConfig) {
+  if (!canWriteCrud(config)) {
+    crudMessages.value[config.key] = { type: 'error', text: 'Não tem permissão para criar ou editar nesta vista.' }
+    return
+  }
   const form = crudForms.value[config.key] || {}
   const editingId = crudEditingId.value[config.key] || undefined
   const requiredError = validateRequiredFields(config, form)
@@ -1127,6 +2061,10 @@ async function saveCrud(config: CrudConfig) {
 }
 
 async function removeCrud(config: CrudConfig, item: EntityRecord) {
+  if (!canWriteCrud(config)) {
+    crudMessages.value[config.key] = { type: 'error', text: 'Não tem permissão para eliminar nesta vista.' }
+    return
+  }
   const blocked = config.canDelete?.(item)
   if (blocked && blocked !== true) {
     crudMessages.value[config.key] = { type: 'error', text: blocked }
@@ -1155,7 +2093,7 @@ function lotQuantityValidation(form: EntityRecord) {
 }
 
 function qualityResultValidation(form: EntityRecord) {
-  return ['PASS', 'FAIL'].includes(String(form.result)) ? '' : 'Result must be PASS or FAIL'
+  return ['PASS', 'FAIL'].includes(String(form.result)) ? '' : 'O resultado deve ser Aprovado ou Reprovado'
 }
 
 function supportDeleteRule(item: EntityRecord) {
@@ -1167,6 +2105,9 @@ function supportDeleteRule(item: EntityRecord) {
 function crudPanelConfig(config: CrudConfig) {
   return {
     ...config,
+    maxVisibleRows: config.maxVisibleRows ?? 7,
+    maxTableHeight: config.maxTableHeight ?? 'clamp(320px, 48vh, 560px)',
+    readOnly: config.writePermission ? !can(config.writePermission) : false,
     items: () => config.itemsRef.value,
   }
 }
@@ -1179,20 +2120,26 @@ const ordersCrud: CrudConfig = {
   key: 'orders',
   title: 'Manufacturing Orders',
   path: '/manufacturing-orders',
+  writePermission: 'Orders.Manage',
   itemsRef: asCrudRef(orders),
   fields: [
     { key: 'orderNumber', label: 'Order number', required: true },
     { key: 'productId', label: 'Product', type: 'select', required: true, options: productOptions },
     { key: 'variantId', label: 'Variant', type: 'select', nullable: true, options: variantOptions },
+    { key: 'customerId', label: 'Customer', type: 'select', nullable: true, options: customerOptions },
     { key: 'manufacturingProcessId', label: 'Manufacturing process', type: 'select', required: true, options: processOptions },
     { key: 'productionLineId', label: 'Production line', type: 'select', required: true, options: productionLineOptions },
     { key: 'plannedQty', label: 'Planned qty', type: 'number', required: true, min: 1 },
     { key: 'scheduledUntil', label: 'Scheduled until', type: 'datetime', required: true },
     { key: 'status', label: 'Status', type: 'select', required: true, options: () => simpleOptions(['Planned', 'In Progress', 'Completed', 'Blocked', 'Cancelled']) },
+    { key: 'customerReference', label: 'Customer reference' },
+    { key: 'publicTrackingCode', label: 'Public tracking code' },
     { key: 'observations', label: 'Observations', type: 'textarea' },
   ],
   columns: [
     { key: 'orderNumber', label: 'Order' },
+    { key: 'publicTrackingCode', label: 'Tracking code' },
+    { key: 'customerId', label: 'Customer', format: (value) => customerLabel(value) },
     { key: 'productId', label: 'Product', format: (value) => productLabel(value) },
     { key: 'variantId', label: 'Variant', format: (value) => variantLabel(value) },
     { key: 'plannedQty', label: 'Planned qty' },
@@ -1203,11 +2150,14 @@ const ordersCrud: CrudConfig = {
     orderNumber: '',
     productId: products.value[0]?.id || '',
     variantId: '',
+    customerId: customers.value[0]?.id || '',
     manufacturingProcessId: manufacturingProcesses.value[0]?.id || '',
     productionLineId: productionLines.value[0]?.id || '',
     plannedQty: 1,
     scheduledUntil: nowInput(),
     status: 'Planned',
+    customerReference: '',
+    publicTrackingCode: '',
     observations: '',
   }),
   validate: plannedQtyValidation,
@@ -1217,11 +2167,12 @@ const unitsCrud: CrudConfig = {
   key: 'units',
   title: 'Product Units',
   path: '/product-units',
+  writePermission: 'MasterData.Manage',
   itemsRef: asCrudRef(units),
   confirmDelete: true,
   fields: [
     { key: 'unitCode', label: 'Unit code', required: true },
-    { key: 'unitType', label: 'Unit type', type: 'select', required: true, options: () => simpleOptions(['Subproduct', 'Final']) },
+    { key: 'unitType', label: 'Unit type', type: 'select', required: true, options: () => simpleOptions(['Subproduto', 'Final']) },
     { key: 'manufacturingOrderId', label: 'Manufacturing order', type: 'select', required: true, options: orderOptions },
     { key: 'variantId', label: 'Variant', type: 'select', nullable: true, options: variantOptions },
     { key: 'parentUnitId', label: 'Parent unit', type: 'select', nullable: true, options: optionalUnitOptions },
@@ -1241,7 +2192,7 @@ const unitsCrud: CrudConfig = {
   ],
   newItem: () => ({
     unitCode: '',
-    unitType: 'Subproduct',
+    unitType: 'Subproduto',
     manufacturingOrderId: orders.value[0]?.id || '',
     variantId: '',
     parentUnitId: '',
@@ -1257,6 +2208,7 @@ const supportsCrud: CrudConfig = {
   key: 'supports',
   title: 'Supports / WIP Tracking',
   path: '/supports',
+  writePermission: 'Supports.Manage',
   itemsRef: asCrudRef(supports),
   confirmDelete: true,
   canDelete: supportDeleteRule,
@@ -1277,6 +2229,7 @@ const rawMaterialsCrud: CrudConfig = {
   key: 'raw-materials',
   title: 'Raw materials',
   path: '/raw-materials',
+  writePermission: 'Materials.Manage',
   itemsRef: asCrudRef(materials),
   fields: [
     { key: 'name', label: 'Name', required: true },
@@ -1293,6 +2246,7 @@ const lotsCrud: CrudConfig = {
   key: 'lot-raw-materials',
   title: 'Material lots',
   path: '/lot-raw-materials',
+  writePermission: 'Materials.Manage',
   itemsRef: asCrudRef(lots),
   fields: [
     { key: 'rawMaterialId', label: 'Material', type: 'select', required: true, options: materialOptions },
@@ -1316,12 +2270,13 @@ const unitMaterialLotUsagesCrud: CrudConfig = {
   key: 'unit-material-lot-usages',
   title: 'Unit material lot usages',
   path: '/unit-material-lot-usages',
+  writePermission: 'Materials.Manage',
   itemsRef: asCrudRef(unitMaterialLotUsages),
   confirmDelete: true,
   fields: [
     { key: 'productUnitId', label: 'Product unit', type: 'select', required: true, options: unitOptions },
     { key: 'lotId', label: 'Lot', type: 'select', required: true, options: lotOptions },
-    { key: 'associationType', label: 'Association type', type: 'select', required: true, options: () => simpleOptions(['Consumed', 'Reserved']) },
+    { key: 'associationType', label: 'Association type', type: 'select', required: true, options: () => simpleOptions(['Consumido', 'Reservado']) },
     { key: 'quantity', label: 'Quantity', type: 'number', required: true, min: 1 },
   ],
   columns: [
@@ -1330,7 +2285,7 @@ const unitMaterialLotUsagesCrud: CrudConfig = {
     { key: 'associationType', label: 'Type', format: (value) => translateStatus(String(value || '')) },
     { key: 'quantity', label: 'Quantity' },
   ],
-  newItem: () => ({ productUnitId: units.value[0]?.id || '', lotId: lots.value[0]?.id || '', associationType: 'Consumed', quantity: 1 }),
+  newItem: () => ({ productUnitId: units.value[0]?.id || '', lotId: lots.value[0]?.id || '', associationType: 'Consumido', quantity: 1 }),
   validate: positiveQuantityValidation,
 }
 
@@ -1338,6 +2293,7 @@ const qualityResultsCrud: CrudConfig = {
   key: 'quality-results',
   title: 'Quality results',
   path: '/quality-results',
+  writePermission: 'Quality.Record',
   itemsRef: asCrudRef(quality),
   confirmDelete: true,
   fields: [
@@ -1362,6 +2318,7 @@ const nonconformitiesCrud: CrudConfig = {
   key: 'nonconformities',
   title: 'Nonconformities',
   path: '/nonconformities',
+  writePermission: 'Quality.Decide',
   itemsRef: asCrudRef(nonconformities),
   allowDelete: false,
   fields: [
@@ -1384,6 +2341,7 @@ const reworkRecordsCrud: CrudConfig = {
   key: 'rework-records',
   title: 'Rework records',
   path: '/rework-records',
+  writePermission: 'Quality.Decide',
   itemsRef: asCrudRef(reworkRecords),
   allowDelete: false,
   fields: [
@@ -1408,6 +2366,7 @@ const scrapRecordsCrud: CrudConfig = {
   title: 'Scrap records',
   description: 'Scrap records are historical evidence and do not delete product units.',
   path: '/scrap-records',
+  writePermission: 'Quality.Decide',
   itemsRef: asCrudRef(scrapRecords),
   allowDelete: false,
   fields: [
@@ -1429,6 +2388,7 @@ const racksCrud: CrudConfig = {
   key: 'racks',
   title: 'Racks / Post-line Logistics',
   path: '/racks',
+  writePermission: 'Racks.Manage',
   itemsRef: asCrudRef(racks),
   fields: [
     { key: 'rackCode', label: 'Rack code', required: true },
@@ -1447,6 +2407,7 @@ const rackAssignmentsCrud: CrudConfig = {
   key: 'rack-support-assignments',
   title: 'Rack support assignments',
   path: '/rack-support-assignments',
+  writePermission: 'Racks.Manage',
   itemsRef: asCrudRef(rackSupportAssignments),
   confirmDelete: true,
   fields: [
@@ -1464,28 +2425,24 @@ const rackAssignmentsCrud: CrudConfig = {
   newItem: () => ({ rackId: racks.value[0]?.id || '', supportId: supports.value[0]?.id || '', dateTimeIn: nowInput(), dateTimeOut: '' }),
 }
 
-const predictionsCrud: CrudConfig = {
-  key: 'predictions',
-  title: 'Predictions',
-  description: 'This section prepares future analysis of completion times, delay risk and productive deviations. In this V1 the data is demonstrative.',
-  path: '/predictions',
-  itemsRef: asCrudRef(predictions),
-  fields: [
-    { key: 'manufacturingOrderId', label: 'Manufacturing order', type: 'select', nullable: true, options: optionalOrderOptions },
-    { key: 'modelVersion', label: 'Model version', required: true },
-    { key: 'modelType', label: 'Model type', required: true },
-    { key: 'lastDate', label: 'Last update', type: 'datetime', nullable: true },
-  ],
-  columns: [
-    { key: 'manufacturingOrderId', label: 'Order', format: (value) => orderLabel(value) },
-    { key: 'modelVersion', label: 'Model' },
-    { key: 'modelType', label: 'Type', format: (value) => t(String(value || '')) },
-    { key: 'lastDate', label: 'Last update', format: formatOptionalDate },
-  ],
-  newItem: () => ({ manufacturingOrderId: orders.value[0]?.id || '', modelVersion: 'future-v1', modelType: 'Placeholder', lastDate: nowInput(), createdAt: new Date().toISOString() }),
-}
-
 const parameterConfigs: CrudConfig[] = [
+  {
+    key: 'customers',
+    title: 'Customers',
+    path: '/customers',
+    itemsRef: asCrudRef(customers),
+    fields: [
+      { key: 'customerCode', label: 'Customer code', required: true },
+      { key: 'name', label: 'Name', required: true },
+      { key: 'contactEmail', label: 'Email' },
+    ],
+    columns: [
+      { key: 'customerCode', label: 'Code' },
+      { key: 'name', label: 'Name' },
+      { key: 'contactEmail', label: 'Email' },
+    ],
+    newItem: () => ({ customerCode: '', name: '', contactEmail: '', isActive: true }),
+  },
   {
     key: 'products',
     title: 'Products',
@@ -1526,12 +2483,16 @@ const parameterConfigs: CrudConfig[] = [
     fields: [
       { key: 'lineCode', label: 'Line code', required: true },
       { key: 'name', label: 'Name', required: true },
+      { key: 'displayOrder', label: 'Display order', type: 'number', min: 0 },
+      { key: 'visualGroup', label: 'Visual group' },
     ],
     columns: [
       { key: 'lineCode', label: 'Code' },
       { key: 'name', label: 'Name' },
+      { key: 'displayOrder', label: 'Display order' },
+      { key: 'visualGroup', label: 'Visual group' },
     ],
-    newItem: () => ({ lineCode: '', name: '' }),
+    newItem: () => ({ lineCode: '', name: '', displayOrder: 0, visualGroup: '' }),
   },
   {
     key: 'production-line-sections',
@@ -1543,14 +2504,19 @@ const parameterConfigs: CrudConfig[] = [
       { key: 'name', label: 'Name', required: true },
       { key: 'sectionType', label: 'Section type', required: true },
       { key: 'lineId', label: 'Production line', type: 'select', nullable: true, options: optionalProductionLineOptions },
+      { key: 'displayOrder', label: 'Display order', type: 'number', min: 0 },
+      { key: 'layoutColumn', label: 'Layout column', type: 'number', min: 0, nullable: true },
+      { key: 'layoutRow', label: 'Layout row', type: 'number', min: 0, nullable: true },
+      { key: 'visualZone', label: 'Visual zone' },
     ],
     columns: [
       { key: 'sectionCode', label: 'Code' },
       { key: 'name', label: 'Name', format: (value) => translateSectionName(String(value || '')) },
       { key: 'sectionType', label: 'Type', format: (value) => translateSectionName(String(value || '')) },
       { key: 'lineId', label: 'Production line', format: (value) => lineLabel(value) },
+      { key: 'displayOrder', label: 'Display order' },
     ],
-    newItem: () => ({ sectionCode: '', name: '', sectionType: '', lineId: productionLines.value[0]?.id || '' }),
+    newItem: () => ({ sectionCode: '', name: '', sectionType: '', lineId: productionLines.value[0]?.id || '', displayOrder: 0, layoutColumn: '', layoutRow: '', visualZone: '' }),
   },
   {
     key: 'manufacturing-processes',
@@ -1654,10 +2620,14 @@ const activeCrudConfigs = computed(() => {
   if (activeView.value === 'materials') return materialCrudConfigs
   if (activeView.value === 'quality') return qualityCrudConfigs
   if (activeView.value === 'racks') return rackCrudConfigs
-  if (activeView.value === 'predictions') return [predictionsCrud]
   if (activeView.value === 'parameters' && canManageUsers.value) return parameterConfigs.filter((config) => config.key === parameterTab.value)
   return []
 })
+
+async function apiGetAllowed<T>(permission: string, path: string, fallback: T, blockedFallback: T): Promise<T> {
+  if (!can(permission)) return blockedFallback
+  return apiGet(path, fallback)
+}
 
 async function loadData(showSpinner = true) {
   if (showSpinner) loading.value = true
@@ -1665,6 +2635,7 @@ async function loadData(showSpinner = true) {
     dashboardData,
     productData,
     variantData,
+    customerData,
     productionLineData,
     sectionData,
     resourceData,
@@ -1684,40 +2655,52 @@ async function loadData(showSpinner = true) {
     nonconformityData,
     reworkData,
     scrapData,
-    predictionData,
     supportHistoryData,
     contextData,
+    flowSummaryData,
+    operatorWorkbenchData,
+    permissionCatalogData,
+    operationalEventsData,
+    authContextData,
+    customerOrdersData,
   ] = await Promise.all([
-    apiGet('/dashboard/summary', demoDashboard),
-    apiGet('/products', demoProducts),
-    apiGet('/variants', demoVariants),
-    apiGet('/production-lines', demoProductionLines),
-    apiGet('/production-line-sections', demoProductionLineSections),
-    apiGet('/resources', demoResources),
-    apiGet('/manufacturing-processes', demoManufacturingProcesses),
-    apiGet('/manufacturing-section-phases', demoManufacturingSectionPhases),
-    apiGet('/manufacturing-process-phases', demoManufacturingProcessPhases),
-    apiGet('/checkpoints', demoCheckpoints),
-    apiGet('/manufacturing-orders', demoOrders),
-    apiGet('/product-units', demoUnits),
-    apiGet('/supports', demoSupports),
-    apiGet('/racks', demoRacks),
-    apiGet('/rack-support-assignments', demoRackSupportAssignments),
-    apiGet('/raw-materials', demoMaterials),
-    apiGet('/lot-raw-materials', demoLots),
-    apiGet('/unit-material-lot-usages', demoUnitMaterialLotUsages),
-    apiGet('/quality-results', demoQuality),
-    apiGet('/nonconformities', demoNonconformities),
-    apiGet('/rework-records', demoReworkRecords),
-    apiGet('/scrap-records', demoScrapRecords),
-    apiGet('/predictions', demoPredictions),
-    apiGet('/support-localization-history', demoSupportLocalizationHistory),
-    apiGet('/fiware/context', emptyFiwareContext()),
+    apiGetAllowed('ProductUnits.View', '/dashboard/summary', demoDashboard, emptyDashboardSummary()),
+    apiGetAllowed('MasterData.Manage', '/products', demoProducts, [] as Product[]),
+    apiGetAllowed('MasterData.Manage', '/variants', demoVariants, [] as Variant[]),
+    apiGetAllowed('MasterData.Manage', '/customers', demoCustomers, [] as Customer[]),
+    apiGetAllowed('MasterData.Manage', '/production-lines', demoProductionLines, [] as ProductionLine[]),
+    apiGetAllowed('MasterData.Manage', '/production-line-sections', demoProductionLineSections, [] as ProductionLineSection[]),
+    apiGetAllowed('MasterData.Manage', '/resources', demoResources, [] as ResourceRecord[]),
+    apiGetAllowed('MasterData.Manage', '/manufacturing-processes', demoManufacturingProcesses, [] as ManufacturingProcess[]),
+    apiGetAllowed('MasterData.Manage', '/manufacturing-section-phases', demoManufacturingSectionPhases, [] as ManufacturingSectionPhase[]),
+    apiGetAllowed('MasterData.Manage', '/manufacturing-process-phases', demoManufacturingProcessPhases, [] as ManufacturingProcessPhase[]),
+    apiGetAllowed('Quality.View', '/checkpoints', demoCheckpoints, [] as Checkpoint[]),
+    apiGetAllowed('Orders.View', '/manufacturing-orders', demoOrders, [] as ManufacturingOrder[]),
+    apiGetAllowed('ProductUnits.View', '/product-units', demoUnits, [] as ProductUnit[]),
+    apiGetAllowed('ProductUnits.View', '/supports', demoSupports, [] as Support[]),
+    apiGetAllowed('Racks.View', '/racks', demoRacks, [] as Rack[]),
+    apiGetAllowed('Racks.View', '/rack-support-assignments', demoRackSupportAssignments, [] as RackSupportAssignment[]),
+    apiGetAllowed('Materials.View', '/raw-materials', demoMaterials, [] as RawMaterial[]),
+    apiGetAllowed('Materials.View', '/lot-raw-materials', demoLots, [] as LotRawMaterial[]),
+    apiGetAllowed('Materials.View', '/unit-material-lot-usages', demoUnitMaterialLotUsages, [] as UnitMaterialLotUsage[]),
+    apiGetAllowed('Quality.View', '/quality-results', demoQuality, [] as QualityRecord[]),
+    apiGetAllowed('Quality.View', '/nonconformities', demoNonconformities, [] as NonconformityRecord[]),
+    apiGetAllowed('Quality.View', '/rework-records', demoReworkRecords, [] as ReworkRecord[]),
+    apiGetAllowed('Quality.View', '/scrap-records', demoScrapRecords, [] as ScrapRecord[]),
+    apiGetAllowed('ProductUnits.Trace', '/support-localization-history', demoSupportLocalizationHistory, [] as SupportLocalizationHistory[]),
+    apiGetAllowed('Fiware.View', '/fiware/context', emptyFiwareContext(), emptyFiwareContext()),
+    apiGetAllowed('ProductUnits.View', '/operations/flow-summary', emptyFlowSummary(), emptyFlowSummary()),
+    apiGetAllowed('ProductUnits.View', '/operator/workbench', emptyOperatorWorkbench(), emptyOperatorWorkbench()),
+    apiGet(`/permissions/catalog?role=${encodeURIComponent(backendRoleFor(user.value?.roleKey))}`, fallbackPermissionCatalog),
+    apiGetAllowed('OperationalEvents.View', '/operational-events/recent?limit=20', [] as OperationalEventRecord[], [] as OperationalEventRecord[]),
+    apiGet('/auth/me', null as AuthUserContext | null),
+    apiGetAllowed('CustomerPortal.View', '/customer/orders', [] as CustomerOrderLookup[], [] as CustomerOrderLookup[]),
   ])
 
   summary.value = dashboardData
   products.value = productData
   variants.value = variantData
+  customers.value = customerData
   productionLines.value = productionLineData
   productionLineSections.value = sectionData
   resources.value = resourceData
@@ -1737,9 +2720,18 @@ async function loadData(showSpinner = true) {
   nonconformities.value = nonconformityData
   reworkRecords.value = reworkData
   scrapRecords.value = scrapData
-  predictions.value = predictionData
   supportHistory.value = supportHistoryData
   fiwareContext.value = normalizeFiwareContextPayload(contextData)
+  flowSummary.value = flowSummaryData
+  operatorWorkbench.value = operatorWorkbenchData
+  permissionCatalog.value = permissionCatalogData
+  operationalEvents.value = operationalEventsData
+  serverUserContext.value = authContextData
+  customerOrders.value = customerOrdersData
+  if (authContextData?.customer?.defaultPublicTrackingCode && user.value?.roleKey === 'client') {
+    customerLookupCode.value = authContextData.customer.defaultPublicTrackingCode
+  }
+  ensureAccessibleView()
   apiStatus.value = dashboardData === demoDashboard ? 'Offline demo data loaded' : 'Connected to DriveTrace Core API'
   if (showSpinner) loading.value = false
 }
@@ -1764,6 +2756,117 @@ async function injectManualEvent() {
   } catch (error) {
     eventStatus.value = t('API unavailable or event rejected. Check Swagger for the exact backend response.')
   }
+}
+
+async function loadUnitTrace(unitId: number) {
+  traceLoading.value = true
+  transferStatus.value = ''
+  try {
+    const response = await api.get<ProductUnitTrace>(`/product-units/${unitId}/trace`)
+    selectedUnitTrace.value = response.data
+  } catch (error) {
+    transferStatus.value = `${t('Could not load product unit trace.')}: ${getApiErrorMessage(error)}`
+  } finally {
+    traceLoading.value = false
+  }
+}
+
+function prepareTransfer(unit: ProductUnit) {
+  transferForm.value = {
+    productUnitId: String(unit.id),
+    toSectionId: String(unit.currentSectionId || transferTargetSections.value[0]?.id || ''),
+    toSupportId: String(unit.currentSupportId || ''),
+    reason: 'Operational transfer',
+    notes: '',
+    moveCurrentSupport: true,
+  }
+  void loadUnitTrace(unit.id)
+}
+
+async function submitUnitTransfer() {
+  const unitId = Number(transferForm.value.productUnitId)
+  const toSectionId = Number(transferForm.value.toSectionId)
+  if (!unitId || !toSectionId) {
+    transferStatus.value = t('Select a product unit and target section.')
+    return
+  }
+
+  transferStatus.value = t('Registering product-unit transfer...')
+  try {
+    await apiPost(`/product-units/${unitId}/transfer`, {
+      toSectionId,
+      toSupportId: transferForm.value.toSupportId ? Number(transferForm.value.toSupportId) : null,
+      reason: transferForm.value.reason,
+      notes: transferForm.value.notes,
+      operatorUserId: user.value?.username || 'dashboard',
+      moveCurrentSupport: transferForm.value.moveCurrentSupport,
+    })
+    transferStatus.value = t('Product-unit transfer registered.')
+    await loadData(false)
+    await loadUnitTrace(unitId)
+  } catch (error) {
+    transferStatus.value = `${t('Transfer rejected')}: ${getApiErrorMessage(error)}`
+  }
+}
+
+async function lookupCustomerOrder() {
+  const code = customerLookupCode.value.trim()
+  if (!code) {
+    customerLookupStatus.value = t('Enter a public tracking code.')
+    customerLookup.value = null
+    return
+  }
+
+  customerLookupStatus.value = t('Searching customer order...')
+  try {
+    const response = await api.get<CustomerOrderLookup>(`/customer/orders/${encodeURIComponent(code)}`)
+    customerLookup.value = response.data
+    customerLookupStatus.value = t('Customer order loaded.')
+  } catch (error) {
+    customerLookup.value = null
+    customerLookupStatus.value = `${t('Customer order not found')}: ${getApiErrorMessage(error)}`
+  }
+}
+
+async function openCustomerOrderDetail(publicTrackingCode?: string) {
+  const code = publicTrackingCode?.trim()
+  if (!code) return
+  customerLookupCode.value = code
+  await lookupCustomerOrder()
+}
+
+async function submitCustomerOrder() {
+  customerOrderStatus.value = ''
+  customerCreatedOrder.value = null
+  const quantity = Number(customerOrderForm.value.quantity)
+  if (!customerOrderForm.value.productId || !customerOrderForm.value.variantId || !Number.isFinite(quantity) || quantity < 1) {
+    customerOrderStatus.value = t('Selecione produto, variante e quantidade antes de submeter.')
+    return
+  }
+
+  try {
+    const created = await apiPost('/customer/orders', {
+      productId: customerOrderForm.value.productId ? Number(customerOrderForm.value.productId) : null,
+      variantId: customerOrderForm.value.variantId ? Number(customerOrderForm.value.variantId) : null,
+      quantity,
+      observations: customerOrderForm.value.observations.trim(),
+    })
+    customerLookup.value = created as CustomerOrderLookup
+    customerCreatedOrder.value = customerLookup.value
+    customerLookupCode.value = customerLookup.value.publicTrackingCode || ''
+    customerOrderStatus.value = `${t('Encomenda criada com sucesso')}. ${t('Código de rastreio')}: ${customerLookup.value.publicTrackingCode || '-'}`
+    customerOrderForm.value = { productId: '', variantId: '', quantity: 1, observations: '' }
+    await loadData(false)
+  } catch (error) {
+    customerOrderStatus.value = `${t('Error saving changes')}: ${getApiErrorMessage(error)}`
+  }
+}
+
+function resetCustomerOrderForm() {
+  customerOrderForm.value = { productId: '', variantId: '', quantity: 1, observations: '' }
+  customerOrderStatus.value = ''
+  customerCreatedOrder.value = null
+  activeView.value = 'customerNewOrder'
 }
 
 async function refreshFiwareContext(showStatus = true) {
@@ -1811,7 +2914,11 @@ function handleDesktopMediaChange(event: MediaQueryListEvent | MediaQueryList) {
 }
 
 onMounted(() => {
-  void loadData()
+  if (isAuthenticated.value) {
+    void loadData()
+  } else {
+    loading.value = false
+  }
   if (typeof window !== 'undefined' && 'matchMedia' in window) {
     desktopMediaQuery = window.matchMedia('(min-width: 1024px)')
     handleDesktopMediaChange(desktopMediaQuery)
@@ -1820,6 +2927,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  stopSidebarResize()
   if (desktopMediaQuery) {
     desktopMediaQuery.removeEventListener('change', handleDesktopMediaChange)
   }
@@ -1845,7 +2953,14 @@ onBeforeUnmount(() => {
           <p v-if="loginError" class="text-red-600 text-sm">{{ loginError }}</p>
           <button type="submit" class="btn-primary w-full">{{ t('Submit') }}</button>
           <button type="button" class="btn-secondary w-full" @click="isRegistering = true; loginError = ''">{{ t('Create account') }}</button>
-          <p class="text-center text-xs text-slate-500 dark:text-slate-400">admin / admin</p>
+          <div class="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900/50">
+            <p class="text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">Contas demo</p>
+            <div class="mt-2 grid grid-cols-2 gap-2">
+              <button v-for="profile in demoLoginProfiles" :key="profile.username" type="button" class="btn-secondary btn-compact justify-center" @click="loginAsDemo(profile)">
+                {{ profile.username }}
+              </button>
+            </div>
+          </div>
         </form>
         <form v-else @submit.prevent="registerUser(false)" class="space-y-4">
           <label class="form-label">{{ t('Name / full name') }}<input v-model="registerForm.name" class="form-input" /></label>
@@ -1855,9 +2970,12 @@ onBeforeUnmount(() => {
           <label class="form-label">{{ t('Confirm password') }}<input v-model="registerForm.confirmPassword" type="password" class="form-input" /></label>
           <label class="form-label">{{ t('Role') }}
             <select v-model="registerForm.roleKey" class="form-input">
-              <option value="operator">{{ t('Operator') }}</option>
-              <option value="client">{{ t('Client') }}</option>
               <option value="admin">{{ t('Administrator') }}</option>
+              <option value="supervisor">{{ t('Supervisor') }}</option>
+              <option value="operator">{{ t('Operator') }}</option>
+              <option value="quality">{{ t('Quality technician') }}</option>
+              <option value="logistics">{{ t('Logistics') }}</option>
+              <option value="client">{{ t('Client') }}</option>
             </select>
           </label>
           <p v-if="registerError" class="text-red-600 text-sm">{{ registerError }}</p>
@@ -1869,14 +2987,13 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- MAIN APPLICATION -->
-    <div v-else class="app-shell">
+    <div v-else class="app-shell" :style="appShellStyle">
       <!-- SIDEBAR -->
       <aside class="app-sidebar" :class="{ 'app-sidebar-open': mobileSidebarOpen }">
         <div class="app-sidebar-brand">
           <button class="app-sidebar-close lg:hidden" type="button" @click="closeMobileSidebar" :aria-label="t('Close navigation')">×</button>
-          <img :src="logoUrl" alt="DRIVOLUTION logo" class="h-11 w-auto max-w-full object-contain" />
+          <img :src="logoUrl" alt="DRIVOLUTION logo" class="h-9 w-auto max-w-full object-contain" />
           <h1>DriveTrace Core</h1>
-          <p>{{ t('Industrial WIP command center') }}</p>
         </div>
         <div class="app-sidebar-nav">
           <nav>
@@ -1898,67 +3015,64 @@ onBeforeUnmount(() => {
         <!-- Quick settings / user info section replacing the academic scope block -->
         <div class="app-sidebar-profile">
           <p class="font-black text-slate-950 dark:text-slate-50">{{ user?.name }}</p>
-          <p class="mt-1 text-xs font-semibold">{{ user ? getRoleLabel(user.roleKey) : '' }} · {{ locale === 'pt-PT' ? t('Portuguese') : t('English') }}</p>
-          <div class="app-sidebar-profile-meta">
-            <p>{{ t('WIP automóvel') }}</p>
-            <p>{{ t('Suporte como âncora intra-linha') }}</p>
-            <p>{{ t('Rack como logística pós-linha') }}</p>
-          </div>
           <div class="app-sidebar-profile-actions">
-            <button class="btn-secondary flex-1" @click="openProfileView">{{ t('Profile') }}</button>
-            <button class="btn-secondary flex-1" @click="navigateTo('settings')">{{ t('Settings') }}</button>
+            <button class="btn-secondary btn-compact" @click="openProfileView">{{ t('Profile') }}</button>
+            <button class="btn-secondary btn-compact" @click="navigateTo('settings')">{{ t('Settings') }}</button>
+            <button class="btn-secondary btn-compact" @click="logout">{{ t('Sign out') }}</button>
           </div>
-          <button class="btn-secondary mt-2 w-full" @click="logout">{{ t('Logout') }}</button>
         </div>
+        <button
+          class="app-sidebar-resize-handle"
+          type="button"
+          :aria-label="t('Resize sidebar')"
+          :title="t('Resize sidebar')"
+          @pointerdown="startSidebarResize"
+          @dblclick="resetSidebarWidth"
+        ></button>
       </aside>
       <button v-if="mobileSidebarOpen" type="button" class="app-sidebar-overlay lg:hidden" @click="closeMobileSidebar" :aria-label="t('Close navigation')"></button>
 
       <main class="app-main">
         <!-- TOP BAR -->
         <header class="app-topbar">
-          <div class="content-shell px-4 py-4 sm:px-5 lg:px-6 xl:px-8">
-            <div class="flex flex-col justify-between gap-4 2xl:flex-row 2xl:items-start">
-              <div class="flex min-w-0 flex-1 items-start gap-3 sm:gap-4">
-                <img :src="logoUrl" alt="DRIVOLUTION logo" class="h-10 w-10 shrink-0 rounded-xl object-contain lg:hidden" />
+          <div class="content-shell px-3 py-2.5 sm:px-4 lg:px-5 xl:px-6">
+            <div class="flex flex-col justify-between gap-2 lg:flex-row lg:items-center">
+              <div class="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+                <button class="icon-button lg:hidden" type="button" @click="toggleMobileSidebar" :aria-label="mobileSidebarOpen ? t('Close navigation') : t('Open navigation')">☰</button>
+                <img :src="logoUrl" alt="DRIVOLUTION logo" class="h-8 w-8 shrink-0 rounded-lg object-contain lg:hidden" />
                 <div class="min-w-0">
-                  <p class="text-xs font-bold uppercase tracking-normal text-drivolution-700 dark:text-drivolution-300">{{ t('WIP Traceability and Monitoring Platform') }}</p>
-                  <h2 class="mt-1 max-w-3xl text-xl font-black leading-tight tracking-normal sm:text-2xl">{{ t(activeViewTitle) }}</h2>
-                  <p class="mt-1 max-w-3xl text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">{{ t(activeViewSubtitle) }}</p>
+                  <h2 class="truncate text-lg font-black leading-tight tracking-normal sm:text-xl">{{ t(activeViewTitle) }}</h2>
+                  <p class="truncate text-xs font-semibold text-slate-600 dark:text-slate-300 sm:text-sm">{{ t(activeViewSubtitle) }}</p>
                 </div>
               </div>
-              <div class="min-w-0 space-y-3 2xl:w-[43rem]">
-                <div class="topbar-status-grid">
-                  <div class="system-pill"><span>{{ t('API status') }}</span><strong>{{ t(apiStatus) }}</strong></div>
-                  <div class="system-pill"><span>{{ t('Last update') }}</span><strong>{{ latestDataUpdate }}</strong></div>
-                  <div class="system-pill"><span>{{ t('Mode') }}</span><strong>{{ theme === 'dark' ? t('Dark') : t('Light') }}</strong></div>
-                  <div class="system-pill"><span>{{ t('Profile') }}</span><strong>{{ user?.username }}</strong></div>
-                </div>
-                <div class="relative flex min-w-0 w-full flex-wrap items-center gap-2 sm:gap-3 2xl:justify-end">
-                  <button class="btn-secondary lg:hidden" type="button" @click="toggleMobileSidebar">{{ mobileSidebarOpen ? t('Close navigation') : t('Open navigation') }}</button>
-                  <button class="btn-primary" @click="() => loadData()">{{ t('Refresh') }}</button>
-                  <select v-model="locale" class="min-w-[8.5rem] rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
-                    <option value="pt-PT">{{ t('Portuguese') }}</option>
-                    <option value="en">{{ t('English') }}</option>
-                  </select>
-                  <button class="btn-secondary" @click="toggleTheme">
-                    {{ theme === 'dark' ? t('Light mode') : t('Dark mode') }}
-                  </button>
-                  <div class="relative sm:ml-auto 2xl:ml-0">
-                    <button @click="showUserMenu = !showUserMenu" class="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200">
+              <div class="topbar-controls">
+                <button class="icon-button" type="button" :title="t('Refresh')" :aria-label="t('Refresh data')" @click="() => loadData()">⟳</button>
+                <span class="text-xs font-bold text-slate-500 dark:text-slate-400">{{ t('Updated') }}: {{ latestDataUpdateShort }}</span>
+                <select v-model="locale" class="compact-select" :aria-label="t('Language')">
+                  <option value="pt-PT">Português</option>
+                  <option value="en">English</option>
+                </select>
+                <button class="icon-button" type="button" :title="theme === 'dark' ? t('Light mode') : t('Dark mode')" :aria-label="theme === 'dark' ? t('Light mode') : t('Dark mode')" @click="toggleTheme">
+                  {{ theme === 'dark' ? '☀' : '☾' }}
+                </button>
+                <span class="api-health" :class="apiHealthClass" :title="apiHealthTitle">
+                  <span class="api-health-dot"></span>
+                  <span>API</span>
+                </span>
+                <div class="relative">
+                  <button @click="showUserMenu = !showUserMenu" class="avatar-button" :title="user?.name">
                     <span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-drivolution-500 text-xs font-black text-white">{{ user?.name.charAt(0) }}</span>
-                    <span class="hidden sm:inline-block">{{ user?.name }}</span>
-                    </button>
-                    <div v-if="showUserMenu" class="absolute right-0 z-30 mt-2 w-44 rounded-lg border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
-                      <button class="w-full rounded-lg px-4 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800" @click="openProfileView">{{ t('Profile') }}</button>
-                      <button class="w-full rounded-lg px-4 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800" @click="navigateTo('settings')">{{ t('Settings') }}</button>
-                      <button class="w-full rounded-lg px-4 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800" @click="logout(); showUserMenu = false">{{ t('Logout') }}</button>
-                    </div>
+                  </button>
+                  <div v-if="showUserMenu" class="absolute right-0 z-30 mt-2 w-44 rounded-lg border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                    <button class="w-full rounded-lg px-4 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800" @click="openProfileView">{{ t('Profile') }}</button>
+                    <button class="w-full rounded-lg px-4 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800" @click="navigateTo('settings')">{{ t('Settings') }}</button>
+                    <button class="w-full rounded-lg px-4 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800" @click="logout(); showUserMenu = false">{{ t('Sign out') }}</button>
                   </div>
                 </div>
               </div>
             </div>
             <!-- Mobile tab navigation -->
-            <div class="mt-4 flex gap-2 overflow-x-auto pb-1 lg:hidden">
+            <div class="mt-2 flex gap-2 overflow-x-auto pb-1 lg:hidden">
               <button v-for="item in nav" v-show="canShowNav(item.key)" :key="item.key" class="mobile-tab" :class="activeView === item.key ? 'mobile-tab-active' : ''" @click="navigateTo(item.key)">
                 {{ t(item.label) }}
               </button>
@@ -1968,8 +3082,29 @@ onBeforeUnmount(() => {
         <!-- MAIN CONTENT -->
         <section class="app-content">
           <div class="content-shell">
+            <p v-if="permissionNotice" class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-100">
+              {{ permissionNotice }}
+            </p>
             <div v-if="loading" class="card p-6 text-center text-slate-600 dark:bg-slate-800 dark:text-slate-200 sm:p-8">{{ t('Loading DriveTrace Core data...') }}</div>
             <template v-else>
+              <div v-if="activeView === 'traceGraph'">
+                <TraceGraphView :initial-product-unit-id="traceGraphInitialUnitId" :initial-order-id="traceGraphInitialOrderId" />
+              </div>
+
+              <div v-if="activeView === 'reconditioning'">
+                <ReconditioningView @open-trace-graph="openTraceGraphForUnit" />
+              </div>
+
+              <div v-if="activeView === 'simulation'">
+                <ProductionSimulatorView
+                  @open-trace-graph-unit="openTraceGraphForUnit"
+                  @open-trace-graph-order="openTraceGraphForOrder"
+                  @open-analytics="navigateTo('analytics')"
+                  @open-fiware="navigateTo('fiware')"
+                  @refresh="loadData(false)"
+                />
+              </div>
+
               <!-- PROFILE VIEW -->
               <div v-if="activeView === 'profile'" class="mx-auto w-full max-w-4xl">
                 <section class="card p-5 sm:p-6 lg:p-8">
@@ -2056,7 +3191,7 @@ onBeforeUnmount(() => {
                   <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
                     <button v-if="isEditingProfile" class="btn-primary sm:order-2" @click="saveProfileChanges">{{ t('Save changes') }}</button>
                     <button v-if="isEditingProfile" class="btn-secondary sm:order-1" @click="cancelProfileEdit">{{ t('Cancel') }}</button>
-                    <button class="btn-secondary sm:order-3" @click="activeView = 'overview'">{{ t('Back to dashboard') }}</button>
+                    <button class="btn-secondary sm:order-3" @click="navigateTo(homeViewForRole(user?.roleKey))">{{ t('Back to dashboard') }}</button>
                     <button class="btn-secondary sm:order-4" @click="activeView = 'settings'">{{ t('Open settings') }}</button>
                   </div>
                 </section>
@@ -2096,9 +3231,9 @@ onBeforeUnmount(() => {
               </div>
               <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-900 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-100">
                 <p>{{ t('Demo/local authentication') }}</p>
-                <p class="mt-1 font-medium">{{ t('The API is not protected by JWT yet. Access control is local to the dashboard for this V1.') }}</p>
+                <p class="mt-1 font-medium">{{ t('The API is not protected by JWT yet. Demo role headers are enforced by backend permission guards in this V1.') }}</p>
               </div>
-              <button class="btn-secondary" @click="activeView = 'overview'">{{ t('Back to dashboard') }}</button>
+              <button class="btn-secondary" @click="navigateTo(homeViewForRole(user?.roleKey))">{{ t('Back to dashboard') }}</button>
             </div>
 
             <!-- CRUD VIEWS -->
@@ -2109,15 +3244,151 @@ onBeforeUnmount(() => {
                 <div class="metric-card"><span>{{ t('Deviations') }}</span><strong>{{ blockedUnits.length }}</strong></div>
               </section>
 
+              <section v-if="activeView === 'units'" class="industrial-panel">
+                <div class="section-heading">
+                  <div>
+                    <p>{{ t('ProductUnit route') }}</p>
+                    <h3>{{ t('Trace and transfer product unit') }}</h3>
+                    <p class="section-description">{{ t('ProductUnit remains the traceability root; supports transport the unit and racks remain post-line logistics.') }}</p>
+                  </div>
+                </div>
+                <div class="mt-5 grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+                  <div class="grid gap-3">
+                    <label class="form-label">{{ t('Product unit') }}
+                      <select v-model="transferForm.productUnitId" class="form-input" @change="transferForm.productUnitId && loadUnitTrace(Number(transferForm.productUnitId))">
+                        <option value="">{{ t('Select option') }}</option>
+                        <option v-for="unit in units" :key="unit.id" :value="unit.id">{{ unit.unitCode }} · {{ translateStatus(String(unit.status)) }}</option>
+                      </select>
+                    </label>
+                    <label class="form-label">{{ t('Target section') }}
+                      <select v-model="transferForm.toSectionId" class="form-input">
+                        <option value="">{{ t('Select option') }}</option>
+                        <option v-for="section in transferTargetSections" :key="section.id" :value="section.id">{{ section.sectionCode }} · {{ translateSectionName(section.name) }} · {{ lineLabel(section.lineId) }}</option>
+                      </select>
+                    </label>
+                    <label class="form-label">{{ t('Target support') }}
+                      <select v-model="transferForm.toSupportId" class="form-input">
+                        <option value="">{{ t('Keep current support') }}</option>
+                        <option v-for="support in supports" :key="support.id" :value="support.id">{{ support.supportCode }} · {{ translateStatus(String(support.status)) }}</option>
+                      </select>
+                    </label>
+                    <label class="form-label">{{ t('Reason') }}<input v-model="transferForm.reason" class="form-input" /></label>
+                    <label class="form-label">{{ t('Notes') }}<textarea v-model="transferForm.notes" class="form-input min-h-20"></textarea></label>
+                    <label class="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                      <input v-model="transferForm.moveCurrentSupport" type="checkbox" class="h-4 w-4 rounded border-slate-300" />
+                      {{ t('Move current support with unit') }}
+                    </label>
+                    <div class="flex flex-wrap gap-2">
+                      <button class="btn-secondary" type="button" :disabled="!selectedTransferUnit" @click="selectedTransferUnit && prepareTransfer(selectedTransferUnit)">{{ t('Load trace') }}</button>
+                      <button class="btn-primary" type="button" :disabled="!can('ProductUnits.Transfer')" @click="submitUnitTransfer">{{ t('Register transfer') }}</button>
+                    </div>
+                    <p v-if="transferStatus" class="rounded-lg border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">{{ transferStatus }}</p>
+                  </div>
+                  <div class="table-shell">
+                    <table class="data-table">
+                      <thead><tr><th>{{ t('Unit') }}</th><th>{{ t('Line') }}</th><th>{{ t('Section') }}</th><th>{{ t('Route state') }}</th><th></th></tr></thead>
+                      <tbody>
+                        <tr v-for="unit in units" :key="unit.id">
+                          <td class="font-bold">{{ unit.unitCode }}</td>
+                          <td>{{ lineLabel(sectionsById.get(Number(unit.currentSectionId))?.lineId) }}</td>
+                          <td>{{ sectionName(unit.currentSectionId) }}</td>
+                          <td><span :class="statusClass(unit.status)">{{ translateStatus(String(unit.status)) }}</span></td>
+                          <td><button class="btn-secondary btn-compact" type="button" @click="prepareTransfer(unit)">{{ t('Trace') }}</button></td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </section>
+
+              <section v-if="activeView === 'units' && selectedUnitTrace" class="industrial-panel">
+                <div class="section-heading">
+                  <div>
+                    <p>{{ t('Product unit trace') }}</p>
+                    <h3>{{ selectedUnitTrace.unit?.unitCode || t('Selected unit') }}</h3>
+                    <p class="section-description">{{ referenceLabel(selectedUnitTrace.unit?.currentProductionLine) }} · {{ referenceLabel(selectedUnitTrace.unit?.currentSection) }} · {{ t(selectedUnitTrace.unit?.routeState || 'No data available') }}</p>
+                  </div>
+                </div>
+                <div class="table-shell compact-table-shell mt-4">
+                  <table class="data-table">
+                    <thead><tr><th>{{ t('Timestamp') }}</th><th>{{ t('Event') }}</th><th>{{ t('Line') }}</th><th>{{ t('Section') }}</th><th>{{ t('Support') }}</th><th>{{ t('Notes') }}</th></tr></thead>
+                    <tbody>
+                      <tr v-for="item in selectedTraceTimeline" :key="`${item.eventType}-${item.occurredAt}-${item.sectionCode || ''}`">
+                        <td>{{ formatDate(item.occurredAt) }}</td>
+                        <td><span class="event-chip" :class="statusClass(item.eventType)">{{ displayOperationalEvent(item.eventType) }}</span></td>
+                        <td>{{ item.lineCode || '-' }}</td>
+                        <td>{{ item.sectionCode || '-' }}</td>
+                        <td>{{ item.supportCode || '-' }}</td>
+                        <td>{{ item.label || item.result || '-' }}</td>
+                      </tr>
+                      <tr v-if="!selectedTraceTimeline.length"><td colspan="6" class="text-center">{{ traceLoading ? t('Loading DriveTrace Core data...') : t('No records found') }}</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
               <section v-if="activeView === 'supports'" class="card overflow-hidden p-5 sm:p-6">
                 <div class="section-heading"><div><p>{{ t('Physical tracking') }}</p><h3>{{ t('Support is the intra-line anchor') }}</h3></div></div>
-                <img :src="lineDoorUrl" alt="Support-based line" class="mt-5 max-h-[22rem] w-full max-w-full rounded-lg border border-slate-200 bg-slate-50 object-contain p-2 dark:border-slate-700 dark:bg-slate-900/30" />
+                <img :src="lineDoorUrl" alt="Support-based line" class="mt-4 max-h-[16rem] w-full max-w-full rounded-lg border border-slate-200 bg-slate-50 object-contain p-2 dark:border-slate-700 dark:bg-slate-900/30" />
               </section>
 
               <section v-if="activeView === 'quality'" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 <div class="metric-card"><span>{{ t('Results') }}</span><strong>{{ quality.length }}</strong></div>
                 <div class="metric-card"><span>{{ t('PASS') }}</span><strong>{{ quality.filter((item) => item.result === 'PASS').length }}</strong></div>
                 <div class="metric-card"><span>{{ t('FAIL') }}</span><strong>{{ quality.filter((item) => item.result === 'FAIL').length }}</strong></div>
+              </section>
+
+              <section v-if="activeView === 'quality'" class="industrial-panel">
+                <div class="section-heading">
+                  <div>
+                    <p>Qualidade</p>
+                    <h3>Painel de decisão de qualidade</h3>
+                    <p class="section-description">Resultados, não conformidades, retrabalho e sucata ficam agregados para o técnico de qualidade.</p>
+                  </div>
+                </div>
+                <div class="mt-5 grid gap-3 sm:grid-cols-3">
+                  <article v-for="card in roleContextCards" :key="card.key" class="decision-card" :class="card.tone">
+                    <span>{{ card.label }}</span>
+                    <strong>{{ card.value }}</strong>
+                    <p>{{ card.detail }}</p>
+                  </article>
+                </div>
+                <div class="mt-5 grid gap-5 xl:grid-cols-2">
+                  <div>
+                    <h4 class="text-sm font-black text-slate-950 dark:text-white">Últimos resultados registados</h4>
+                    <div class="table-shell">
+                      <table class="data-table">
+                        <thead><tr><th>{{ t('Unit') }}</th><th>{{ t('Result') }}</th><th>{{ t('Recorded at') }}</th><th>{{ t('Notes') }}</th></tr></thead>
+                        <tbody>
+                          <tr v-for="record in recentQualityRecords" :key="record.id">
+                            <td class="font-bold">{{ unitCode(record.productUnitId) }}</td>
+                            <td><span :class="statusClass(record.result)">{{ translateQualityResult(record.result) }}</span></td>
+                            <td>{{ formatDate(record.recordedAt) }}</td>
+                            <td class="max-w-[18rem] truncate" :title="record.notes || '-'">{{ record.notes || '-' }}</td>
+                          </tr>
+                          <tr v-if="!recentQualityRecords.length"><td colspan="4" class="text-center">{{ t('No records found') }}</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  <div>
+                    <h4 class="text-sm font-black text-slate-950 dark:text-white">Não conformidades abertas</h4>
+                    <div class="table-shell">
+                      <table class="data-table">
+                        <thead><tr><th>{{ t('Unit') }}</th><th>{{ t('Severity') }}</th><th>{{ t('Status') }}</th><th>{{ t('Description') }}</th></tr></thead>
+                        <tbody>
+                          <tr v-for="item in openNonconformities" :key="item.id">
+                            <td class="font-bold">{{ unitCode(item.productUnitId) }}</td>
+                            <td><span :class="statusClass(item.severity)">{{ displayStatus(item.severity) }}</span></td>
+                            <td><span :class="statusClass(item.status)">{{ displayStatus(item.status) }}</span></td>
+                            <td class="max-w-[18rem] truncate" :title="item.description || '-'">{{ item.description || '-' }}</td>
+                          </tr>
+                          <tr v-if="!openNonconformities.length"><td colspan="4" class="text-center">{{ t('No records found') }}</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
               </section>
 
               <section v-if="activeView === 'racks'" class="space-y-5 lg:space-y-6">
@@ -2138,20 +3409,20 @@ onBeforeUnmount(() => {
                       </div>
                     </div>
                     <div class="ops-hero-visual">
-                      <img :src="lineCarUrl" alt="Automotive production line" class="max-h-[19rem] w-full rounded-lg bg-white object-contain p-2 dark:bg-slate-900" />
+                      <img :src="lineCarUrl" alt="Automotive production line" class="max-h-[14rem] w-full rounded-lg bg-white object-contain p-2 dark:bg-slate-900" />
                       <p class="mt-3 text-xs font-bold uppercase tracking-normal text-slate-500 dark:text-slate-400">{{ t('Rack as post-line logistics') }}</p>
                     </div>
                   </div>
                 </div>
                 <div class="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
-                  <section class="industrial-panel">
-                    <div class="section-heading"><div><p>{{ t('Operational meaning') }}</p><h3>{{ t('What this page controls') }}</h3></div></div>
+                  <details class="industrial-panel compact-help">
+                    <summary class="section-heading"><div><p>{{ t('Operational meaning') }}</p><h3>{{ t('What this page controls') }}</h3></div></summary>
                     <ul class="technical-list">
                       <li>{{ t('Racks aggregate supports after the controlled line.') }}</li>
                       <li>{{ t('Primary traceability remains attached to support and product unit.') }}</li>
                       <li>{{ t('Rack-support association is logistical, temporal and auditable.') }}</li>
                     </ul>
-                  </section>
+                  </details>
                   <section class="industrial-panel">
                     <div class="section-heading"><div><p>{{ t('Operational decision') }}</p><h3>{{ t('Post-line capacity reading') }}</h3></div></div>
                     <div class="decision-grid mt-4">
@@ -2168,11 +3439,37 @@ onBeforeUnmount(() => {
                     </div>
                   </section>
                 </div>
-              </section>
-
-              <section v-if="activeView === 'predictions'" class="card p-5 sm:p-6">
-                <div class="section-heading"><div><p>{{ t('Predictions') }}</p><h3>{{ t('Operational forecasts') }}</h3></div></div>
-                <p class="mt-3 text-slate-600 dark:text-slate-300">{{ t('This section prepares future analysis of completion times, delay risk and productive deviations. In this V1 the data is demonstrative.') }}</p>
+                <section class="industrial-panel">
+                  <div class="section-heading">
+                    <div>
+                      <p>Logística</p>
+                      <h3>Atribuições rack-suporte</h3>
+                      <p class="section-description">A logística gere capacidade pós-linha sem substituir a rastreabilidade por suporte e unidade de produto.</p>
+                    </div>
+                  </div>
+                  <div class="mt-5 grid gap-3 sm:grid-cols-3">
+                    <article v-for="card in roleContextCards" :key="card.key" class="decision-card" :class="card.tone">
+                      <span>{{ card.label }}</span>
+                      <strong>{{ card.value }}</strong>
+                      <p>{{ card.detail }}</p>
+                    </article>
+                  </div>
+                  <div class="table-shell mt-5">
+                    <table class="data-table">
+                      <thead><tr><th>{{ t('Rack') }}</th><th>{{ t('Support') }}</th><th>{{ t('Status') }}</th><th>{{ t('Date/time in') }}</th><th>{{ t('Date/time out') }}</th></tr></thead>
+                      <tbody>
+                        <tr v-for="assignment in recentRackAssignments" :key="assignment.id">
+                          <td class="font-bold">{{ rackCode(assignment.rackId) }}</td>
+                          <td>{{ supportCode(assignment.supportId) }}</td>
+                          <td><span :class="statusClass(assignment.dateTimeOut ? 'Completed' : 'Active')">{{ assignment.dateTimeOut ? t('Completed') : t('Active') }}</span></td>
+                          <td>{{ formatDate(assignment.dateTimeIn) }}</td>
+                          <td>{{ formatDate(assignment.dateTimeOut) }}</td>
+                        </tr>
+                        <tr v-if="!recentRackAssignments.length"><td colspan="5" class="text-center">{{ t('No records found') }}</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
               </section>
 
               <section v-if="activeView === 'parameters' && canManageUsers" class="card p-5 sm:p-6">
@@ -2214,12 +3511,12 @@ onBeforeUnmount(() => {
               <section class="ops-hero">
                 <div class="grid gap-6 xl:grid-cols-[1.1fr_0.9fr] xl:items-center">
                   <div class="min-w-0">
-                    <p class="text-sm font-bold uppercase tracking-normal text-drivolution-700">{{ t('Automotive WIP traceability') }}</p>
-                    <h3 class="mt-3 max-w-3xl text-3xl font-black leading-tight tracking-normal sm:text-4xl">{{ t('Line state command overview') }}</h3>
-                    <p class="mt-4 max-w-2xl text-sm leading-7 text-slate-600 dark:text-slate-300 sm:text-base">
+                    <p class="text-xs font-bold uppercase tracking-normal text-drivolution-700">{{ t('Automotive WIP traceability') }}</p>
+                    <h3 class="mt-2 max-w-3xl text-2xl font-black leading-tight tracking-normal sm:text-3xl">{{ t('Line state command overview') }}</h3>
+                    <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-300">
                       {{ t('Line state command overview description') }}
                     </p>
-                    <div class="mt-6 flex flex-wrap gap-3">
+                    <div class="mt-4 flex flex-wrap gap-2">
                       <span class="domain-pill">{{ t('ProductUnit-centred traceability') }}</span>
                       <span class="domain-pill">{{ t('Support as intra-line anchor') }}</span>
                       <span class="domain-pill">{{ t('Rack as post-line logistics') }}</span>
@@ -2227,7 +3524,7 @@ onBeforeUnmount(() => {
                     </div>
                   </div>
                   <div class="ops-hero-visual">
-                    <img :src="lineDoorUrl" alt="Door production line" class="max-h-[20rem] w-full max-w-xl justify-self-center rounded-lg bg-white object-contain p-2 dark:bg-slate-900" />
+                    <img :src="lineDoorUrl" alt="Door production line" class="max-h-[14rem] w-full max-w-xl justify-self-center rounded-lg bg-white object-contain p-2 dark:bg-slate-900" />
                     <div class="mt-3 grid gap-2 sm:grid-cols-3">
                       <span class="system-pill"><span>{{ t('Highest WIP') }}</span><strong>{{ topWipSection ? translateSectionName(topWipSection.section) : '-' }}</strong></span>
                       <span class="system-pill"><span>{{ t('PASS rate') }}</span><strong>{{ passRate === null ? '-' : `${passRate}%` }}</strong></span>
@@ -2236,12 +3533,85 @@ onBeforeUnmount(() => {
                   </div>
                 </div>
               </section>
+              <section v-if="roleContextCards.length" class="kpi-grid">
+                <article v-for="card in roleContextCards" :key="card.key" class="kpi-card" :class="card.tone">
+                  <span>{{ card.label }}</span>
+                  <strong>{{ card.value }}</strong>
+                  <p>{{ card.detail }}</p>
+                </article>
+              </section>
               <section class="kpi-grid">
                 <article v-for="metric in overviewKpis" :key="metric.key" class="kpi-card" :class="metric.tone">
                   <span>{{ t(metric.label) }}</span>
                   <strong>{{ metric.value }}</strong>
                   <p>{{ t(metric.detail) }}</p>
                 </article>
+              </section>
+              <section v-if="flowSummary.lineSummaries.length" class="industrial-panel">
+                <div class="section-heading">
+                  <div>
+                    <p>{{ t('Flow validation') }}</p>
+                    <h3>{{ t('Multi-line flow') }}</h3>
+                    <p class="section-description">{{ t('Current ProductUnit WIP grouped by production line and section.') }}</p>
+                  </div>
+                </div>
+                <div class="mt-4 grid gap-3 sm:grid-cols-3">
+                  <article v-for="metric in flowKpis" :key="metric.key" class="kpi-card" :class="metric.tone">
+                    <span>{{ t(metric.label) }}</span>
+                    <strong>{{ metric.value }}</strong>
+                    <p>{{ t(metric.detail) }}</p>
+                  </article>
+                </div>
+                <div class="flow-filter-row">
+                  <select v-model="flowLineFilter" class="compact-select" :aria-label="t('Production line')">
+                    <option v-for="option in flowLineFilterOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+                  </select>
+                  <button class="mobile-tab" :class="flowTransferFilter === 'all' ? 'mobile-tab-active' : ''" type="button" @click="flowTransferFilter = 'all'">{{ t('All movements') }}</button>
+                  <button class="mobile-tab" :class="flowTransferFilter === 'transfers' ? 'mobile-tab-active' : ''" type="button" @click="flowTransferFilter = 'transfers'">{{ t('Only transfers') }}</button>
+                  <button class="mobile-tab" :class="flowTransferFilter === 'attention' ? 'mobile-tab-active' : ''" type="button" @click="flowTransferFilter = 'attention'">{{ t('Units in attention') }}</button>
+                </div>
+                <div class="compact-card-list mt-4 grid gap-3 xl:grid-cols-2">
+                  <div v-for="line in visibleFlowLineSummaries" :key="line.productionLineId" class="line-step flex-col items-stretch">
+                    <div class="flex items-center justify-between gap-3">
+                      <div class="min-w-0">
+                        <p class="font-bold text-slate-950 dark:text-slate-50">{{ line.lineCode }} · {{ line.name }}</p>
+                        <p class="text-xs uppercase tracking-normal text-slate-500 dark:text-slate-400">{{ line.activeSupports }} {{ t('supports') }} · {{ line.blockedUnits }} {{ t('attention') }}</p>
+                      </div>
+                      <span class="text-sm font-black text-slate-950 dark:text-slate-50">{{ line.wipUnits }}</span>
+                    </div>
+                    <div class="mt-3 grid gap-2">
+                      <div v-for="section in line.sections" :key="section.sectionId" class="flex items-center gap-3">
+                        <span class="min-w-0 flex-1 truncate text-xs font-semibold text-slate-600 dark:text-slate-300">{{ section.sectionCode }} · {{ translateSectionName(section.name) }}</span>
+                        <div class="h-2 w-24 rounded-full bg-slate-200 dark:bg-slate-700">
+                          <div class="h-2 rounded-full bg-drivolution-500" :style="{ width: `${Math.min(100, section.wipUnits * 34)}%` }"></div>
+                        </div>
+                        <strong class="w-6 text-right text-xs">{{ section.wipUnits }}</strong>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="mt-4 rounded-lg border border-slate-200 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-950/35">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p class="text-xs font-black uppercase tracking-normal text-drivolution-700 dark:text-drivolution-300">{{ t('Latest transfers between lines') }}</p>
+                      <h4 class="text-base font-black text-slate-950 dark:text-white">{{ t('ProductUnit movement audit') }}</h4>
+                    </div>
+                    <span class="text-xs font-bold text-slate-500 dark:text-slate-400">{{ filteredFlowTransfers.length }} {{ t('records') }}</span>
+                  </div>
+                  <div class="flow-list">
+                    <article v-for="movement in filteredFlowTransfers" :key="movement.id" class="flow-transfer-row">
+                      <p class="flow-transfer-main" :title="movementTitle(movement)">
+                        {{ movement.unit?.code || '-' }} · {{ movementText(movement.fromProductionLine) }} / {{ movementText(movement.fromSection) }} -> {{ movementText(movement.toProductionLine) }} / {{ movementText(movement.toSection) }}
+                      </p>
+                      <div class="flow-transfer-meta">
+                        <span :class="statusClass(movement.eventType)">{{ movementBadge(movement) }}</span>
+                        <span>{{ formatShortTime(movement.occurredAt) }}</span>
+                        <span class="max-w-[12rem] truncate" :title="movement.reason || t('No reason recorded')">{{ movement.reason || t('No reason recorded') }}</span>
+                      </div>
+                    </article>
+                    <p v-if="!filteredFlowTransfers.length" class="empty-state"><strong>{{ t('No transfer movements found') }}</strong></p>
+                  </div>
+                </div>
               </section>
               <section class="decision-grid">
                 <article class="decision-card" :class="blockedUnits.length ? 'tone-warning' : 'tone-success'">
@@ -2268,15 +3638,15 @@ onBeforeUnmount(() => {
                       <h3>{{ t('Current WIP by section') }}</h3>
                     </div>
                   </div>
-                  <div class="mt-5 space-y-4">
-                    <div v-for="section in summary.wipBySection" :key="section.sectionCode" class="line-step">
+                  <div class="line-state-list mt-4">
+                    <div v-for="section in summary.wipBySection" :key="section.sectionCode" class="line-step line-state-row">
                       <div class="min-w-0">
                         <p class="font-bold text-slate-950 dark:text-slate-50">{{ translateSectionName(section.section) }}</p>
-                        <p class="text-xs uppercase tracking-normal text-slate-500 dark:text-slate-400">{{ translateSectionName(section.sectionType) }}</p>
+                        <p class="text-xs uppercase tracking-normal text-slate-500 dark:text-slate-400">{{ section.sectionCode }} · {{ translateSectionName(section.sectionType) }}</p>
                       </div>
                       <div class="flex w-full items-center gap-3 sm:min-w-40">
-                        <div class="h-2 flex-1 rounded-full bg-slate-200 dark:bg-slate-700">
-                          <div class="h-2 rounded-full bg-drivolution-500" :style="{ width: `${Math.min(100, section.productUnits * 28)}%` }"></div>
+                        <div class="h-1.5 flex-1 rounded-full bg-slate-200 dark:bg-slate-700">
+                          <div class="h-1.5 rounded-full bg-drivolution-500" :style="{ width: `${Math.min(100, section.productUnits * 28)}%` }"></div>
                         </div>
                         <span class="text-sm font-black text-slate-950 dark:text-slate-50">{{ section.productUnits }}</span>
                       </div>
@@ -2290,14 +3660,14 @@ onBeforeUnmount(() => {
                       <h3>{{ t('Open alerts and deviations') }}</h3>
                     </div>
                   </div>
-                  <div class="mt-5 space-y-3">
+                  <div class="compact-card-list mt-5 space-y-3">
                     <div v-for="alert in summary.qualityAlerts" :key="`${alert.unitCode}-${alert.createdAt}`" class="alert-card">
                       <div class="flex items-center justify-between gap-3">
                         <strong>{{ alert.unitCode }}</strong>
-                        <span :class="statusClass(alert.status)">{{ translateStatus(alert.status) }}</span>
+                        <span :class="statusClass(alert.status)">{{ displayStatus(alert.status) }}</span>
                       </div>
-                      <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">{{ t(alert.description) }}</p>
-                        <p class="mt-2 text-xs font-semibold uppercase tracking-normal text-slate-400 dark:text-slate-500">{{ translateStatus(alert.severity) }}</p>
+                      <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">{{ displayDemoText(alert.description) }}</p>
+                        <p class="mt-2 text-xs font-semibold uppercase tracking-normal text-slate-400 dark:text-slate-500">{{ displayStatus(alert.severity) }}</p>
                     </div>
                     <p v-if="!summary.qualityAlerts.length" class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800 dark:border-emerald-700/70 dark:bg-emerald-900/30 dark:text-emerald-100">{{ t('No blocked units right now.') }}</p>
                   </div>
@@ -2307,23 +3677,320 @@ onBeforeUnmount(() => {
                 <div class="section-heading">
                   <div>
                     <p>{{ t('Recent events') }}</p>
-                    <h3>{{ t('Support movement and audit trail') }}</h3>
+                    <h3>{{ t('Operational event log') }}</h3>
                   </div>
                 </div>
-                <div class="table-shell">
+                <div class="table-shell compact-table-shell">
                   <table class="data-table">
-                    <thead><tr><th>{{ t('Support') }}</th><th>{{ t('Section') }}</th><th>{{ t('Event') }}</th><th>{{ t('Timestamp') }}</th></tr></thead>
+                    <thead><tr><th>{{ t('Event') }}</th><th>{{ t('Target') }}</th><th>{{ t('Location') }}</th><th>{{ t('Timestamp') }}</th></tr></thead>
                     <tbody>
-                      <tr v-for="event in summary.recentEvents" :key="`${event.supportCode}-${event.dateTime}`">
-                        <td>{{ event.supportCode }}</td>
-                        <td>{{ translateSectionName(event.section) }}</td>
-                        <td>{{ translateStatus(event.eventType) }}</td>
-                        <td>{{ formatDate(event.dateTime) }}</td>
+                      <tr v-for="event in recentOperationalEvents.slice(0, 8)" :key="event.eventCode">
+                        <td><span class="event-chip" :class="statusClass(event.eventType)">{{ displayOperationalEvent(event.eventType) }}</span></td>
+                        <td>{{ operationalEventTarget(event) }}</td>
+                        <td>{{ operationalEventLocation(event) }}</td>
+                        <td>{{ formatDate(event.occurredAt) }}</td>
                       </tr>
+                      <tr v-if="!recentOperationalEvents.length"><td colspan="4" class="text-center">{{ t('No records found') }}</td></tr>
                     </tbody>
                   </table>
                 </div>
               </section>
+            </div>
+
+            <!-- OPERATOR WORKBENCH VIEW -->
+            <div v-if="activeView === 'operator'" class="space-y-5 lg:space-y-6">
+              <section class="ops-hero">
+                <div class="section-heading">
+                  <div>
+                    <p>{{ t('Operator workbench') }}</p>
+                    <h3>{{ t('Shift execution queues') }}</h3>
+                    <p class="section-description">{{ t('Actionable ProductUnit queues from the current production flow.') }}</p>
+                  </div>
+                  <button class="btn-primary" type="button" @click="loadData(false)">{{ t('Refresh') }}</button>
+                </div>
+                <div v-if="roleContextCards.length" class="mt-5 grid gap-3 sm:grid-cols-3">
+                  <article v-for="card in roleContextCards" :key="card.key" class="kpi-card" :class="card.tone">
+                    <span>{{ card.label }}</span>
+                    <strong>{{ card.value }}</strong>
+                    <p>{{ card.detail }}</p>
+                  </article>
+                </div>
+                <div class="kpi-grid mt-5">
+                  <article class="kpi-card tone-info"><span>{{ t('Transfer ready') }}</span><strong>{{ operatorWorkbench.queues.transferReady }}</strong><p>{{ t('Units at transfer-capable sections') }}</p></article>
+                  <article class="kpi-card" :class="operatorWorkbench.queues.blocked ? 'tone-warning' : 'tone-success'"><span>{{ t('Blocked') }}</span><strong>{{ operatorWorkbench.queues.blocked }}</strong><p>{{ t('Units requiring attention') }}</p></article>
+                  <article class="kpi-card tone-muted"><span>{{ t('Rework') }}</span><strong>{{ operatorWorkbench.queues.rework }}</strong><p>{{ t('Units currently in rework') }}</p></article>
+                  <article class="kpi-card" :class="operatorWorkbench.queues.noSupport ? 'tone-warning' : 'tone-success'"><span>{{ t('No support') }}</span><strong>{{ operatorWorkbench.queues.noSupport }}</strong><p>{{ t('Units without active transport support') }}</p></article>
+                </div>
+              </section>
+
+              <section class="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+                <div class="industrial-panel">
+                  <div class="section-heading"><div><p>{{ t('Execution') }}</p><h3>{{ t('Active ProductUnit queue') }}</h3></div></div>
+                  <div class="table-shell mt-4">
+                    <table class="data-table">
+                      <thead><tr><th>{{ t('Unit') }}</th><th>{{ t('Line') }}</th><th>{{ t('Section') }}</th><th>{{ t('Status') }}</th><th>{{ t('Route state') }}</th><th></th></tr></thead>
+                      <tbody>
+                        <tr v-for="unit in operatorWorkbench.units" :key="unit.id">
+                          <td class="font-bold">{{ unit.unitCode }}</td>
+                          <td>{{ referenceLabel(unit.currentProductionLine) }}</td>
+                          <td>{{ referenceLabel(unit.currentSection) }}</td>
+                          <td><span :class="statusClass(unit.requiresAttention ? 'Blocked' : unit.status)">{{ displayStatus(unit.status) }}</span></td>
+                          <td>{{ t(unit.routeState) }}</td>
+                          <td>
+                            <button class="btn-secondary btn-compact" type="button" @click="prepareTransfer(unitsById.get(unit.id) || { id: unit.id, unitCode: unit.unitCode, unitType: 'Subproduto', status: unit.status, qualityStatus: unit.qualityStatus, manufacturingOrderId: 0 })">{{ unit.canTransfer ? t('Transfer') : t('Trace') }}</button>
+                          </td>
+                        </tr>
+                        <tr v-if="!operatorWorkbench.units.length"><td colspan="6" class="text-center">{{ t('No operational records are currently available for this table.') }}</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div class="industrial-panel">
+                  <div class="section-heading"><div><p>{{ t('Transfer targets') }}</p><h3>{{ t('Available target sections') }}</h3></div></div>
+                  <div class="compact-card-list mt-4 grid gap-3">
+                    <article v-for="target in operatorWorkbench.transferTargets" :key="target.sectionId" class="decision-card tone-info">
+                      <span>{{ referenceLabel(target.productionLine) }}</span>
+                      <strong>{{ target.sectionCode }}</strong>
+                      <p>{{ translateSectionName(target.name) }} · {{ target.currentWip }} {{ t('units') }}</p>
+                    </article>
+                    <p v-if="!operatorWorkbench.transferTargets.length" class="empty-state"><strong>{{ t('No records found') }}</strong></p>
+                  </div>
+                </div>
+              </section>
+
+              <section class="industrial-panel">
+                <div class="section-heading"><div><p>{{ t('Recent transfers') }}</p><h3>{{ t('ProductUnit movement audit') }}</h3></div></div>
+                <div class="table-shell compact-table-shell mt-4">
+                  <table class="data-table">
+                    <thead><tr><th>{{ t('Unit') }}</th><th>{{ t('From') }}</th><th>{{ t('To') }}</th><th>{{ t('Event') }}</th><th>{{ t('Timestamp') }}</th></tr></thead>
+                    <tbody>
+                      <tr v-for="movement in operatorWorkbench.recentTransfers" :key="movement.id">
+                        <td>{{ movement.unit?.code || '-' }}</td>
+                        <td>{{ referenceLabel(movement.fromSection) }}</td>
+                        <td>{{ referenceLabel(movement.toSection) }}</td>
+                        <td>{{ displayOperationalEvent(movement.eventType) }}</td>
+                        <td>{{ formatDate(movement.occurredAt) }}</td>
+                      </tr>
+                      <tr v-if="!operatorWorkbench.recentTransfers.length"><td colspan="5" class="text-center">{{ t('No records found') }}</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+
+            <!-- CUSTOMER ORDERS VIEW -->
+            <div v-if="activeView === 'customerOrders'" class="space-y-5 lg:space-y-6">
+              <section class="kpi-grid">
+                <article class="kpi-card tone-info"><span>{{ t('Encomendas ativas') }}</span><strong>{{ customerOrderSummary.active }}</strong><p>{{ t('A decorrer ou em preparação') }}</p></article>
+                <article class="kpi-card tone-info"><span>{{ t('Em produção') }}</span><strong>{{ customerOrderSummary.production }}</strong><p>{{ t('Em fabrico neste momento') }}</p></article>
+                <article class="kpi-card tone-success"><span>{{ t('Prontas') }}</span><strong>{{ customerOrderSummary.ready }}</strong><p>{{ t('Preparadas para levantamento') }}</p></article>
+                <article class="kpi-card tone-muted"><span>{{ t('Concluídas') }}</span><strong>{{ customerOrderSummary.completed }}</strong><p>{{ t('Entregues ou finalizadas') }}</p></article>
+              </section>
+
+              <section class="industrial-panel customer-toolbar">
+                <div class="mobile-tabs">
+                  <button v-for="filter in customerOrderFilters" :key="filter.key" class="mobile-tab" :class="customerOrderFilter === filter.key ? 'mobile-tab-active' : ''" type="button" @click="customerOrderFilter = filter.key">
+                    {{ filter.label }} <span class="ml-1 opacity-70">{{ filter.count }}</span>
+                  </button>
+                </div>
+                <div class="flex flex-wrap gap-3">
+                  <button class="btn-primary" type="button" @click="navigateTo('customerNewOrder')">{{ t('Nova encomenda') }}</button>
+                  <button class="btn-secondary" type="button" @click="loadData(false)">{{ t('Atualizar') }}</button>
+                </div>
+              </section>
+
+              <section v-if="!customerOrders.length" class="customer-empty-state">
+                <strong>{{ t('Ainda não existem encomendas.') }}</strong>
+                <p>{{ t('Crie uma nova encomenda para começar.') }}</p>
+                <button class="btn-primary" type="button" @click="navigateTo('customerNewOrder')">{{ t('Nova encomenda') }}</button>
+              </section>
+
+              <section v-else-if="!filteredCustomerOrders.length" class="customer-empty-state">
+                <strong>{{ t('Sem encomendas neste filtro.') }}</strong>
+                <p>{{ t('Escolha outro filtro para ver mais encomendas.') }}</p>
+              </section>
+
+              <section v-else class="grid gap-4 xl:grid-cols-2">
+                <article v-for="order in filteredCustomerOrders" :key="order.publicTrackingCode" class="customer-order-card" :class="customerOrderTone(order)">
+                  <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div class="min-w-0">
+                      <span>{{ t('Código de rastreio') }}</span>
+                      <strong class="break-words">{{ order.publicTrackingCode || '-' }}</strong>
+                    </div>
+                    <span class="customer-state-chip">{{ customerOrderState(order) }}</span>
+                  </div>
+                  <p class="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">{{ order.order?.product || '-' }}<span v-if="order.order?.variant"> · {{ order.order.variant }}</span></p>
+                  <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">{{ t('Data prevista') }}: {{ formatDate(order.order?.scheduledUntil) }}</p>
+                  <div class="mt-4">
+                    <div class="flex items-center justify-between gap-3 text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">
+                      <span>{{ customerOrderState(order) }}</span>
+                      <span>{{ customerProgressPercent(order) }}%</span>
+                    </div>
+                    <div class="mt-2 h-2 rounded-full bg-slate-200 dark:bg-slate-700">
+                      <div class="h-2 rounded-full bg-drivolution-500" :style="{ width: `${customerProgressPercent(order)}%` }"></div>
+                    </div>
+                  </div>
+                  <p class="mt-3 text-sm font-semibold text-slate-600 dark:text-slate-300">{{ customerNextStep(order) }}</p>
+                  <button class="btn-secondary mt-4" type="button" @click="openCustomerOrderDetail(order.publicTrackingCode)">{{ t('Ver detalhe') }}</button>
+                </article>
+              </section>
+
+              <section v-if="customerLookup" class="customer-detail-panel">
+                <div class="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p class="text-xs font-black uppercase tracking-normal text-drivolution-700 dark:text-drivolution-300">{{ t('Detalhe da encomenda') }}</p>
+                    <h3 class="mt-1 text-xl font-black text-slate-950 dark:text-white">{{ customerLookup.order?.product || '-' }}<span v-if="customerLookup.order?.variant"> · {{ customerLookup.order.variant }}</span></h3>
+                    <p class="mt-1 text-sm font-semibold text-slate-600 dark:text-slate-300">{{ t('Código de rastreio') }}: {{ customerLookup.publicTrackingCode }}</p>
+                  </div>
+                  <span class="customer-state-chip">{{ customerOrderState(customerLookup) }}</span>
+                </div>
+                <div class="mt-5 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+                  <article class="customer-status-card">
+                    <span>{{ t('Estado da encomenda') }}</span>
+                    <strong>{{ customerOrderState(customerLookup) }}</strong>
+                    <p>{{ customerNextStep(customerLookup) }}</p>
+                    <div class="mt-4 h-2 rounded-full bg-slate-200 dark:bg-slate-700">
+                      <div class="h-2 rounded-full bg-drivolution-500" :style="{ width: `${customerProgressPercent(customerLookup)}%` }"></div>
+                    </div>
+                  </article>
+                  <div class="customer-progress-steps">
+                    <div v-for="step in customerProgressSteps(customerLookup)" :key="step.key" class="customer-progress-step" :class="`customer-progress-step-${step.state}`">
+                      <span></span>
+                      <p>{{ step.label }}</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="mt-5 grid gap-4 md:grid-cols-3">
+                  <article class="customer-info-tile"><span>{{ t('Estado atual') }}</span><strong>{{ customerOrderState(customerLookup) }}</strong></article>
+                  <article class="customer-info-tile"><span>{{ t('Data prevista') }}</span><strong>{{ formatDate(customerLookup.order?.scheduledUntil) }}</strong></article>
+                  <article class="customer-info-tile"><span>{{ t('Atualização mais recente') }}</span><strong>{{ customerLookup.summary?.lastMilestone || customerOrderState(customerLookup) }}</strong></article>
+                </div>
+                <div class="mt-5">
+                  <p class="text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">{{ t('Histórico resumido') }}</p>
+                  <ol class="customer-history-list mt-3">
+                    <li v-for="milestone in (customerLookup.milestones || []).slice(-4)" :key="`${milestone.occurredAt}-${milestone.eventType}`">
+                      <span>{{ formatDate(milestone.occurredAt) }}</span>
+                      <strong>{{ milestone.eventType }}</strong>
+                    </li>
+                    <li v-if="!customerLookup.milestones?.length">
+                      <span>{{ t('Pedido recebido') }}</span>
+                      <strong>{{ t('A encomenda foi registada.') }}</strong>
+                    </li>
+                  </ol>
+                </div>
+              </section>
+            </div>
+
+            <!-- NEW CUSTOMER ORDER VIEW -->
+            <div v-if="activeView === 'customerNewOrder'" class="space-y-5 lg:space-y-6">
+              <section v-if="customerCreatedOrder" class="customer-confirmation">
+                <span>{{ t('Encomenda criada com sucesso') }}</span>
+                <strong>{{ t('Código de rastreio') }}: {{ customerCreatedOrder.publicTrackingCode }}</strong>
+                <p>{{ t('A encomenda será registada como pedido recebido.') }}</p>
+                <div class="mt-5 flex flex-wrap justify-center gap-3">
+                  <button class="btn-primary" type="button" @click="openCustomerOrderDetail(customerCreatedOrder.publicTrackingCode); activeView = 'customerOrders'">{{ t('Ver encomenda') }}</button>
+                  <button class="btn-secondary" type="button" @click="resetCustomerOrderForm">{{ t('Criar nova encomenda') }}</button>
+                  <button class="btn-secondary" type="button" @click="navigateTo('customerOrders')">{{ t('As minhas encomendas') }}</button>
+                </div>
+              </section>
+              <section v-else class="customer-order-form-layout">
+                <form class="industrial-panel customer-order-form" @submit.prevent="submitCustomerOrder">
+                  <label class="form-label">{{ t('Produto') }}
+                    <select v-model="customerOrderForm.productId" class="form-input">
+                      <option value="">{{ t('Selecione produto') }}</option>
+                      <option v-for="product in customerProductOptions" :key="product.id" :value="product.id">{{ translateMaterialName(product.name) }}</option>
+                    </select>
+                  </label>
+                  <label class="form-label">{{ t('Variante') }}
+                    <select v-model="customerOrderForm.variantId" class="form-input">
+                      <option value="">{{ t('Selecione variante') }}</option>
+                      <option v-for="variant in customerVariantOptions" :key="variant.id" :value="variant.id">{{ variant.name }}</option>
+                    </select>
+                  </label>
+                  <label class="form-label">{{ t('Quantidade') }}<input v-model.number="customerOrderForm.quantity" min="1" max="99" type="number" class="form-input" /></label>
+                  <label class="form-label">{{ t('Observações para a encomenda') }}<textarea v-model="customerOrderForm.observations" class="form-input min-h-28"></textarea></label>
+                  <p v-if="customerOrderStatus" class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-100">{{ customerOrderStatus }}</p>
+                </form>
+                <aside class="customer-order-preview">
+                  <span>{{ t('Resumo da encomenda') }}</span>
+                  <strong>{{ selectedCustomerProduct ? translateMaterialName(selectedCustomerProduct.name) : t('Produto por escolher') }}</strong>
+                  <dl>
+                    <div><dt>{{ t('Variante') }}</dt><dd>{{ selectedCustomerVariant?.name || t('Por escolher') }}</dd></div>
+                    <div><dt>{{ t('Quantidade') }}</dt><dd>{{ customerOrderForm.quantity || 0 }}</dd></div>
+                    <div><dt>{{ t('Estado inicial') }}</dt><dd>{{ t('Pedido recebido') }}</dd></div>
+                  </dl>
+                  <p>{{ t('A encomenda será registada como pedido recebido.') }}</p>
+                  <button class="btn-primary w-full" type="button" @click="submitCustomerOrder">{{ t('Submeter encomenda') }}</button>
+                </aside>
+              </section>
+            </div>
+
+            <!-- CUSTOMER LOOKUP VIEW -->
+            <div v-if="activeView === 'customer'" class="space-y-5 lg:space-y-6">
+              <section class="ops-hero">
+                <div class="section-heading">
+                  <div>
+                    <p>{{ t('Customer tracking') }}</p>
+                    <h3>{{ t('Customer order lookup') }}</h3>
+                    <p class="section-description">{{ t('Public tracking view for manufacturing order progress and unit milestones.') }}</p>
+                  </div>
+                </div>
+                <form class="mt-5 flex flex-col gap-3 sm:flex-row" @submit.prevent="lookupCustomerOrder">
+                  <label class="form-label flex-1">{{ t('Public tracking code') }}<input v-model="customerLookupCode" class="form-input" /></label>
+                  <button class="btn-primary self-end" type="submit">{{ t('Search') }}</button>
+                </form>
+                <div v-if="roleContextCards.length" class="mt-5 grid gap-3 sm:grid-cols-3">
+                  <article v-for="card in roleContextCards" :key="card.key" class="kpi-card" :class="card.tone">
+                    <span>{{ card.label }}</span>
+                    <strong>{{ card.value }}</strong>
+                    <p>{{ card.detail }}</p>
+                  </article>
+                </div>
+                <p v-if="customerLookupStatus" class="mt-4 rounded-lg border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">{{ customerLookupStatus }}</p>
+              </section>
+
+              <template v-if="customerLookup">
+                <section class="kpi-grid">
+                  <article class="kpi-card tone-info"><span>{{ t('Código público de rastreio') }}</span><strong>{{ customerLookup.publicTrackingCode || '-' }}</strong><p>{{ customerLookup.customer?.name || '-' }}</p></article>
+                  <article class="kpi-card tone-muted"><span>{{ t('Status') }}</span><strong>{{ translateStatus(customerLookup.order?.status || '-') }}</strong><p>{{ customerLookup.publicTrackingCode }}</p></article>
+                  <article class="kpi-card tone-info"><span>{{ t('Units') }}</span><strong>{{ customerLookup.summary?.units ?? 0 }}</strong><p>{{ customerLookup.summary?.inFlow ?? 0 }} {{ t('in flow') }}</p></article>
+                  <article class="kpi-card" :class="customerLookup.summary?.attention ? 'tone-warning' : 'tone-success'"><span>{{ t('Attention') }}</span><strong>{{ customerLookup.summary?.attention ?? 0 }}</strong><p>{{ t('Customer-visible quality and route state') }}</p></article>
+                </section>
+
+                <section class="industrial-panel">
+                  <div class="section-heading"><div><p>{{ t('Unit progress') }}</p><h3>{{ t('ProductUnit customer status') }}</h3></div></div>
+                  <div class="table-shell mt-4">
+                    <table class="data-table">
+                      <thead><tr><th>{{ t('Stage') }}</th><th>{{ t('Status') }}</th><th>{{ t('Quality') }}</th><th>{{ t('Last movement') }}</th></tr></thead>
+                      <tbody>
+                        <tr v-for="(unit, index) in customerLookup.units || []" :key="`${customerLookup.publicTrackingCode}-${index}`">
+                          <td>{{ unit.currentStage || '-' }}</td>
+                          <td><span :class="statusClass(unit.status)">{{ displayStatus(unit.customerState || unit.status) }}</span></td>
+                          <td>{{ unit.qualityStatus || '-' }}</td>
+                          <td>{{ formatDate(unit.lastMovementAt) }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+
+                <section class="industrial-panel">
+                  <div class="section-heading"><div><p>{{ t('Milestones') }}</p><h3>{{ t('Customer movement timeline') }}</h3></div></div>
+                  <div class="table-shell mt-4">
+                    <table class="data-table">
+                      <thead><tr><th>{{ t('Timestamp') }}</th><th>{{ t('Último marco') }}</th><th>{{ t('Stage') }}</th></tr></thead>
+                      <tbody>
+                        <tr v-for="milestone in customerLookup.milestones || []" :key="`${milestone.occurredAt}-${milestone.eventType}`">
+                          <td>{{ formatDate(milestone.occurredAt) }}</td>
+                          <td>{{ milestone.eventType }}</td>
+                          <td>{{ milestone.stage || '-' }}</td>
+                        </tr>
+                        <tr v-if="!customerLookup.milestones?.length"><td colspan="3" class="text-center">{{ t('No records found') }}</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              </template>
             </div>
 
             <!-- ORDERS VIEW -->
@@ -2361,7 +4028,7 @@ onBeforeUnmount(() => {
                       <tr v-for="unit in units" :key="unit.id">
                         <td class="font-bold">{{ unit.unitCode }}</td>
                         <td>{{ translateUnitType(unit.unitType) }}</td>
-                        <td><span :class="statusClass(unit.status)">{{ translateStatus(unit.status) }}</span></td>
+                        <td><span :class="statusClass(unit.status)">{{ displayStatus(unit.status) }}</span></td>
                         <td><span :class="statusClass(unit.qualityStatus)">{{ translateQualityResult(unit.qualityStatus) }}</span></td>
                         <td>{{ supportCode(unit.currentSupportId) }}</td>
                         <td>{{ sectionName(unit.currentSectionId) }}</td>
@@ -2464,10 +4131,17 @@ onBeforeUnmount(() => {
 
             <!-- EVENTS VIEW -->
             <div v-if="activeView === 'events'" class="grid gap-5 xl:grid-cols-2">
+              <section class="xl:col-span-2 kpi-grid">
+                <article v-for="metric in eventKpis" :key="metric.key" class="kpi-card" :class="metric.tone">
+                  <span>{{ t(metric.label) }}</span>
+                  <strong>{{ metric.value }}</strong>
+                  <p>{{ t(metric.detail) }}</p>
+                </article>
+              </section>
               <section class="card p-5 sm:p-6">
                 <div class="section-heading"><div><p>{{ t('Simulation') }}</p><h3>{{ t('Execute event playback') }}</h3></div></div>
                 <p class="mt-3 text-slate-600 dark:text-slate-300">{{ t('Advances supports across the nominal door production line and updates the audit trail.') }}</p>
-                <button class="btn-primary mt-5" @click="executePlayback">{{ t('Execute playback scenario') }}</button>
+                <button class="btn-primary mt-5" :disabled="!can('Simulation.Manage')" @click="executePlayback">{{ t('Execute playback scenario') }}</button>
               </section>
               <section class="card p-5 sm:p-6">
                 <div class="section-heading"><div><p>{{ t('Controlled event') }}</p><h3>{{ t('Inject manual factory event') }}</h3></div></div>
@@ -2476,12 +4150,36 @@ onBeforeUnmount(() => {
                   <label class="form-label">{{ t('Support code') }}<input v-model="manualEvent.supportCode" class="form-input" /></label>
                   <label class="form-label">{{ t('Section / Rack code') }}<input v-model="manualEvent.sectionCode" class="form-input" /></label>
                   <label class="form-label">{{ t('Unit code') }}<input v-model="manualEvent.productUnitCode" class="form-input" /></label>
-                  <label class="form-label">{{ t('Result') }}<input v-model="manualEvent.result" class="form-input" /></label>
+                  <label class="form-label">{{ t('Result') }}
+                    <select v-model="manualEvent.result" class="form-input">
+                      <option value="PASS">{{ t('PASS') }}</option>
+                      <option value="FAIL">{{ t('FAIL') }}</option>
+                    </select>
+                  </label>
                   <label class="form-label">{{ t('Notes') }}<textarea v-model="manualEvent.notes" class="form-input min-h-24"></textarea></label>
                 </div>
-                <button class="btn-primary mt-5" @click="injectManualEvent">{{ t('Inject manual event') }}</button>
+                <button class="btn-primary mt-5" :disabled="!can('ProductUnits.Transfer') && !can('Quality.Record') && !can('Racks.Manage')" @click="injectManualEvent">{{ t('Inject manual event') }}</button>
               </section>
               <p v-if="eventStatus" class="2xl:col-span-2 rounded-lg border border-slate-200 bg-white p-4 font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">{{ eventStatus }}</p>
+              <section class="2xl:col-span-2 card p-5 sm:p-6">
+                <div class="section-heading"><div><p>{{ t('Operational events') }}</p><h3>{{ t('Recent event stream') }}</h3></div></div>
+                <div class="table-shell compact-table-shell">
+                  <table class="data-table">
+                    <thead><tr><th>{{ t('Event') }}</th><th>{{ t('Target') }}</th><th>{{ t('Location') }}</th><th>{{ t('Source') }}</th><th>{{ t('Detail') }}</th><th>{{ t('Timestamp') }}</th></tr></thead>
+                    <tbody>
+                      <tr v-for="event in recentOperationalEvents" :key="event.eventCode">
+                        <td><span class="event-chip" :class="statusClass(event.eventType)">{{ displayOperationalEvent(event.eventType) }}</span></td>
+                        <td>{{ operationalEventTarget(event) }}</td>
+                        <td>{{ operationalEventLocation(event) }}</td>
+                        <td>{{ t(event.source) }}</td>
+                        <td class="max-w-[22rem] truncate" :title="operationalEventDetail(event)">{{ operationalEventDetail(event) }}</td>
+                        <td>{{ formatDate(event.occurredAt) }}</td>
+                      </tr>
+                      <tr v-if="!recentOperationalEvents.length"><td colspan="6" class="text-center">{{ t('No records found') }}</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
               <section class="2xl:col-span-2 card p-5 sm:p-6">
                 <div class="section-heading"><div><p>{{ t('Audit trail') }}</p><h3>{{ t('Support localization history') }}</h3></div></div>
                 <p class="mt-3 text-sm text-slate-600 dark:text-slate-300">{{ t('Support localization history is generated by movements and is read-only in this interface.') }}</p>
@@ -2492,7 +4190,7 @@ onBeforeUnmount(() => {
                       <tr v-for="history in supportHistory" :key="history.id">
                         <td>{{ supportCode(history.supportId) }}</td>
                         <td>{{ sectionName(history.sectionId) }}</td>
-                        <td>{{ translateStatus(history.eventType) }}</td>
+                        <td>{{ displayOperationalEvent(history.eventType) }}</td>
                         <td>{{ formatDate(history.dateTime) }}</td>
                       </tr>
                       <tr v-if="!supportHistory.length"><td colspan="4" class="text-center">{{ t('No records found') }}</td></tr>
@@ -2512,30 +4210,6 @@ onBeforeUnmount(() => {
                 :operational-data="analyticsOperationalData"
                 @refresh="loadData(false)"
               />
-            </div>
-
-            <!-- PREDICTIONS VIEW -->
-            <div v-if="false && activeView === 'predictions'" class="space-y-6">
-              <section class="card p-6">
-                <div class="section-heading"><div><p>{{ t('Predictions') }}</p><h3>{{ t('Operational forecasts') }}</h3></div></div>
-                <p class="mt-3 text-slate-600 dark:text-slate-300">{{ t('This section prepares future analysis of completion times, delay risk and productive deviations. In this V1 the data is demonstrative.') }}</p>
-                <div class="mt-5 overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700">
-                  <table class="data-table">
-                    <thead><tr><th>{{ t('Order') }}</th><th>{{ t('Model') }}</th><th>{{ t('Type') }}</th><th>{{ t('Last update') }}</th><th>{{ t('Confidence') }}</th><th>{{ t('Status') }}</th></tr></thead>
-                    <tbody>
-                      <tr v-for="prediction in predictions" :key="prediction.id">
-                        <td>{{ prediction.manufacturingOrderId ? 'MO-' + prediction.manufacturingOrderId : '-' }}</td>
-                        <td>{{ prediction.modelVersion }}</td>
-                        <td>{{ t(prediction.modelType) }}</td>
-                        <td>{{ formatDate(prediction.lastDate) }}</td>
-                        <td>{{ formatConfidence(prediction.confidence) }}</td>
-                        <td><span :class="statusClass(prediction.status)">{{ translateStatus(prediction.status) }}</span></td>
-                      </tr>
-                      <tr v-if="!predictions.length"><td colspan="6" class="text-center">{{ t('No predictions available yet.') }}</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-              </section>
             </div>
 
             <!-- USERS VIEW -->
@@ -2565,7 +4239,10 @@ onBeforeUnmount(() => {
                   <label class="form-label">{{ t('Role') }}
                     <select v-model="registerForm.roleKey" class="form-input disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:disabled:bg-slate-800" :disabled="editingUsername === defaultUser.username">
                       <option value="admin">{{ t('Administrator') }}</option>
+                      <option value="supervisor">{{ t('Supervisor') }}</option>
                       <option value="operator">{{ t('Operator') }}</option>
+                      <option value="quality">{{ t('Quality technician') }}</option>
+                      <option value="logistics">{{ t('Logistics') }}</option>
                       <option value="client">{{ t('Client') }}</option>
                     </select>
                   </label>
@@ -2623,7 +4300,7 @@ onBeforeUnmount(() => {
                   </div>
                   <div class="flex w-full flex-wrap gap-2 sm:w-auto">
                     <button class="btn-secondary w-full sm:w-auto" :disabled="fiwareLoading" @click="refreshFiwareContext()">{{ t('Refresh context') }}</button>
-                    <button class="btn-primary w-full sm:w-auto" :disabled="fiwareLoading" @click="publishFiware">{{ t('Publish current context to Orion-LD') }}</button>
+                    <button class="btn-primary w-full sm:w-auto" :disabled="fiwareLoading || !can('Fiware.Manage')" @click="publishFiware">{{ t('Publish current context to Orion-LD') }}</button>
                   </div>
                 </div>
                 <div class="kpi-grid mt-5">
@@ -2649,7 +4326,7 @@ onBeforeUnmount(() => {
                     <thead><tr><th>{{ t('Type') }}</th><th>{{ t('ID') }}</th><th>{{ t('Main attributes') }}</th></tr></thead>
                     <tbody>
                       <tr v-for="entity in fiwareContext.entities" :key="entity.id">
-                        <td><span class="badge-blue">{{ entity.type }}</span></td>
+                        <td><span class="badge-blue">{{ fiwareEntityTypeLabel(entity.type) }}</span></td>
                         <td class="font-mono text-xs">{{ entity.id }}</td>
                         <td>{{ fiwareAttributesPreview(entity.attributes) }}</td>
                       </tr>

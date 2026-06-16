@@ -1,4 +1,5 @@
 using DriveTraceCore.Api.Data;
+using DriveTraceCore.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -18,11 +19,21 @@ public sealed class DashboardController : ControllerBase
     [HttpGet("summary")]
     public async Task<IActionResult> Summary()
     {
+        if (!PermissionCatalogService.HasPermission(HttpContext, PermissionNames.ProductUnitsView))
+        {
+            return PermissionCatalogService.Forbidden(PermissionNames.ProductUnitsView);
+        }
+
         var activeUnits = await _db.ProductUnits.CountAsync(x => x.Status == "Active" || x.Status == "Rework" || x.Status == "Blocked");
         var qualityIssues = await _db.Nonconformities.CountAsync(x => x.Status != "Closed");
         var activeSupports = await _db.Supports.CountAsync(x => x.Status != "Available");
         var openOrders = await _db.ManufacturingOrders.CountAsync(x => x.Status != "Completed");
         var rackAssignments = await _db.RackSupportAssignments.CountAsync(x => x.DateTimeOut == null);
+        var reconditionedUnits = await _db.ProductUnits.CountAsync(x => x.IsReconditioned);
+        var recoveryCandidates = await _db.ReconditionRecords.CountAsync(x => x.Status == ReconditioningStatuses.Candidate || x.Status == ReconditioningStatuses.Recoverable);
+        var inRecovery = await _db.ReconditionRecords.CountAsync(x => x.Status == ReconditioningStatuses.InRecovery);
+        var rejectedRecovery = await _db.ReconditionRecords.CountAsync(x => x.Status == ReconditioningStatuses.Rejected);
+        var closedRecoveryDecisions = Math.Max(1, reconditionedUnits + rejectedRecovery);
 
         var sections = await _db.ProductionLineSections
             .AsNoTracking()
@@ -59,6 +70,9 @@ public sealed class DashboardController : ControllerBase
             .Join(_db.ProductUnits, nc => nc.ProductUnitId, u => u.Id, (nc, unit) => new
             {
                 unitCode = unit.UnitCode,
+                unit.IsReconditioned,
+                unit.RecoveryStatus,
+                unit.QualityDisposition,
                 nc.Severity,
                 nc.Status,
                 nc.Description,
@@ -77,7 +91,23 @@ public sealed class DashboardController : ControllerBase
                 activeUnits,
                 activeSupports,
                 qualityIssues,
-                rackAssignments
+                rackAssignments,
+                reconditionedUnits,
+                recoveryCandidates,
+                inRecovery,
+                recoveryRate = Math.Round(reconditionedUnits * 100.0 / closedRecoveryDecisions, 1)
+            },
+            reconditioning = new
+            {
+                candidates = recoveryCandidates,
+                inRecovery,
+                reconditioned = reconditionedUnits,
+                rejected = rejectedRecovery,
+                recommendation = recoveryCandidates > 0
+                    ? "Existem unidades elegíveis para recuperação produtiva."
+                    : inRecovery > 0
+                        ? "Validar unidades em recuperação antes de concluir."
+                        : "Sem pendências críticas de recondicionamento."
             },
             wipBySection = sections,
             recentEvents,

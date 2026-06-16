@@ -24,8 +24,8 @@
     {
       "id": 1,
       "type": "barchart",
-      "title": "Product units by current section",
-      "description": "Current WIP distribution by section.",
+      "title": "Unidades por secção atual",
+      "description": "Distribuição atual de WIP por secção.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -66,15 +66,15 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT COALESCE(pls.\"Name\", 'Unknown section') AS section, COUNT(pu.\"Id\") AS total FROM \"ProductionLineSections\" pls LEFT JOIN \"ProductUnits\" pu ON pu.\"CurrentSectionId\" = pls.\"Id\" GROUP BY COALESCE(pls.\"Name\", 'Unknown section'), pls.\"Id\" ORDER BY pls.\"Id\";"
+          "rawSql": "SELECT COALESCE(pl.\"LineCode\", 'Sem linha') || ' / ' || COALESCE(pls.\"Name\", 'Secção desconhecida') AS line_section, COUNT(pu.\"Id\") AS total FROM \"ProductionLineSections\" pls LEFT JOIN \"ProductionLines\" pl ON pl.\"Id\" = pls.\"LineId\" LEFT JOIN \"ProductUnits\" pu ON pu.\"CurrentSectionId\" = pls.\"Id\" GROUP BY COALESCE(pl.\"LineCode\", 'Sem linha'), COALESCE(pls.\"Name\", 'Secção desconhecida'), COALESCE(pl.\"DisplayOrder\", 0), COALESCE(pls.\"DisplayOrder\", pls.\"Id\"), pls.\"Id\" ORDER BY COALESCE(pl.\"DisplayOrder\", 0), COALESCE(pls.\"DisplayOrder\", pls.\"Id\"), pls.\"Id\";"
         }
       ]
     },
     {
       "id": 2,
       "type": "barchart",
-      "title": "Supports by current section",
-      "description": "Support distribution by section.",
+      "title": "Suportes por secção atual",
+      "description": "Distribuição dos suportes por secção.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -115,15 +115,15 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT COALESCE(pls.\"Name\", 'Unknown section') AS section, COUNT(s.\"Id\") AS total FROM \"ProductionLineSections\" pls LEFT JOIN \"Supports\" s ON s.\"CurrentSectionId\" = pls.\"Id\" GROUP BY COALESCE(pls.\"Name\", 'Unknown section'), pls.\"Id\" ORDER BY pls.\"Id\";"
+          "rawSql": "SELECT COALESCE(pl.\"LineCode\", 'Sem linha') || ' / ' || COALESCE(pls.\"Name\", 'Secção desconhecida') AS line_section, COUNT(s.\"Id\") AS total FROM \"ProductionLineSections\" pls LEFT JOIN \"ProductionLines\" pl ON pl.\"Id\" = pls.\"LineId\" LEFT JOIN \"Supports\" s ON s.\"CurrentSectionId\" = pls.\"Id\" GROUP BY COALESCE(pl.\"LineCode\", 'Sem linha'), COALESCE(pls.\"Name\", 'Secção desconhecida'), COALESCE(pl.\"DisplayOrder\", 0), COALESCE(pls.\"DisplayOrder\", pls.\"Id\"), pls.\"Id\" ORDER BY COALESCE(pl.\"DisplayOrder\", 0), COALESCE(pls.\"DisplayOrder\", pls.\"Id\"), pls.\"Id\";"
         }
       ]
     },
     {
       "id": 3,
       "type": "barchart",
-      "title": "Product units by status",
-      "description": "Operational status split for product units.",
+      "title": "Unidades por estado",
+      "description": "Distribuição operacional dos estados das unidades.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -164,15 +164,15 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT COALESCE(\"Status\", 'Unknown') AS status, COUNT(*) AS total FROM \"ProductUnits\" GROUP BY COALESCE(\"Status\", 'Unknown') ORDER BY status;"
+          "rawSql": "SELECT CASE COALESCE(\"Status\", 'Desconhecido') WHEN 'Active' THEN 'Em produção' WHEN 'In Progress' THEN 'Em progresso' WHEN 'Completed' THEN 'Concluída' WHEN 'Blocked' THEN 'Bloqueada' WHEN 'Rework' THEN 'Em retrabalho' WHEN 'Scrap' THEN 'Sucata' WHEN 'Stored' THEN 'Armazenado' WHEN 'Loaded' THEN 'Carregado' WHEN 'Available' THEN 'Disponível' WHEN 'Pending' THEN 'Pendente' WHEN 'Planned' THEN 'Planeada' WHEN 'Cancelled' THEN 'Cancelada' WHEN 'Open' THEN 'Aberto' WHEN 'Closed' THEN 'Fechado' ELSE COALESCE(\"Status\", 'Desconhecido') END AS estado, COUNT(*) AS total FROM \"ProductUnits\" GROUP BY COALESCE(\"Status\", 'Desconhecido') ORDER BY estado;"
         }
       ]
     },
     {
       "id": 4,
       "type": "barchart",
-      "title": "Supports by status",
-      "description": "Operational status split for supports.",
+      "title": "Suportes por estado",
+      "description": "Distribuição operacional dos estados dos suportes.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -213,15 +213,15 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT COALESCE(\"Status\", 'Unknown') AS status, COUNT(*) AS total FROM \"Supports\" GROUP BY COALESCE(\"Status\", 'Unknown') ORDER BY status;"
+          "rawSql": "SELECT CASE COALESCE(\"Status\", 'Desconhecido') WHEN 'Active' THEN 'Em produção' WHEN 'In Progress' THEN 'Em progresso' WHEN 'Completed' THEN 'Concluída' WHEN 'Blocked' THEN 'Bloqueada' WHEN 'Rework' THEN 'Em retrabalho' WHEN 'Scrap' THEN 'Sucata' WHEN 'Stored' THEN 'Armazenado' WHEN 'Loaded' THEN 'Carregado' WHEN 'Available' THEN 'Disponível' WHEN 'Pending' THEN 'Pendente' WHEN 'Planned' THEN 'Planeada' WHEN 'Cancelled' THEN 'Cancelada' WHEN 'Open' THEN 'Aberto' WHEN 'Closed' THEN 'Fechado' ELSE COALESCE(\"Status\", 'Desconhecido') END AS estado, COUNT(*) AS total FROM \"Supports\" GROUP BY COALESCE(\"Status\", 'Desconhecido') ORDER BY estado;"
         }
       ]
     },
     {
       "id": 5,
       "type": "table",
-      "title": "Current unit-support assignments",
-      "description": "Product units mapped to current supports and sections.",
+      "title": "Associações atuais unidade-suporte",
+      "description": "Unidades associadas aos suportes e secções atuais.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -258,15 +258,15 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT pu.\"UnitCode\", COALESCE(s.\"SupportCode\", '-') AS support_code, COALESCE(pls.\"Name\", '-') AS current_section, COALESCE(pu.\"QualityStatus\", 'Pending') AS quality_status, COALESCE(pu.\"Status\", 'Unknown') AS unit_status FROM \"ProductUnits\" pu LEFT JOIN \"Supports\" s ON s.\"Id\" = pu.\"CurrentSupportId\" LEFT JOIN \"ProductionLineSections\" pls ON pls.\"Id\" = pu.\"CurrentSectionId\" ORDER BY pu.\"UnitCode\";"
+          "rawSql": "SELECT pu.\"UnitCode\" AS unidade, COALESCE(s.\"SupportCode\", '-') AS suporte, COALESCE(pls.\"Name\", '-') AS seccao_atual, CASE COALESCE(pu.\"QualityStatus\", 'Pending') WHEN 'PASS' THEN 'Aprovado' WHEN 'FAIL' THEN 'Reprovado' WHEN 'Pending' THEN 'Pendente' ELSE COALESCE(pu.\"QualityStatus\", 'Pendente') END AS qualidade, CASE COALESCE(pu.\"Status\", 'Desconhecido') WHEN 'Active' THEN 'Em produção' WHEN 'Completed' THEN 'Concluída' WHEN 'Blocked' THEN 'Bloqueada' WHEN 'Rework' THEN 'Em retrabalho' WHEN 'Planned' THEN 'Planeada' ELSE COALESCE(pu.\"Status\", 'Desconhecido') END AS estado FROM \"ProductUnits\" pu LEFT JOIN \"Supports\" s ON s.\"Id\" = pu.\"CurrentSupportId\" LEFT JOIN \"ProductionLineSections\" pls ON pls.\"Id\" = pu.\"CurrentSectionId\" ORDER BY pu.\"UnitCode\";"
         }
       ]
     },
     {
       "id": 6,
       "type": "barchart",
-      "title": "Supports currently loaded/blocked/rework/available",
-      "description": "Operational support status snapshot.",
+      "title": "Suportes carregados, bloqueados, em retrabalho ou disponíveis",
+      "description": "Snapshot operacional do estado dos suportes.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -307,15 +307,15 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT CASE WHEN COALESCE(\"Status\", '') = 'Available' THEN 'Available' WHEN \"Status\" = 'Loaded' THEN 'Loaded' WHEN \"Status\" = 'Blocked' THEN 'Blocked' WHEN \"Status\" = 'Rework' THEN 'Rework' ELSE 'Other' END AS category, COUNT(*) AS total FROM \"Supports\" GROUP BY CASE WHEN COALESCE(\"Status\", '') = 'Available' THEN 'Available' WHEN \"Status\" = 'Loaded' THEN 'Loaded' WHEN \"Status\" = 'Blocked' THEN 'Blocked' WHEN \"Status\" = 'Rework' THEN 'Rework' ELSE 'Other' END ORDER BY category;"
+          "rawSql": "SELECT CASE WHEN COALESCE(\"Status\", '') = 'Available' THEN 'Disponível' WHEN \"Status\" = 'Loaded' THEN 'Carregado' WHEN \"Status\" = 'Blocked' THEN 'Bloqueado' WHEN \"Status\" = 'Rework' THEN 'Em retrabalho' ELSE 'Outro' END AS categoria, COUNT(*) AS total FROM \"Supports\" GROUP BY CASE WHEN COALESCE(\"Status\", '') = 'Available' THEN 'Disponível' WHEN \"Status\" = 'Loaded' THEN 'Carregado' WHEN \"Status\" = 'Blocked' THEN 'Bloqueado' WHEN \"Status\" = 'Rework' THEN 'Em retrabalho' ELSE 'Outro' END ORDER BY categoria;"
         }
       ]
     },
     {
       "id": 7,
       "type": "barchart",
-      "title": "Manufacturing orders by status",
-      "description": "Current manufacturing order distribution.",
+      "title": "Ordens de fabrico por estado",
+      "description": "Distribuição atual das ordens de fabrico.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -356,15 +356,15 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT COALESCE(\"Status\", 'Unknown') AS status, COUNT(*) AS total FROM \"ManufacturingOrders\" GROUP BY COALESCE(\"Status\", 'Unknown') ORDER BY status;"
+          "rawSql": "SELECT CASE COALESCE(\"Status\", 'Desconhecido') WHEN 'Active' THEN 'Em produção' WHEN 'In Progress' THEN 'Em progresso' WHEN 'Completed' THEN 'Concluída' WHEN 'Blocked' THEN 'Bloqueada' WHEN 'Rework' THEN 'Em retrabalho' WHEN 'Scrap' THEN 'Sucata' WHEN 'Stored' THEN 'Armazenado' WHEN 'Loaded' THEN 'Carregado' WHEN 'Available' THEN 'Disponível' WHEN 'Pending' THEN 'Pendente' WHEN 'Planned' THEN 'Planeada' WHEN 'Cancelled' THEN 'Cancelada' WHEN 'Open' THEN 'Aberto' WHEN 'Closed' THEN 'Fechado' ELSE COALESCE(\"Status\", 'Desconhecido') END AS estado, COUNT(*) AS total FROM \"ManufacturingOrders\" GROUP BY COALESCE(\"Status\", 'Desconhecido') ORDER BY estado;"
         }
       ]
     },
     {
       "id": 8,
       "type": "table",
-      "title": "Recent support localization history",
-      "description": "Latest 30 localization events for supports.",
+      "title": "Histórico recente de movimentos de unidades e suportes",
+      "description": "Transferências recentes de unidades e movimentos de suportes por secção.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -401,15 +401,15 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT slh.\"DateTime\", s.\"SupportCode\", COALESCE(pls.\"Name\", 'Unknown section') AS section, slh.\"EventType\" FROM \"SupportLocalizationHistory\" slh LEFT JOIN \"Supports\" s ON s.\"Id\" = slh.\"SupportId\" LEFT JOIN \"ProductionLineSections\" pls ON pls.\"Id\" = slh.\"SectionId\" ORDER BY slh.\"DateTime\" DESC LIMIT 30;"
+          "rawSql": "SELECT data_hora AS \"Data/hora\", codigo AS \"Código\", seccao_origem AS \"Secção origem\", seccao_destino AS \"Secção destino\", CASE tipo_evento WHEN 'LineTransfer' THEN 'Transferência entre linhas' WHEN 'TransferToRack' THEN 'Transferência para rack' WHEN 'SupportAssigned' THEN 'Suporte atribuído' WHEN 'Movement' THEN 'Movimento' WHEN 'SeededCurrentLocation' THEN 'Localização demonstrativa' ELSE tipo_evento END AS \"Tipo de evento\" FROM (SELECT pulh.\"OccurredAt\" AS data_hora, pu.\"UnitCode\" AS codigo, COALESCE(from_sec.\"Name\", '-') AS seccao_origem, COALESCE(to_sec.\"Name\", '-') AS seccao_destino, pulh.\"EventType\" AS tipo_evento FROM \"ProductUnitLocationHistory\" pulh LEFT JOIN \"ProductUnits\" pu ON pu.\"Id\" = pulh.\"ProductUnitId\" LEFT JOIN \"ProductionLineSections\" from_sec ON from_sec.\"Id\" = pulh.\"FromSectionId\" LEFT JOIN \"ProductionLineSections\" to_sec ON to_sec.\"Id\" = pulh.\"ToSectionId\" UNION ALL SELECT slh.\"DateTime\" AS data_hora, s.\"SupportCode\" AS codigo, '-' AS seccao_origem, COALESCE(pls.\"Name\", 'Secção desconhecida') AS seccao_destino, slh.\"EventType\" AS tipo_evento FROM \"SupportLocalizationHistory\" slh LEFT JOIN \"Supports\" s ON s.\"Id\" = slh.\"SupportId\" LEFT JOIN \"ProductionLineSections\" pls ON pls.\"Id\" = slh.\"SectionId\") events ORDER BY data_hora DESC LIMIT 30;"
         }
       ]
     },
     {
       "id": 9,
       "type": "barchart",
-      "title": "Bottleneck indication by section",
-      "description": "Sections with highest blocked/rework concentration.",
+      "title": "Indicação de gargalos por secção",
+      "description": "Secções com maior concentração de bloqueio ou retrabalho.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -450,15 +450,15 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT COALESCE(pls.\"Name\", 'Unknown section') AS section, COUNT(pu.\"Id\") FILTER (WHERE COALESCE(pu.\"Status\", '') IN ('Blocked', 'Rework')) AS blocked_or_rework_units, COUNT(pu.\"Id\") AS total_units FROM \"ProductionLineSections\" pls LEFT JOIN \"ProductUnits\" pu ON pu.\"CurrentSectionId\" = pls.\"Id\" GROUP BY COALESCE(pls.\"Name\", 'Unknown section'), pls.\"Id\" ORDER BY blocked_or_rework_units DESC, total_units DESC, pls.\"Id\";"
+          "rawSql": "SELECT COALESCE(pls.\"Name\", 'Secção desconhecida') AS section, COUNT(pu.\"Id\") FILTER (WHERE COALESCE(pu.\"Status\", '') IN ('Blocked', 'Rework')) AS unidades_bloqueadas_ou_retrabalho, COUNT(pu.\"Id\") AS total_unidades FROM \"ProductionLineSections\" pls LEFT JOIN \"ProductUnits\" pu ON pu.\"CurrentSectionId\" = pls.\"Id\" GROUP BY COALESCE(pls.\"Name\", 'Secção desconhecida'), pls.\"Id\" ORDER BY unidades_bloqueadas_ou_retrabalho DESC, total_unidades DESC, pls.\"Id\";"
         }
       ]
     },
     {
       "id": 10,
       "type": "table",
-      "title": "Throughput proxy by day",
-      "description": "Created vs completed product units by day.",
+      "title": "Indicador diário de throughput",
+      "description": "Unidades criadas versus concluídas por dia.",
       "datasource": {
         "type": "postgres",
         "uid": "drivetrace-timescaledb"
@@ -495,7 +495,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT DATE_TRUNC('day', pu.\"CreatedAt\")::date AS day, COUNT(*) AS created_units, COUNT(*) FILTER (WHERE pu.\"CompletedAt\" IS NOT NULL OR COALESCE(pu.\"Status\", '') IN ('Completed', 'Closed')) AS completed_units FROM \"ProductUnits\" pu GROUP BY DATE_TRUNC('day', pu.\"CreatedAt\")::date ORDER BY day DESC LIMIT 30;"
+          "rawSql": "SELECT DATE_TRUNC('day', pu.\"CreatedAt\")::date AS day, COUNT(*) AS unidades_criadas, COUNT(*) FILTER (WHERE pu.\"CompletedAt\" IS NOT NULL OR COALESCE(pu.\"Status\", '') IN ('Completed', 'Closed')) AS unidades_concluidas FROM \"ProductUnits\" pu GROUP BY DATE_TRUNC('day', pu.\"CreatedAt\")::date ORDER BY day DESC LIMIT 30;"
         }
       ]
     }
@@ -516,7 +516,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "DriveTrace Core - WIP Operations",
+  "title": "DriveTrace Core - Operações WIP",
   "uid": "drivetrace-wip-operations",
   "version": 10,
   "weekStart": ""

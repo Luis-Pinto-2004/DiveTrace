@@ -7,6 +7,8 @@ $ErrorActionPreference = "Stop"
 $script:FailedChecks = 0
 $script:StaleEntityId = "urn:ngsi-ld:Support:teste"
 
+& "$PSScriptRoot\wait-api.ps1"
+
 function Register-Failure {
   param([string]$Message)
   Write-Host "[FAIL] $Message"
@@ -83,10 +85,15 @@ function Get-FiwareContextObject {
 function Remove-EntityBestEffort {
   param([string]$EntityId)
 
-  $encoded = [Uri]::EscapeDataString($EntityId)
-  $url = "http://localhost:1026/ngsi-ld/v1/entities/$encoded"
+  $payload = "[`"$EntityId`"]"
   try {
-    Invoke-WebRequest -Method Delete -Uri $url -UseBasicParsing -TimeoutSec 15 | Out-Null
+    Invoke-WebRequest `
+      -Method Post `
+      -Uri "http://localhost:1026/ngsi-ld/v1/entityOperations/delete" `
+      -Body $payload `
+      -ContentType "application/json" `
+      -UseBasicParsing `
+      -TimeoutSec 15 | Out-Null
   } catch {
     if ($_.Exception.Response) {
       try {
@@ -103,25 +110,27 @@ function Ensure-StaleEntityForSyncTest {
   Remove-EntityBestEffort -EntityId $staleId
 
   $payload = @"
-{
-  "id": "urn:ngsi-ld:Support:teste",
-  "type": "Support",
-  "supportCode": { "type": "Property", "value": "teste" },
-  "status": { "type": "Property", "value": "Stale" },
-  "@context": [
-    "https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context-v1.8.jsonld",
-    {
-      "Support": "https://uri.drivolution.local/ns/Support",
-      "supportCode": "https://uri.drivolution.local/ns/supportCode",
-      "status": "https://uri.drivolution.local/ns/status"
-    }
-  ]
-}
+[
+  {
+    "id": "urn:ngsi-ld:Support:teste",
+    "type": "Support",
+    "supportCode": { "type": "Property", "value": "teste" },
+    "status": { "type": "Property", "value": "\u00d3rf\u00e3" },
+    "@context": [
+      "https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context-v1.8.jsonld",
+      {
+        "Support": "https://uri.drivolution.local/ns/Support",
+        "supportCode": "https://uri.drivolution.local/ns/supportCode",
+        "status": "https://uri.drivolution.local/ns/status"
+      }
+    ]
+  }
+]
 "@
 
   $createResponse = Show-Result `
-    -Name "Create stale test entity (Support:teste)" `
-    -Url "http://localhost:1026/ngsi-ld/v1/entities" `
+    -Name "Upsert stale test entity (Support:teste)" `
+    -Url "http://localhost:1026/ngsi-ld/v1/entityOperations/upsert" `
     -Method "POST" `
     -Body $payload `
     -ContentType "application/ld+json"
@@ -186,6 +195,8 @@ if ($PublishCurrent) {
         if ($afterJson.entities) { $afterEntities = @($afterJson.entities) }
         $stillHasStale = $afterEntities | Where-Object { $_.id -eq $script:StaleEntityId } | Select-Object -First 1
         Assert-Condition ($null -eq $stillHasStale) "Stale test entity was removed from Orion-LD." "Stale test entity is still present in Orion-LD."
+        $hasPtUnit = $afterEntities | Where-Object { $_.id -eq "urn:ngsi-ld:ProductUnit:UP-PORTA-001" } | Select-Object -First 1
+        Assert-Condition ($null -ne $hasPtUnit) "Context includes urn:ngsi-ld:ProductUnit:UP-PORTA-001." "Context does not include the PT-PT ProductUnit URN."
       } catch {
         Register-Failure "Could not parse API FIWARE context (after publish) JSON."
       }

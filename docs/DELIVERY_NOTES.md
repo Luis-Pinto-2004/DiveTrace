@@ -15,7 +15,7 @@
 
 - Legacy non-core mobile subsystem.
 - Legacy human-monitoring concepts.
-- Legacy conversational AI and advanced prediction services.
+- Legacy conversational AI and advanced out-of-scope analytics services.
 - Product-lot-as-output modelling.
 
 ## Validation note

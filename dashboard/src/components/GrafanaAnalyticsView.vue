@@ -27,6 +27,26 @@
       </div>
     </section>
 
+    <section class="analytics-decision-strip" :class="primaryOperationalDecision.toneClass">
+      <div>
+        <span>{{ t('Estado operacional') }}</span>
+        <strong>{{ primaryOperationalDecision.state }}</strong>
+      </div>
+      <div>
+        <span>{{ t('Principal atenção') }}</span>
+        <strong>{{ primaryOperationalDecision.attention }}</strong>
+      </div>
+      <div>
+        <span>{{ t('Ação recomendada') }}</span>
+        <strong>{{ primaryOperationalDecision.action }}</strong>
+      </div>
+      <div>
+        <span>{{ t('Evidência') }}</span>
+        <strong>{{ primaryOperationalDecision.evidence }}</strong>
+      </div>
+      <button type="button" class="btn-primary" @click="focusTab(primaryOperationalDecision.tab)">{{ t('Abrir detalhe') }}</button>
+    </section>
+
     <section class="analytics-section">
       <div class="section-heading">
         <div class="min-w-0">
@@ -53,7 +73,7 @@
         </div>
       </div>
       <div class="analytics-insight-grid">
-        <article v-for="insight in operationalInsights" :key="insight.key" class="analytics-insight-card" :class="insight.toneClass">
+        <article v-for="insight in visibleOperationalInsights" :key="insight.key" class="analytics-insight-card" :class="insight.toneClass">
           <span>{{ insight.domain }}</span>
           <strong>{{ insight.title }}</strong>
           <p>{{ insight.description }}</p>
@@ -72,10 +92,13 @@
           <h3>{{ t('Grafana dashboard catalogue') }}</h3>
           <p class="section-description">{{ t('Dashboard catalogue description') }}</p>
         </div>
+        <button type="button" class="btn-secondary" @click="showAllDashboards = !showAllDashboards">
+          {{ showAllDashboards ? t('Mostrar menos') : t('Ver todos') }}
+        </button>
       </div>
-      <div class="dashboard-card-grid">
+      <div class="dashboard-compact-list">
         <article
-          v-for="dashboard in dashboardCatalog"
+          v-for="dashboard in visibleDashboardCatalog"
           :key="dashboard.uid"
           class="dashboard-card"
           :class="activeTab === dashboard.tab ? 'dashboard-card-active' : ''"
@@ -133,10 +156,13 @@
         >
           {{ t(tab.label) }}
         </button>
+        <button type="button" class="mobile-tab" :class="showEmbeddedPanels ? 'mobile-tab-active' : ''" @click="showEmbeddedPanels = !showEmbeddedPanels">
+          {{ showEmbeddedPanels ? t('Ocultar detalhe') : t('Mostrar detalhe') }}
+        </button>
       </div>
     </section>
 
-    <section class="grid min-w-0 gap-5 xl:grid-cols-2">
+    <section v-if="showEmbeddedPanels" class="grid min-w-0 gap-5 xl:grid-cols-3">
       <GrafanaPanel
         v-for="card in activePanelCards"
         :key="card.key"
@@ -238,6 +264,10 @@ type SummaryData = {
     activeSupports?: number
     qualityIssues?: number
     rackAssignments?: number
+    reconditionedUnits?: number
+    recoveryCandidates?: number
+    inRecovery?: number
+    recoveryRate?: number
   }
   wipBySection?: Array<{ section: string; sectionCode?: string; productUnits: number; activeSupports?: number }>
   recentEvents?: Array<{ supportCode: string; section: string; eventType: string; dateTime: string }>
@@ -245,8 +275,20 @@ type SummaryData = {
 
 type OperationalData = {
   summary: SummaryData
+  flowSummary?: {
+    totals?: {
+      productionLines?: number
+      transferPoints?: number
+      transfers?: number
+      transfersLast24h?: number
+      reconditionedUnits?: number
+      recoveryCandidates?: number
+      recoveryRate?: number
+    }
+    lineSummaries?: Array<{ lineCode?: string; name?: string; wipUnits?: number; blockedUnits?: number }>
+  }
   orders: Array<{ status?: string }>
-  units: Array<{ status?: string; qualityStatus?: string; currentSectionId?: number }>
+  units: Array<{ status?: string; qualityStatus?: string; currentSectionId?: number; isReconditioned?: boolean; recoveryStatus?: string; qualityDisposition?: string }>
   supports: Array<{ status?: string; currentSectionId?: number }>
   racks: Array<{ status?: string }>
   rackSupportAssignments: Array<{ dateTimeOut?: string | null }>
@@ -272,11 +314,11 @@ const datasourceName = 'DriveTrace TimescaleDB'
 const datasourceDetail = 'PostgreSQL / TimescaleDB'
 
 const tabs: Array<{ key: TabKey; label: string }> = [
-  { key: 'executive', label: 'Executive Overview' },
-  { key: 'wip', label: 'WIP Operations' },
-  { key: 'quality', label: 'Quality & Traceability' },
-  { key: 'fiware', label: 'FIWARE / Infrastructure' },
-  { key: 'overview', label: 'WIP Overview' },
+  { key: 'executive', label: 'Visão executiva' },
+  { key: 'wip', label: 'Operações WIP' },
+  { key: 'quality', label: 'Qualidade e rastreabilidade' },
+  { key: 'fiware', label: 'FIWARE / infraestrutura' },
+  { key: 'overview', label: 'Visão geral WIP' },
 ]
 
 const dashboardCatalog: DashboardDefinition[] = [
@@ -284,89 +326,91 @@ const dashboardCatalog: DashboardDefinition[] = [
     tab: 'executive',
     uid: 'drivetrace-executive-overview',
     slug: 'drivetrace-executive-overview',
-    title: 'DriveTrace Core - Executive Overview',
-    domain: 'Executive monitoring',
-    objective: 'Executive dashboard objective',
-    decision: 'Executive dashboard decision support',
-    analysisType: 'Production, WIP and quality overview',
-    questions: ['How many orders are open?', 'How many units are in flow?', 'Are there quality issues?', 'Where is the highest WIP?'],
+    title: 'DriveTrace Core - Visão executiva',
+    domain: 'Monitorização executiva',
+    objective: 'Objetivo do dashboard executivo',
+    decision: 'Suporte à decisão executiva',
+    analysisType: 'Visão geral de produção, WIP e qualidade',
+    questions: ['Quantas ordens estão abertas?', 'Quantas unidades estão em fluxo?', 'Existem problemas de qualidade?', 'Onde está o maior WIP?'],
   },
   {
     tab: 'wip',
     uid: 'drivetrace-wip-operations',
     slug: 'drivetrace-wip-operations',
-    title: 'DriveTrace Core - WIP Operations',
-    domain: 'WIP operational flow',
-    objective: 'WIP operations dashboard objective',
-    decision: 'WIP operations dashboard decision support',
-    analysisType: 'Flow, supports and bottlenecks',
-    questions: ['Where is there accumulation?', 'Which supports are loaded?', 'Which movements happened recently?'],
+    title: 'DriveTrace Core - Operações WIP',
+    domain: 'Fluxo operacional WIP',
+    objective: 'Objetivo do dashboard de operações WIP',
+    decision: 'Suporte à decisão de operações WIP',
+    analysisType: 'Fluxo, suportes e gargalos',
+    questions: ['Onde existe acumulação?', 'Que suportes estão carregados?', 'Que movimentos ocorreram recentemente?'],
   },
   {
     tab: 'quality',
     uid: 'drivetrace-quality-traceability',
     slug: 'drivetrace-quality-traceability',
-    title: 'DriveTrace Core - Quality & Traceability',
-    domain: 'Quality and traceability',
-    objective: 'Quality dashboard objective',
-    decision: 'Quality dashboard decision support',
-    analysisType: 'Quality evidence and genealogy',
-    questions: ['What is the PASS/FAIL rate?', 'Which units failed?', 'Is there rework or nonconformity?'],
+    title: 'DriveTrace Core - Qualidade e rastreabilidade',
+    domain: 'Qualidade e rastreabilidade',
+    objective: 'Objetivo do dashboard de qualidade',
+    decision: 'Suporte à decisão de qualidade',
+    analysisType: 'Evidência de qualidade e genealogia',
+    questions: ['Qual é a taxa aprovado/reprovado?', 'Que unidades falharam?', 'Existe retrabalho ou não conformidade?'],
   },
   {
     tab: 'fiware',
     uid: 'drivetrace-fiware-infra-status',
     slug: 'drivetrace-fiware-infrastructure-status',
-    title: 'DriveTrace Core - FIWARE / Infrastructure Status',
-    domain: 'FIWARE and infrastructure',
-    objective: 'FIWARE dashboard objective',
-    decision: 'FIWARE dashboard decision support',
-    analysisType: 'Context publication readiness',
-    questions: ['How many entities are publishable?', 'Which types are synchronized?', 'Is the context coherent?'],
+    title: 'DriveTrace Core - Estado FIWARE / infraestrutura',
+    domain: 'FIWARE e infraestrutura',
+    objective: 'Objetivo do dashboard FIWARE',
+    decision: 'Suporte à decisão FIWARE',
+    analysisType: 'Prontidão de publicação de contexto',
+    questions: ['Quantas entidades são publicáveis?', 'Que tipos estão sincronizados?', 'O contexto está coerente?'],
   },
   {
     tab: 'overview',
     uid: 'drivetrace-wip-overview',
     slug: 'drivetrace-wip-overview',
-    title: 'DriveTrace Core - WIP Overview',
-    domain: 'WIP baseline overview',
-    objective: 'WIP overview dashboard objective',
-    decision: 'WIP overview dashboard decision support',
-    analysisType: 'Compact WIP status baseline',
-    questions: ['What is the global WIP status?', 'Which indicators require attention?', 'What changed recently?'],
+    title: 'DriveTrace Core - Visão geral WIP',
+    domain: 'Visão base WIP',
+    objective: 'Objetivo do dashboard de visão geral WIP',
+    decision: 'Suporte à decisão da visão geral WIP',
+    analysisType: 'Estado WIP compacto de referência',
+    questions: ['Qual é o estado global do WIP?', 'Que indicadores requerem atenção?', 'O que mudou recentemente?'],
   },
 ]
 
 const dashboardsByTab: Record<TabKey, PanelCard[]> = {
   executive: [
-    { key: 'executive-open-orders', title: 'Open manufacturing orders', description: 'High-level KPI for current orders.', dashboardUid: 'drivetrace-executive-overview', slug: 'drivetrace-executive-overview', panelId: 1, height: 260 },
-    { key: 'executive-active-units', title: 'Active product units', description: 'Tracks currently active units in production.', dashboardUid: 'drivetrace-executive-overview', slug: 'drivetrace-executive-overview', panelId: 2, height: 260 },
-    { key: 'executive-quality-issues', title: 'Open quality issues', description: 'Highlights active quality deviations.', dashboardUid: 'drivetrace-executive-overview', slug: 'drivetrace-executive-overview', panelId: 4, height: 280 },
-    { key: 'executive-operations', title: 'Product units by status', description: 'Operational overview of unit states.', dashboardUid: 'drivetrace-executive-overview', slug: 'drivetrace-executive-overview', panelId: 6, height: 320 },
+    { key: 'executive-open-orders', title: 'Ordens de fabrico abertas', description: 'KPI de alto nível para ordens atuais.', dashboardUid: 'drivetrace-executive-overview', slug: 'drivetrace-executive-overview', panelId: 1, height: 260 },
+    { key: 'executive-active-units', title: 'Unidades de produto ativas', description: 'Monitoriza as unidades atualmente ativas em produção.', dashboardUid: 'drivetrace-executive-overview', slug: 'drivetrace-executive-overview', panelId: 2, height: 260 },
+    { key: 'executive-quality-issues', title: 'Problemas de qualidade em aberto', description: 'Destaca desvios de qualidade ativos.', dashboardUid: 'drivetrace-executive-overview', slug: 'drivetrace-executive-overview', panelId: 4, height: 280 },
+    { key: 'executive-operations', title: 'Unidades de produto por estado', description: 'Visão operacional dos estados das unidades.', dashboardUid: 'drivetrace-executive-overview', slug: 'drivetrace-executive-overview', panelId: 6, height: 320 },
   ],
   wip: [
-    { key: 'wip-by-section', title: 'Product units by current section', description: 'WIP distribution across production sections.', dashboardUid: 'drivetrace-wip-operations', slug: 'drivetrace-wip-operations', panelId: 1, height: 320 },
-    { key: 'wip-supports-by-section', title: 'Supports by current section', description: 'Support occupancy by current section.', dashboardUid: 'drivetrace-wip-operations', slug: 'drivetrace-wip-operations', panelId: 2, height: 320 },
-    { key: 'wip-units-status', title: 'Product units by status', description: 'Operational status split for units.', dashboardUid: 'drivetrace-wip-operations', slug: 'drivetrace-wip-operations', panelId: 3, height: 320 },
-    { key: 'wip-recent-movements', title: 'Recent support localization history', description: 'Recent movement events and rack assignments.', dashboardUid: 'drivetrace-wip-operations', slug: 'drivetrace-wip-operations', panelId: 8, height: 380 },
+    { key: 'wip-by-section', title: 'Unidades por secção atual', description: 'Distribuição do WIP pelas secções de produção.', dashboardUid: 'drivetrace-wip-operations', slug: 'drivetrace-wip-operations', panelId: 1, height: 320 },
+    { key: 'wip-supports-by-section', title: 'Suportes por secção atual', description: 'Ocupação de suportes por secção atual.', dashboardUid: 'drivetrace-wip-operations', slug: 'drivetrace-wip-operations', panelId: 2, height: 320 },
+    { key: 'wip-units-status', title: 'Unidades de produto por estado', description: 'Distribuição operacional por estado das unidades.', dashboardUid: 'drivetrace-wip-operations', slug: 'drivetrace-wip-operations', panelId: 3, height: 320 },
+    { key: 'wip-recent-movements', title: 'Histórico recente de localização de suportes', description: 'Eventos recentes de movimento e atribuições a racks.', dashboardUid: 'drivetrace-wip-operations', slug: 'drivetrace-wip-operations', panelId: 8, height: 380 },
   ],
   quality: [
-    { key: 'quality-pass-fail', title: 'Quality results PASS/FAIL', description: 'Quality gate outcomes and pass/fail balance.', dashboardUid: 'drivetrace-quality-traceability', slug: 'drivetrace-quality-traceability', panelId: 1, height: 320 },
-    { key: 'quality-nc-severity', title: 'Nonconformities by severity', description: 'Distribution of nonconformities by severity.', dashboardUid: 'drivetrace-quality-traceability', slug: 'drivetrace-quality-traceability', panelId: 2, height: 320 },
-    { key: 'quality-rework', title: 'Open rework records', description: 'Current units in rework state.', dashboardUid: 'drivetrace-quality-traceability', slug: 'drivetrace-quality-traceability', panelId: 4, height: 260 },
-    { key: 'quality-recent-events', title: 'Latest quality results table', description: 'Recent quality evidence and traceability events.', dashboardUid: 'drivetrace-quality-traceability', slug: 'drivetrace-quality-traceability', panelId: 7, height: 380 },
+    { key: 'quality-pass-fail', title: 'Resultados de qualidade aprovado/reprovado', description: 'Resultados dos pontos de controlo e equilíbrio aprovado/reprovado.', dashboardUid: 'drivetrace-quality-traceability', slug: 'drivetrace-quality-traceability', panelId: 1, height: 320 },
+    { key: 'quality-nc-severity', title: 'Não conformidades por severidade', description: 'Distribuição de não conformidades por severidade.', dashboardUid: 'drivetrace-quality-traceability', slug: 'drivetrace-quality-traceability', panelId: 2, height: 320 },
+    { key: 'quality-rework', title: 'Registos de retrabalho em aberto', description: 'Unidades atuais em estado de retrabalho.', dashboardUid: 'drivetrace-quality-traceability', slug: 'drivetrace-quality-traceability', panelId: 4, height: 260 },
+    { key: 'quality-reconditioning-status', title: 'Estado de recuperação / recondicionamento', description: 'Candidatas, em recuperação, rejeitadas e recondicionadas.', dashboardUid: 'drivetrace-quality-traceability', slug: 'drivetrace-quality-traceability', panelId: 12, height: 320 },
+    { key: 'quality-recent-events', title: 'Tabela de resultados de qualidade recentes', description: 'Evidência recente de qualidade e eventos de rastreabilidade.', dashboardUid: 'drivetrace-quality-traceability', slug: 'drivetrace-quality-traceability', panelId: 7, height: 380 },
+    { key: 'quality-reconditioned-table', title: 'Unidades recuperadas e recondicionadas', description: 'Histórico operacional das decisões de recuperação produtiva.', dashboardUid: 'drivetrace-quality-traceability', slug: 'drivetrace-quality-traceability', panelId: 13, height: 380 },
   ],
   fiware: [
-    { key: 'fiware-publishable-entities', title: 'Estimated publishable context entities', description: 'Estimated amount of entities ready for publication.', dashboardUid: 'drivetrace-fiware-infra-status', slug: 'drivetrace-fiware-infrastructure-status', panelId: 1, height: 260 },
-    { key: 'fiware-current-supports', title: 'Current supports count', description: 'Current support entities available.', dashboardUid: 'drivetrace-fiware-infra-status', slug: 'drivetrace-fiware-infrastructure-status', panelId: 2, height: 260 },
-    { key: 'fiware-candidates-type', title: 'Context entity candidates by type', description: 'Entity candidates segmented by FIWARE type.', dashboardUid: 'drivetrace-fiware-infra-status', slug: 'drivetrace-fiware-infrastructure-status', panelId: 5, height: 390 },
-    { key: 'fiware-recent-movements', title: 'Recent support movement events', description: 'Operational event stream associated with context updates.', dashboardUid: 'drivetrace-fiware-infra-status', slug: 'drivetrace-fiware-infrastructure-status', panelId: 6, height: 390 },
+    { key: 'fiware-publishable-entities', title: 'Entidades de contexto publicáveis estimadas', description: 'Quantidade estimada de entidades prontas para publicação.', dashboardUid: 'drivetrace-fiware-infra-status', slug: 'drivetrace-fiware-infrastructure-status', panelId: 1, height: 260 },
+    { key: 'fiware-current-supports', title: 'Número atual de suportes', description: 'Entidades de suporte atualmente disponíveis.', dashboardUid: 'drivetrace-fiware-infra-status', slug: 'drivetrace-fiware-infrastructure-status', panelId: 2, height: 260 },
+    { key: 'fiware-candidates-type', title: 'Candidatos a entidades de contexto por tipo', description: 'Candidatos a entidades segmentados por tipo FIWARE.', dashboardUid: 'drivetrace-fiware-infra-status', slug: 'drivetrace-fiware-infrastructure-status', panelId: 5, height: 390 },
+    { key: 'fiware-recent-movements', title: 'Eventos recentes de movimento de suportes', description: 'Fluxo de eventos operacional associado a atualizações de contexto.', dashboardUid: 'drivetrace-fiware-infra-status', slug: 'drivetrace-fiware-infrastructure-status', panelId: 6, height: 390 },
   ],
   overview: [
-    { key: 'overview-open-orders', title: 'Open manufacturing orders', description: 'High-level KPI for current orders.', dashboardUid: 'drivetrace-wip-overview', slug: 'drivetrace-wip-overview', panelId: 1, height: 250 },
-    { key: 'overview-active-units', title: 'Active product units', description: 'Tracks currently active units in production.', dashboardUid: 'drivetrace-wip-overview', slug: 'drivetrace-wip-overview', panelId: 2, height: 250 },
-    { key: 'overview-wip-by-section', title: 'WIP by production section', description: 'WIP distribution across production sections.', dashboardUid: 'drivetrace-wip-overview', slug: 'drivetrace-wip-overview', panelId: 8, height: 320 },
-    { key: 'overview-quality', title: 'Quality results PASS/FAIL', description: 'Quality gate outcomes and pass/fail balance.', dashboardUid: 'drivetrace-wip-overview', slug: 'drivetrace-wip-overview', panelId: 9, height: 320 },
+    { key: 'overview-open-orders', title: 'Ordens de fabrico abertas', description: 'KPI de alto nível para ordens atuais.', dashboardUid: 'drivetrace-wip-overview', slug: 'drivetrace-wip-overview', panelId: 1, height: 250 },
+    { key: 'overview-active-units', title: 'Unidades de produto ativas', description: 'Monitoriza as unidades atualmente ativas em produção.', dashboardUid: 'drivetrace-wip-overview', slug: 'drivetrace-wip-overview', panelId: 2, height: 250 },
+    { key: 'overview-wip-by-section', title: 'WIP por secção de produção', description: 'Distribuição do WIP pelas secções de produção.', dashboardUid: 'drivetrace-wip-overview', slug: 'drivetrace-wip-overview', panelId: 8, height: 320 },
+    { key: 'overview-quality', title: 'Resultados de qualidade aprovado/reprovado', description: 'Resultados dos pontos de controlo e equilíbrio aprovado/reprovado.', dashboardUid: 'drivetrace-wip-overview', slug: 'drivetrace-wip-overview', panelId: 9, height: 320 },
   ],
 }
 
@@ -374,6 +418,8 @@ const activeTab = ref<TabKey>('executive')
 const grafanaAvailable = ref<boolean | null>(null)
 const checkingConnectivity = ref(false)
 const statusTimestampRaw = ref('')
+const showAllDashboards = ref(false)
+const showEmbeddedPanels = ref(true)
 const showFullDashboard = ref(false)
 
 let availabilityTimer: ReturnType<typeof setInterval> | undefined
@@ -385,7 +431,8 @@ const grafanaBaseUrl = computed(() => {
 
 const grafanaTheme = computed<'dark' | 'light'>(() => (props.theme === 'dark' ? 'dark' : 'light'))
 const activeDashboard = computed(() => dashboardCatalog.find((item) => item.tab === activeTab.value) ?? dashboardCatalog[0])
-const activePanelCards = computed(() => dashboardsByTab[activeTab.value])
+const visibleDashboardCatalog = computed(() => showAllDashboards.value ? dashboardCatalog : dashboardCatalog.slice(0, 3))
+const activePanelCards = computed(() => dashboardsByTab[activeTab.value].slice(0, 3))
 
 const statusTimestamp = computed(() => {
   if (!statusTimestampRaw.value) return '-'
@@ -466,6 +513,18 @@ const openOrders = computed(() => props.operationalData.summary.counts?.openOrde
 const activeRackAssignments = computed(() => props.operationalData.summary.counts?.rackAssignments ?? countBy(props.operationalData.rackSupportAssignments, (item) => !item.dateTimeOut))
 const openNonconformities = computed(() => props.operationalData.summary.counts?.qualityIssues ?? countBy(props.operationalData.nonconformities, (item) => !['closed', 'completed'].includes(normalized(item.status))))
 const openRework = computed(() => countBy(props.operationalData.reworkRecords, (item) => !['closed', 'completed'].includes(normalized(item.status))))
+const reconditionedUnits = computed(() => props.operationalData.summary.counts?.reconditionedUnits
+  ?? props.operationalData.flowSummary?.totals?.reconditionedUnits
+  ?? countBy(props.operationalData.units, (unit) => unit.isReconditioned === true || normalized(unit.recoveryStatus) === 'reconditioned' || normalized(unit.qualityDisposition) === 'reconditioned'))
+const recoveryCandidates = computed(() => props.operationalData.summary.counts?.recoveryCandidates
+  ?? props.operationalData.flowSummary?.totals?.recoveryCandidates
+  ?? countBy(props.operationalData.units, (unit) => ['candidate', 'recoverable'].includes(normalized(unit.recoveryStatus))))
+const inRecoveryUnits = computed(() => props.operationalData.summary.counts?.inRecovery
+  ?? countBy(props.operationalData.units, (unit) => normalized(unit.recoveryStatus) === 'inrecovery'))
+const recoveryRate = computed(() => props.operationalData.summary.counts?.recoveryRate ?? props.operationalData.flowSummary?.totals?.recoveryRate ?? null)
+const productionLineCount = computed(() => props.operationalData.flowSummary?.totals?.productionLines ?? 0)
+const transferPoints = computed(() => props.operationalData.flowSummary?.totals?.transferPoints ?? 0)
+const transfersLast24h = computed(() => props.operationalData.flowSummary?.totals?.transfersLast24h ?? 0)
 const passResults = computed(() => countBy(props.operationalData.quality, (item) => normalized(item.result) === 'pass'))
 const failResults = computed(() => countBy(props.operationalData.quality, (item) => normalized(item.result) === 'fail'))
 const passRate = computed(() => {
@@ -487,15 +546,21 @@ const rackUtilization = computed(() => {
 const operationalMetrics = computed(() => [
   {
     key: 'open-orders',
-    label: t('Open manufacturing orders'),
+    label: t('Ordens de fabrico abertas'),
     value: String(openOrders.value),
     detail: t('Orders requiring operational follow-up'),
   },
   {
     key: 'active-units',
-    label: t('Active product units'),
+    label: t('Unidades de produto ativas'),
     value: String(activeUnits.value),
     detail: `${blockedUnits.value} ${t('units requiring attention')}`,
+  },
+  {
+    key: 'flow-lines',
+    label: t('Production lines'),
+    value: String(productionLineCount.value),
+    detail: `${transferPoints.value} ${t('transfer points')} / ${transfersLast24h.value} ${t('transfers in last 24h')}`,
   },
   {
     key: 'attention-units',
@@ -513,7 +578,13 @@ const operationalMetrics = computed(() => [
     key: 'quality',
     label: t('Quality PASS rate'),
     value: passRate.value === null ? '-' : `${passRate.value}%`,
-    detail: `${passResults.value} PASS / ${failResults.value} FAIL`,
+    detail: `${passResults.value} aprovados / ${failResults.value} reprovados`,
+  },
+  {
+    key: 'reconditioning',
+    label: t('Recuperação / Recondicionamento'),
+    value: String(reconditionedUnits.value),
+    detail: `${recoveryCandidates.value} ${t('candidatas')} / ${inRecoveryUnits.value} ${t('em recuperação')} / ${recoveryRate.value === null ? '-' : `${recoveryRate.value}%`}`,
   },
   {
     key: 'racks',
@@ -561,6 +632,19 @@ const operationalInsights = computed(() => {
       tab: 'quality' as TabKey,
     },
     {
+      key: 'reconditioning',
+      domain: t('Recuperação / Recondicionamento'),
+      title: `${reconditionedUnits.value} ${t('unidades recondicionadas')}`,
+      description: recoveryCandidates.value + inRecoveryUnits.value > 0
+        ? t('Há unidades recuperáveis a aguardar decisão ou validação final.')
+        : t('Sem pendências críticas de recondicionamento.'),
+      action: recoveryCandidates.value + inRecoveryUnits.value > 0
+        ? t('Validar severidade, retrabalho e aprovação funcional antes de libertar.')
+        : t('Manter monitorização das decisões de recuperação.'),
+      toneClass: recoveryCandidates.value + inRecoveryUnits.value > 0 ? 'tone-warning' : 'tone-success',
+      tab: 'quality' as TabKey,
+    },
+    {
       key: 'racks',
       domain: t('Post-line logistics'),
       title: `${activeRackAssignments.value}/${props.operationalData.racks.length || 0}`,
@@ -588,6 +672,33 @@ const operationalInsights = computed(() => {
       tab: 'quality' as TabKey,
     },
   ]
+})
+
+const visibleOperationalInsights = computed(() => operationalInsights.value.slice(0, 4))
+
+const primaryOperationalDecision = computed(() => {
+  const attentionInsight = operationalInsights.value.find((insight) => insight.toneClass === 'tone-danger')
+    ?? operationalInsights.value.find((insight) => insight.toneClass === 'tone-warning')
+
+  if (attentionInsight) {
+    return {
+      state: 'Atenção necessária',
+      attention: attentionInsight.title,
+      action: attentionInsight.action,
+      evidence: attentionInsight.description,
+      tab: attentionInsight.tab,
+      toneClass: attentionInsight.toneClass,
+    }
+  }
+
+  return {
+    state: t('Fluxo operacional estável'),
+    attention: t('No blocked units right now.'),
+    action: t('Keep monitoring quality gates.'),
+    evidence: `${activeUnits.value} unidades ativas / ${passRate.value === null ? '-' : `${passRate.value}%`} aprovadas`,
+    tab: 'executive' as TabKey,
+    toneClass: 'tone-success',
+  }
 })
 
 function focusTab(tab: TabKey) {

@@ -28,86 +28,110 @@
       #eef4f8;
     background-size: auto, 32px 32px, 32px 32px, auto;
   }
-  .app-main { @apply min-w-0 lg:pl-64 xl:pl-72; }
-  .app-topbar { @apply sticky top-0 z-20 border-b border-slate-200/80 bg-white/90 shadow-[0_10px_35px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-slate-700 dark:bg-slate-900/90; }
-  .app-content { @apply px-3 py-4 sm:px-4 md:px-5 lg:px-6 xl:px-8; }
+  .app-main { @apply min-w-0; }
+  .app-topbar { @apply sticky top-0 z-20 border-b border-slate-200/80 bg-white/95 shadow-[0_6px_22px_rgba(15,23,42,0.05)] backdrop-blur-xl dark:border-slate-700 dark:bg-slate-900/95; }
+  .app-content { @apply px-3 py-3 sm:px-4 md:px-5 lg:px-5 xl:px-6; }
   .app-sidebar {
-    @apply fixed inset-y-0 left-0 z-40 flex w-64 -translate-x-full transform flex-col overflow-hidden border-r border-slate-200/80 bg-white/95 px-3 py-3 shadow-[10px_0_35px_rgba(15,23,42,0.08)] backdrop-blur-xl transition-transform duration-200 ease-out dark:border-slate-800 dark:bg-slate-950/95 lg:translate-x-0 xl:w-72 xl:px-4 xl:py-4;
+    @apply fixed inset-y-0 left-0 z-40 flex w-64 -translate-x-full transform flex-col overflow-hidden border-r border-slate-200/80 bg-white/95 px-3 py-3 shadow-[10px_0_35px_rgba(15,23,42,0.08)] backdrop-blur-xl transition-transform duration-200 ease-out dark:border-slate-800 dark:bg-slate-950/95 lg:translate-x-0;
   }
   .app-sidebar-open { @apply translate-x-0 shadow-2xl lg:shadow-sm; }
   .app-sidebar-overlay { @apply fixed inset-0 z-30 bg-slate-950/45 backdrop-blur-[1px]; }
   .app-sidebar-close { @apply absolute right-0 top-0 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-xl font-bold leading-none text-slate-600 transition hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600; }
-  .app-sidebar-brand { @apply relative mb-4 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-3 text-left shadow-sm dark:border-slate-800 dark:from-slate-900 dark:to-slate-950; }
-  .app-sidebar-brand h1 { @apply mt-3 text-lg font-black tracking-normal text-slate-950 dark:text-slate-50; }
+  .app-sidebar-brand { @apply relative mb-2 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-2.5 text-left shadow-sm dark:border-slate-800 dark:from-slate-900 dark:to-slate-950; }
+  .app-sidebar-brand h1 { @apply mt-2 text-base font-black tracking-normal text-slate-950 dark:text-slate-50; }
   .app-sidebar-brand p { @apply mt-1 text-[11px] font-bold uppercase tracking-normal text-slate-500 dark:text-slate-400; }
   .app-sidebar-nav { @apply min-h-0 flex-1 overflow-y-auto pr-1; }
-  .app-sidebar-nav nav { @apply space-y-4 pb-5; }
-  .nav-group { @apply space-y-1; }
-  .nav-group-title { @apply px-2 text-[10px] font-black uppercase tracking-normal text-slate-400 dark:text-slate-500; }
-  .app-sidebar-profile { @apply mt-4 shrink-0 rounded-lg border border-slate-200 bg-slate-50/90 p-3 text-sm text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-300; }
-  .app-sidebar-profile-meta { @apply mt-3 space-y-1 border-t border-slate-200 pt-3 text-xs font-semibold dark:border-slate-600; }
-  .app-sidebar-profile-actions { @apply mt-3 grid gap-2 sm:grid-cols-2; }
+  .app-sidebar-nav nav { @apply space-y-2.5 pb-3; }
+  .nav-group { @apply space-y-0.5; }
+  .nav-group-title { @apply px-2 pb-0.5 text-[9px] font-black uppercase tracking-normal text-slate-400 dark:text-slate-500; }
+  .app-sidebar-profile { @apply mt-2 shrink-0 rounded-lg border border-slate-200 bg-slate-50/90 p-2.5 text-xs text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-300; }
+  .app-sidebar-profile-actions { @apply mt-2 grid grid-cols-1 gap-1.5 min-[300px]:grid-cols-3; }
+  .app-sidebar-profile-actions .btn-secondary { @apply min-w-0 px-2 text-[11px] leading-tight; }
+  .app-sidebar-resize-handle { @apply absolute inset-y-0 -right-1 hidden w-2 cursor-col-resize rounded-full bg-transparent transition hover:bg-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-400 dark:hover:bg-sky-700 lg:block; }
   .card { @apply rounded-lg border border-slate-200/80 bg-white/95 shadow-[0_14px_40px_rgba(15,23,42,0.07)] dark:border-slate-800 dark:bg-slate-900/95 dark:text-slate-100; }
-  .hero-card { @apply rounded-lg border border-slate-200/85 bg-gradient-to-br from-white via-slate-50 to-sky-50 p-5 shadow-[0_18px_45px_rgba(15,23,42,0.08)] dark:border-slate-800 dark:bg-gradient-to-br dark:from-slate-900 dark:via-slate-900 dark:to-slate-950 dark:text-slate-100 sm:p-6 xl:p-7; }
-  .metric-card { @apply min-w-0 rounded-lg border border-slate-200/90 bg-white p-4 shadow-[0_10px_28px_rgba(15,23,42,0.06)] transition hover:-translate-y-0.5 hover:border-sky-200 dark:border-slate-800 dark:bg-slate-900 sm:p-5; }
+  .hero-card { @apply rounded-lg border border-slate-200/85 bg-gradient-to-br from-white via-slate-50 to-sky-50 p-4 shadow-[0_14px_36px_rgba(15,23,42,0.07)] dark:border-slate-800 dark:bg-gradient-to-br dark:from-slate-900 dark:via-slate-900 dark:to-slate-950 dark:text-slate-100 sm:p-5; }
+  .metric-card { @apply min-w-0 rounded-lg border border-slate-200/90 bg-white p-3 shadow-[0_8px_22px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:border-sky-200 dark:border-slate-800 dark:bg-slate-900 sm:p-4; }
   .metric-card span { @apply block text-[11px] font-bold uppercase tracking-normal text-slate-500 dark:text-slate-400; }
-  .metric-card strong { @apply mt-2 block text-2xl font-black tracking-normal text-slate-950 dark:text-white sm:text-3xl xl:text-4xl; }
-  .nav-item { @apply relative flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-bold text-slate-600 transition hover:bg-slate-100/90 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white; }
+  .metric-card strong { @apply mt-1.5 block text-2xl font-black tracking-normal text-slate-950 dark:text-white sm:text-3xl; }
+  .nav-item { @apply relative flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] font-bold text-slate-600 transition hover:bg-slate-100/90 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white; }
   .nav-item-active { @apply bg-sky-50 text-drivolution-900 ring-1 ring-sky-100 dark:bg-slate-800 dark:text-white dark:ring-sky-900; }
-  .nav-item-active::before { content: ""; @apply absolute left-0 top-2 h-6 w-1 rounded-r bg-drivolution-600; }
-  .nav-label { @apply min-w-0 break-words leading-snug; }
-  .nav-icon { @apply flex h-8 min-w-8 shrink-0 items-center justify-center rounded-md bg-slate-100 text-[10px] font-black tracking-normal text-slate-600 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:ring-slate-700; }
+  .nav-item-active::before { content: ""; @apply absolute left-0 top-1.5 h-5 w-1 rounded-r bg-drivolution-600; }
+  .nav-label { @apply min-w-0 overflow-hidden leading-snug; }
+  .nav-icon { @apply flex h-7 min-w-7 shrink-0 items-center justify-center rounded-md bg-slate-100 text-[9px] font-black tracking-normal text-slate-600 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:ring-slate-700; }
   .nav-item-active .nav-icon { @apply bg-drivolution-600 text-white ring-drivolution-600; }
-  .mobile-tab { @apply whitespace-nowrap rounded-lg border border-slate-200 bg-white px-4 py-2 text-[11px] font-bold text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200; }
+  .mobile-tab { @apply whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200; }
   .mobile-tab-active { @apply border-drivolution-500 bg-sky-50 text-drivolution-900 dark:bg-slate-800 dark:text-white; }
-  .btn-primary { @apply inline-flex max-w-full items-center justify-center whitespace-nowrap rounded-lg bg-drivolution-700 px-4 py-2.5 text-sm font-black text-white shadow-sm transition hover:bg-drivolution-900 dark:bg-drivolution-500 dark:hover:bg-drivolution-700 sm:px-5 sm:py-3; }
-  .btn-secondary { @apply inline-flex max-w-full items-center justify-center whitespace-nowrap rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600 sm:px-5 sm:py-3; }
-  .btn-ghost { @apply inline-flex max-w-full items-center justify-center whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-black text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white; }
-  .btn-danger { @apply inline-flex max-w-full items-center justify-center whitespace-nowrap rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-black text-red-700 shadow-sm transition hover:bg-red-100 dark:border-red-800 dark:bg-red-950/30 dark:text-red-200 dark:hover:bg-red-900/40; }
-  .btn-compact { @apply px-3 py-2 text-xs sm:px-3 sm:py-2; }
+  .btn-primary { @apply inline-flex max-w-full items-center justify-center whitespace-nowrap rounded-lg bg-drivolution-700 px-3.5 py-2 text-sm font-black text-white shadow-sm transition hover:bg-drivolution-900 dark:bg-drivolution-500 dark:hover:bg-drivolution-700; }
+  .btn-secondary { @apply inline-flex max-w-full items-center justify-center whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600; }
+  .btn-ghost { @apply inline-flex max-w-full items-center justify-center whitespace-nowrap rounded-lg px-3.5 py-2 text-sm font-black text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white; }
+  .btn-danger { @apply inline-flex max-w-full items-center justify-center whitespace-nowrap rounded-lg border border-red-200 bg-red-50 px-3.5 py-2 text-sm font-black text-red-700 shadow-sm transition hover:bg-red-100 dark:border-red-800 dark:bg-red-950/30 dark:text-red-200 dark:hover:bg-red-900/40; }
+  .btn-compact { @apply px-2.5 py-1.5 text-xs; }
+  .icon-button { @apply inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-base font-black text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:hover:bg-slate-800; }
+  .topbar-controls { @apply flex min-w-0 flex-wrap items-center gap-2 lg:justify-end; }
+  .compact-select { @apply h-9 min-w-[6.5rem] rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200; }
+  .api-health { @apply inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50/90 px-2.5 text-xs font-black text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-200; }
+  .api-health-dot { @apply h-2 w-2 shrink-0 rounded-full bg-emerald-500; }
+  .api-health-warn .api-health-dot { @apply bg-amber-500; }
+  .api-health-error .api-health-dot { @apply bg-red-500; }
+  .avatar-button { @apply inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 text-xs font-bold text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200; }
   .btn-link-tech { @apply inline-flex items-center justify-center rounded-lg px-2 py-1 text-xs font-black uppercase tracking-normal text-drivolution-700 hover:bg-sky-50 dark:text-sky-300 dark:hover:bg-slate-800; }
-  .domain-pill { @apply rounded-lg border border-drivolution-100 bg-white px-4 py-2 text-sm font-bold text-drivolution-900 shadow-sm dark:border-drivolution-700 dark:bg-slate-700 dark:text-drivolution-100; }
-  .section-heading { @apply flex flex-wrap items-start justify-between gap-4; }
+  .domain-pill { @apply rounded-lg border border-drivolution-100 bg-white px-3 py-1.5 text-xs font-bold text-drivolution-900 shadow-sm dark:border-drivolution-700 dark:bg-slate-700 dark:text-drivolution-100; }
+  .section-heading { @apply flex flex-wrap items-start justify-between gap-3; }
   .section-heading p { @apply text-xs font-bold uppercase tracking-normal text-drivolution-700 dark:text-drivolution-300; }
-  .section-heading h3 { @apply mt-1 text-xl font-black leading-tight tracking-normal text-slate-950 dark:text-white sm:text-2xl; }
-  .line-step { @apply flex min-w-0 flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50/90 p-4 shadow-sm lg:flex-row lg:items-center lg:justify-between dark:border-slate-800 dark:bg-slate-950/50; }
-  .alert-card { @apply min-w-0 rounded-lg border border-slate-200 bg-slate-50/90 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/50; }
-  .table-shell { @apply mt-5 max-w-full overflow-x-auto overflow-y-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900; }
-  .crud-form-shell { @apply mt-5 overflow-hidden rounded-lg border border-slate-200 bg-slate-50/80 dark:border-slate-700 dark:bg-slate-900/40; }
+  .section-heading h3 { @apply mt-0.5 text-lg font-black leading-tight tracking-normal text-slate-950 dark:text-white sm:text-xl; }
+  .line-step { @apply flex min-w-0 flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50/90 p-3 shadow-sm lg:flex-row lg:items-center lg:justify-between dark:border-slate-800 dark:bg-slate-950/50; }
+  .line-state-list { @apply grid max-h-[420px] gap-2 overflow-y-auto pr-1; }
+  .line-state-row { @apply gap-2 px-3 py-2; }
+  .alert-card { @apply min-w-0 rounded-lg border border-slate-200 bg-slate-50/90 p-3 shadow-sm dark:border-slate-800 dark:bg-slate-950/50; }
+  .compact-card-list { @apply max-h-[440px] overflow-y-auto pr-1; }
+  .table-shell { @apply mt-4 max-w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900; max-height: var(--table-shell-max-height, clamp(320px, 48vh, 560px)); }
+  .compact-table-shell { --table-shell-max-height: clamp(260px, 42vh, 420px); }
+  .crud-form-shell { @apply mt-4 overflow-hidden rounded-lg border border-slate-200 bg-slate-50/80 dark:border-slate-700 dark:bg-slate-900/40; }
   .data-table { @apply w-full min-w-[720px] divide-y divide-slate-200 text-left text-sm dark:divide-slate-700; }
   .data-table thead { @apply bg-slate-100/80 dark:bg-slate-950; }
-  .data-table th { @apply whitespace-nowrap px-3 py-2.5 text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-300 sm:px-4 sm:py-3; }
-  .data-table td { @apply border-t border-slate-200 px-3 py-2.5 align-top text-slate-700 dark:border-slate-800 dark:text-slate-200 sm:px-4 sm:py-3; }
+  .data-table th { @apply sticky top-0 z-10 whitespace-nowrap bg-slate-100/95 px-3 py-2 text-[11px] font-black uppercase tracking-normal text-slate-500 shadow-[inset_0_-1px_0_rgba(148,163,184,0.35)] dark:bg-slate-950/95 dark:text-slate-300; }
+  .data-table td { @apply border-t border-slate-200 px-3 py-2 align-top text-slate-700 dark:border-slate-800 dark:text-slate-200; }
   .data-table tbody tr { @apply transition hover:bg-sky-50/55 dark:hover:bg-slate-800/70; }
   .badge-blue { @apply inline-flex rounded-full bg-drivolution-50 px-3 py-1 text-xs font-black uppercase tracking-normal text-drivolution-700 dark:bg-drivolution-700 dark:text-white; }
   .badge-red { @apply inline-flex rounded-full bg-red-50 px-3 py-1 text-xs font-black uppercase tracking-normal text-red-700 dark:bg-red-700 dark:text-white; }
   .badge-amber { @apply inline-flex rounded-full bg-amber-50 px-3 py-1 text-xs font-black uppercase tracking-normal text-amber-700 dark:bg-amber-600 dark:text-white; }
   .badge-green { @apply inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-black uppercase tracking-normal text-emerald-700 dark:bg-emerald-700 dark:text-white; }
   .badge-gray { @apply inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-black uppercase tracking-normal text-slate-600 dark:bg-slate-700 dark:text-slate-200; }
+  .event-chip { @apply max-w-[14rem] truncate px-2.5 py-0.5 text-[11px]; }
   .form-label { @apply grid min-w-0 gap-2 text-sm font-bold text-slate-700 dark:text-slate-300; }
-  .form-input { @apply w-full min-w-0 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-drivolution-500 focus:ring-4 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:ring-drivolution-900 sm:py-3; }
-  .analytics-page { @apply min-w-0 space-y-5 lg:space-y-6; }
-  .analytics-hero { @apply overflow-hidden rounded-lg border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-sky-50 px-4 py-5 shadow-[0_18px_45px_rgba(15,23,42,0.08)] dark:border-slate-800 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950 sm:px-5 sm:py-6; }
-  .analytics-section { @apply min-w-0 space-y-4; }
-  .section-description { @apply mt-2 max-w-3xl text-sm font-medium normal-case leading-6 text-slate-600 dark:text-slate-300; }
-  .section-heading .section-description { @apply mt-2 max-w-3xl text-sm font-medium normal-case leading-6 text-slate-600 dark:text-slate-300; }
-  .analytics-status-grid { @apply mt-5 grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-5; }
-  .analytics-status-card { @apply min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800; }
+  .form-input { @apply w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 outline-none transition focus:border-drivolution-500 focus:ring-4 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:ring-drivolution-900; }
+  .analytics-page { @apply min-w-0 space-y-4 lg:space-y-5; }
+  .analytics-hero { @apply overflow-hidden rounded-lg border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-sky-50 px-4 py-4 shadow-[0_14px_36px_rgba(15,23,42,0.07)] dark:border-slate-800 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950 sm:px-5; }
+  .analytics-section { @apply min-w-0 space-y-3; }
+  .section-description { @apply mt-1.5 max-w-3xl text-sm font-medium normal-case leading-5 text-slate-600 dark:text-slate-300; }
+  .section-heading .section-description { @apply mt-1.5 max-w-3xl text-sm font-medium normal-case leading-5 text-slate-600 dark:text-slate-300; }
+  .analytics-status-grid { @apply mt-4 grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-5; }
+  .analytics-status-card { @apply min-w-0 rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800; }
   .analytics-status-card span { @apply block text-[11px] font-black uppercase tracking-normal text-slate-500 dark:text-slate-400; }
   .analytics-status-card strong { @apply mt-2 block break-words text-base font-black leading-tight text-slate-950 dark:text-white; }
   .analytics-status-card p { @apply mt-2 break-words text-xs font-semibold normal-case leading-5 text-slate-600 dark:text-slate-300; }
   .analytics-kpi-grid { @apply grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6; }
-  .analytics-kpi-card { @apply min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800; }
+  .analytics-kpi-card { @apply min-w-0 rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800; }
   .analytics-kpi-card span { @apply block text-[11px] font-black uppercase tracking-normal text-slate-500 dark:text-slate-400; }
-  .analytics-kpi-card strong { @apply mt-2 block break-words text-2xl font-black leading-tight text-slate-950 dark:text-white sm:text-3xl; }
+  .analytics-kpi-card strong { @apply mt-1.5 block break-words text-2xl font-black leading-tight text-slate-950 dark:text-white; }
   .analytics-kpi-card p { @apply mt-2 break-words text-sm font-semibold normal-case leading-5 text-slate-600 dark:text-slate-300; }
   .analytics-insight-grid { @apply grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-3; }
-  .analytics-insight-card { @apply min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800; }
+  .analytics-insight-card { @apply min-w-0 rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800; }
   .analytics-insight-card span { @apply block text-[11px] font-black uppercase tracking-normal text-slate-500 dark:text-slate-400; }
   .analytics-insight-card strong { @apply mt-2 block break-words text-lg font-black leading-tight text-slate-950 dark:text-white; }
   .analytics-insight-card p { @apply mt-2 min-h-10 break-words text-sm font-semibold normal-case leading-6 text-slate-600 dark:text-slate-300; }
+  .analytics-decision-strip { @apply grid min-w-0 gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800 lg:grid-cols-[repeat(4,minmax(0,1fr))_auto] lg:items-center; }
+  .analytics-decision-strip div { @apply min-w-0 border-b border-slate-200 pb-2 dark:border-slate-700 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-3; }
+  .analytics-decision-strip div:nth-child(4) { @apply lg:border-r-0; }
+  .analytics-decision-strip span { @apply block text-[11px] font-black uppercase tracking-normal text-slate-500 dark:text-slate-400; }
+  .analytics-decision-strip strong { @apply mt-1 block break-words text-sm font-black leading-5 text-slate-950 dark:text-white; }
   .dashboard-card-grid { @apply grid min-w-0 gap-4 md:grid-cols-2 2xl:grid-cols-3; }
+  .dashboard-compact-list { @apply grid min-w-0 gap-3 xl:grid-cols-3; }
   .dashboard-card { @apply min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:border-drivolution-300 dark:border-slate-700 dark:bg-slate-800; }
+  .dashboard-compact-list .dashboard-card { @apply p-3; }
+  .dashboard-compact-list .dashboard-card-meta { @apply mt-3 gap-2 pt-3; }
+  .dashboard-compact-list .dashboard-card-note { @apply mt-3 p-2 text-xs leading-5; }
+  .dashboard-compact-list .technical-list { @apply max-h-20 overflow-y-auto pr-1; }
   .dashboard-card-active { @apply border-drivolution-500 ring-2 ring-drivolution-100 dark:border-drivolution-300 dark:ring-drivolution-900; }
   .dashboard-card-domain { @apply text-[11px] font-black uppercase tracking-normal text-drivolution-700 dark:text-drivolution-300; }
   .dashboard-card h4 { @apply mt-1 break-words text-lg font-black leading-tight text-slate-950 dark:text-white; }
@@ -115,41 +139,103 @@
   .dashboard-card-meta dt { @apply text-[11px] font-black uppercase tracking-normal text-slate-500 dark:text-slate-400; }
   .dashboard-card-meta dd { @apply mt-1 break-words font-bold text-slate-800 dark:text-slate-100; }
   .dashboard-card-note { @apply mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-semibold leading-6 text-slate-700 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-200; }
-  .grafana-panel-card { @apply min-w-0 overflow-hidden rounded-lg border border-slate-200/90 bg-white/95 p-4 shadow-[0_14px_38px_rgba(15,23,42,0.07)] dark:border-slate-800 dark:bg-slate-900/95 sm:p-5; }
+  .grafana-panel-card { @apply min-w-0 overflow-hidden rounded-lg border border-slate-200/90 bg-white/95 p-3 shadow-[0_10px_28px_rgba(15,23,42,0.06)] dark:border-slate-800 dark:bg-slate-900/95 sm:p-4; }
   .tone-success { @apply border-emerald-200 bg-emerald-50/70 dark:border-emerald-800 dark:bg-emerald-950/30; }
   .tone-warning { @apply border-amber-200 bg-amber-50/80 dark:border-amber-700 dark:bg-amber-950/30; }
   .tone-danger { @apply border-red-200 bg-red-50/80 dark:border-red-800 dark:bg-red-950/30; }
   .tone-info { @apply border-sky-200 bg-sky-50/80 dark:border-sky-800 dark:bg-sky-950/30; }
   .tone-muted { @apply border-slate-200 bg-slate-50/80 dark:border-slate-700 dark:bg-slate-900/50; }
-  .topbar-status-grid { @apply grid w-full min-w-0 gap-2 sm:grid-cols-2 xl:w-auto xl:grid-cols-4; }
   .system-pill { @apply min-w-0 rounded-lg border border-slate-200 bg-slate-50/90 px-3 py-2 text-xs font-bold text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-300; }
   .system-pill span { @apply block text-[10px] font-black uppercase tracking-normal text-slate-400; }
   .system-pill strong { @apply mt-0.5 block truncate text-slate-900 dark:text-white; }
-  .ops-hero { @apply overflow-hidden rounded-lg border border-slate-200/90 bg-gradient-to-br from-white via-slate-50 to-sky-50 p-5 shadow-[0_18px_45px_rgba(15,23,42,0.08)] dark:border-slate-800 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950 sm:p-6 xl:p-7; }
-  .ops-hero-visual { @apply min-w-0 rounded-lg border border-slate-200 bg-white/80 p-3 shadow-sm dark:border-slate-800 dark:bg-slate-950/50; }
-  .kpi-grid { @apply grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5; }
-  .kpi-card { @apply min-w-0 rounded-lg border bg-white p-4 shadow-[0_10px_28px_rgba(15,23,42,0.06)] dark:bg-slate-900; }
+  .ops-hero { @apply overflow-hidden rounded-lg border border-slate-200/90 bg-gradient-to-br from-white via-slate-50 to-sky-50 p-4 shadow-[0_14px_36px_rgba(15,23,42,0.07)] dark:border-slate-800 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950 sm:p-5; }
+  .ops-hero-visual { @apply min-w-0 rounded-lg border border-slate-200 bg-white/80 p-2.5 shadow-sm dark:border-slate-800 dark:bg-slate-950/50; }
+  .kpi-grid { @apply grid min-w-0 gap-2.5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5; }
+  .kpi-card { @apply min-w-0 rounded-lg border bg-white p-3 shadow-[0_8px_22px_rgba(15,23,42,0.05)] dark:bg-slate-900; }
   .kpi-card span { @apply block text-[11px] font-black uppercase tracking-normal text-slate-500 dark:text-slate-400; }
-  .kpi-card strong { @apply mt-2 block break-words text-2xl font-black leading-tight text-slate-950 dark:text-white sm:text-3xl; }
-  .kpi-card p { @apply mt-2 text-sm font-semibold leading-5 text-slate-600 dark:text-slate-300; }
-  .industrial-panel { @apply min-w-0 rounded-lg border border-slate-200 bg-white/95 p-5 shadow-[0_14px_40px_rgba(15,23,42,0.07)] dark:border-slate-800 dark:bg-slate-900/95 sm:p-6; }
-  .decision-grid { @apply grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-3; }
-  .decision-card { @apply min-w-0 rounded-lg border bg-white p-4 shadow-sm dark:bg-slate-900; }
+  .kpi-card strong { @apply mt-1.5 block break-words text-2xl font-black leading-tight text-slate-950 dark:text-white; }
+  .kpi-card p { @apply mt-1.5 text-sm font-semibold leading-5 text-slate-600 dark:text-slate-300; }
+  .industrial-panel { @apply min-w-0 rounded-lg border border-slate-200 bg-white/95 p-4 shadow-[0_10px_30px_rgba(15,23,42,0.06)] dark:border-slate-800 dark:bg-slate-900/95 sm:p-5; }
+  .decision-grid { @apply grid min-w-0 gap-2.5 md:grid-cols-2 xl:grid-cols-3; }
+  .decision-card { @apply min-w-0 rounded-lg border bg-white p-3 shadow-sm dark:bg-slate-900; }
   .decision-card span { @apply block text-[11px] font-black uppercase tracking-normal text-slate-500 dark:text-slate-400; }
-  .decision-card strong { @apply mt-2 block text-lg font-black leading-tight text-slate-950 dark:text-white; }
-  .decision-card p { @apply mt-2 text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300; }
-  .empty-state { @apply rounded-lg border border-dashed border-slate-300 bg-slate-50/80 p-5 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-950/40 dark:text-slate-300; }
+  .decision-card strong { @apply mt-1.5 block text-base font-black leading-tight text-slate-950 dark:text-white; }
+  .decision-card p { @apply mt-1.5 text-sm font-semibold leading-5 text-slate-600 dark:text-slate-300; }
+  .customer-toolbar { @apply flex flex-col gap-3 md:flex-row md:items-center md:justify-between; }
+  .customer-order-card { @apply min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900; }
+  .customer-state-chip { @apply inline-flex rounded-full bg-sky-50 px-3 py-1 text-xs font-black uppercase tracking-normal text-drivolution-700 dark:bg-slate-800 dark:text-sky-200; }
+  .customer-empty-state { @apply rounded-lg border border-dashed border-slate-300 bg-white/80 p-6 text-center shadow-sm dark:border-slate-700 dark:bg-slate-900/80; }
+  .customer-empty-state strong { @apply block text-lg font-black text-slate-950 dark:text-white; }
+  .customer-empty-state p { @apply mx-auto mt-2 max-w-xl text-sm font-semibold text-slate-600 dark:text-slate-300; }
+  .customer-detail-panel { @apply rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5; }
+  .customer-status-card { @apply rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/50; }
+  .customer-status-card span, .customer-info-tile span, .customer-order-preview span { @apply block text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400; }
+  .customer-status-card strong { @apply mt-1 block text-2xl font-black text-slate-950 dark:text-white; }
+  .customer-status-card p { @apply mt-2 text-sm font-semibold text-slate-600 dark:text-slate-300; }
+  .customer-progress-steps { @apply grid gap-2 sm:grid-cols-3 xl:grid-cols-6; }
+  .customer-progress-step { @apply rounded-lg border border-slate-200 bg-slate-50 p-3 text-center dark:border-slate-800 dark:bg-slate-950/50; }
+  .customer-progress-step span { @apply mx-auto block h-3 w-3 rounded-full bg-slate-300 dark:bg-slate-600; }
+  .customer-progress-step p { @apply mt-2 text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400; }
+  .customer-progress-step-done span, .customer-progress-step-current span { @apply bg-drivolution-600; }
+  .customer-progress-step-current { @apply border-drivolution-300 bg-sky-50 dark:border-sky-700 dark:bg-slate-800; }
+  .customer-progress-step-current p { @apply text-drivolution-800 dark:text-sky-200; }
+  .customer-info-tile { @apply rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/50; }
+  .customer-info-tile strong { @apply mt-1 block text-sm font-black text-slate-950 dark:text-white; }
+  .customer-history-list { @apply space-y-2; }
+  .customer-history-list li { @apply flex flex-col gap-1 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-800 dark:bg-slate-950/50 sm:flex-row sm:items-center sm:justify-between; }
+  .customer-history-list span { @apply text-xs font-bold text-slate-500 dark:text-slate-400; }
+  .customer-history-list strong { @apply text-slate-900 dark:text-slate-100; }
+  .customer-order-form-layout { @apply grid gap-5 lg:grid-cols-[1fr_0.82fr]; }
+  .customer-order-form { @apply grid gap-4; }
+  .customer-order-preview { @apply rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900; }
+  .customer-order-preview strong { @apply mt-2 block text-2xl font-black text-slate-950 dark:text-white; }
+  .customer-order-preview dl { @apply mt-4 grid gap-3; }
+  .customer-order-preview dt { @apply text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400; }
+  .customer-order-preview dd { @apply text-sm font-bold text-slate-900 dark:text-slate-100; }
+  .customer-order-preview p { @apply my-5 text-sm font-semibold text-slate-600 dark:text-slate-300; }
+  .customer-confirmation { @apply rounded-lg border border-emerald-200 bg-emerald-50 p-6 text-center shadow-sm dark:border-emerald-700 dark:bg-emerald-900/25; }
+  .customer-confirmation span { @apply text-xs font-black uppercase tracking-normal text-emerald-700 dark:text-emerald-200; }
+  .customer-confirmation strong { @apply mt-2 block text-2xl font-black text-emerald-950 dark:text-white; }
+  .customer-confirmation p { @apply mt-2 text-sm font-semibold text-emerald-800 dark:text-emerald-100; }
+  .empty-state { @apply rounded-lg border border-dashed border-slate-300 bg-slate-50/80 p-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-950/40 dark:text-slate-300; }
   .empty-state strong { @apply block text-base font-black text-slate-900 dark:text-white; }
   .empty-state p { @apply mt-1 leading-6; }
-  .technical-list { @apply mt-4 grid gap-2; }
-  .technical-list li { @apply flex gap-2 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-2 text-sm font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-950/50 dark:text-slate-200; }
+  .technical-list { @apply mt-3 grid gap-1.5; }
+  .technical-list li { @apply flex gap-2 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-1.5 text-sm font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-950/50 dark:text-slate-200; }
   .technical-list li::before { content: ""; @apply mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-sky-500; }
+  .compact-help summary { @apply cursor-pointer list-none; }
+  .compact-help summary::-webkit-details-marker { display: none; }
+  .flow-filter-row { @apply mt-4 flex min-w-0 flex-wrap items-center gap-2; }
+  .flow-list { @apply mt-3 grid max-h-[16rem] gap-2 overflow-y-auto pr-1; }
+  .flow-transfer-row { @apply flex min-w-0 flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950/45 sm:flex-row sm:items-center sm:justify-between; }
+  .flow-transfer-main { @apply min-w-0 font-bold text-slate-800 dark:text-slate-100; }
+  .flow-transfer-meta { @apply flex shrink-0 flex-wrap items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400; }
+  .cell-clamp { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 }
 
 .content-shell {
   width: 100%;
   max-width: 1560px;
   margin-inline: auto;
+}
+
+@media (min-width: 1024px) {
+  .app-shell {
+    --sidebar-width: 280px;
+  }
+
+  .app-sidebar {
+    width: min(var(--sidebar-width), min(380px, 38vw));
+  }
+
+  .app-main {
+    padding-left: min(var(--sidebar-width), min(380px, 38vw));
+  }
+}
+
+.is-sidebar-resizing {
+  cursor: col-resize;
+  user-select: none;
 }
 
 .dark .app-shell {
@@ -165,8 +251,23 @@
   scrollbar-gutter: stable;
 }
 
+.nav-label {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
 .data-table td {
+  max-width: 22rem;
   overflow-wrap: anywhere;
+}
+
+.data-table .badge-blue,
+.data-table .badge-red,
+.data-table .badge-amber,
+.data-table .badge-green,
+.data-table .badge-gray {
+  white-space: nowrap;
 }
 
 @media (max-height: 860px) {
@@ -176,33 +277,42 @@
   }
 
   .app-sidebar-brand {
-    margin-bottom: 1rem;
+    margin-bottom: 0.5rem;
   }
 
   .app-sidebar-brand img {
-    height: 2.5rem;
+    height: 2rem;
   }
 
   .app-sidebar-profile {
-    padding: 0.875rem;
-    font-size: 0.8125rem;
+    padding: 0.5rem;
   }
 
-  .app-sidebar-profile-meta {
-    display: none;
+  .nav-item {
+    padding-block: 0.35rem;
   }
 
-  .app-sidebar-profile-actions {
-    grid-template-columns: 1fr;
+  .table-shell {
+    max-height: var(--table-shell-max-height, clamp(260px, 42vh, 440px));
   }
 }
 
 @media (min-width: 1024px) and (max-width: 1279px) {
-  .app-sidebar-profile-meta {
-    display: none;
+  .app-sidebar-profile-actions {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+}
+
+@media (max-width: 1366px) {
+  .content-shell {
+    max-width: 100%;
   }
 
-  .app-sidebar-profile-actions {
-    grid-template-columns: 1fr;
+  .table-shell {
+    max-height: var(--table-shell-max-height, clamp(260px, 42vh, 440px));
+  }
+
+  .ops-hero img {
+    max-height: 12rem;
   }
 }

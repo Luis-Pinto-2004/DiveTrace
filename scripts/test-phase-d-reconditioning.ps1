@@ -273,7 +273,7 @@ if ($PublishFiware) {
   Assert-Condition ($null -ne $publish) "FIWARE publish-current responded." "FIWARE publish-current did not respond."
 }
 
-$fiwareContext = Invoke-Json -Name "FIWARE context" -Path "/fiware/context" -Role "DemoViewer" -User "demo"
+$fiwareContext = Invoke-Json -Name "FIWARE context" -Path "/fiware/context" -Role "DemoViewer" -User "admin"
 if ($fiwareContext) {
   Assert-Condition ($fiwareContext.relationalSnapshotCount -gt 0) "FIWARE context exposes relational snapshot count." "FIWARE context has no relational snapshot count."
   $entities = @(Convert-ToArray $fiwareContext.entities)

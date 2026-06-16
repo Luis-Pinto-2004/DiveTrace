@@ -51,7 +51,7 @@ Fase B aplica controlo funcional real por permissoes no backend, mantendo autent
 | `QualityTechnician` | Ordens em leitura, unidades, trace, qualidade, decisao de qualidade, simulacao, recuperacao/recondicionamento e eventos |
 | `Logistics` | Unidades, trace, racks, materiais, suportes, simulacao, recuperacao em leitura e eventos |
 | `Customer` | Apenas `CustomerPortal.View` |
-| `DemoViewer` | Leitura demo: ordens, unidades, trace, qualidade, racks, materiais, FIWARE, Grafana, simulacao, portal cliente e eventos |
+| `DemoViewer` | Role tecnica de leitura mantida para compatibilidade de testes antigos; nao existe utilizador demo exposto |
 
 ## API
 
@@ -73,7 +73,7 @@ Se nenhum cabecalho for enviado, o ambiente local assume `Administrator` para ma
 ## Guardas funcionais
 
 - Dashboard summary, flow summary e operator workbench: `ProductUnits.View`.
-- Portal de cliente: `CustomerPortal.View`.
+- Portal de cliente: `CustomerPortal.View` em `GET /api/customer/orders`, `GET /api/customer/orders/{publicTrackingCode}` e `POST /api/customer/orders`.
 - CRUD de ordens: leitura `Orders.View`, escrita `Orders.Manage`.
 - CRUD de unidades: leitura `ProductUnits.View`, escrita geral `MasterData.Manage`.
 - Trace e historico de suporte: `ProductUnits.Trace`.
@@ -103,7 +103,7 @@ O dashboard envia `X-DriveTrace-Role` e `X-DriveTrace-User` com base no utilizad
 - mantem paineis CRUD em modo so leitura quando o papel pode consultar mas nao escrever;
 - impede o perfil `Customer` de ver dados internos, logs tecnicos, FIWARE, Grafana e utilizadores.
 
-Perfis demo disponiveis: `admin`, `supervisor`, `operador`, `qualidade`, `logistica`, `cliente` e `demo`.
+Perfis locais disponiveis: `admin`, `supervisor`, `operador`, `qualidade`, `logistica` e `cliente`.
 
 ## Validacao
 

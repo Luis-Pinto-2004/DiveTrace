@@ -78,7 +78,48 @@ public sealed class ProductionFlowController : ControllerBase
             return PermissionCatalogService.Forbidden(PermissionNames.CustomerPortalView);
         }
 
-        var order = await _flow.GetCustomerOrderAsync(publicTrackingCode, cancellationToken);
+        var profile = PermissionCatalogService.ResolveDemoUser(HttpContext);
+        var role = PermissionCatalogService.ResolveRole(HttpContext);
+        var customerCode = role.Equals(RoleNames.Customer, StringComparison.OrdinalIgnoreCase) ? profile.CustomerCode : null;
+        var order = await _flow.GetCustomerOrderAsync(publicTrackingCode, customerCode, cancellationToken);
         return order is null ? NotFound() : Ok(order);
+    }
+
+    [HttpGet("customer/orders")]
+    public async Task<IActionResult> CustomerOrders(CancellationToken cancellationToken)
+    {
+        if (!PermissionCatalogService.HasPermission(HttpContext, PermissionNames.CustomerPortalView))
+        {
+            return PermissionCatalogService.Forbidden(PermissionNames.CustomerPortalView);
+        }
+
+        var profile = PermissionCatalogService.ResolveDemoUser(HttpContext);
+        var role = PermissionCatalogService.ResolveRole(HttpContext);
+        var customerCode = role.Equals(RoleNames.Customer, StringComparison.OrdinalIgnoreCase) ? profile.CustomerCode : null;
+        return Ok(await _flow.GetCustomerOrdersAsync(customerCode, cancellationToken));
+    }
+
+    [HttpPost("customer/orders")]
+    public async Task<IActionResult> CreateCustomerOrder([FromBody] CustomerOrderCreateRequest request, CancellationToken cancellationToken)
+    {
+        if (!PermissionCatalogService.HasPermission(HttpContext, PermissionNames.CustomerPortalView))
+        {
+            return PermissionCatalogService.Forbidden(PermissionNames.CustomerPortalView);
+        }
+
+        var profile = PermissionCatalogService.ResolveDemoUser(HttpContext);
+        if (string.IsNullOrWhiteSpace(profile.CustomerCode))
+        {
+            return BadRequest(new { error = "O perfil autenticado não está associado a um cliente." });
+        }
+
+        try
+        {
+            return Ok(await _flow.CreateCustomerOrderAsync(profile.CustomerCode, request, cancellationToken));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 }

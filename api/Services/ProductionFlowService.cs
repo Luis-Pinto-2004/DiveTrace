@@ -15,6 +15,14 @@ public sealed class ProductUnitTransferRequest
     public bool MoveCurrentSupport { get; set; } = true;
 }
 
+public sealed class CustomerOrderCreateRequest
+{
+    public int? ProductId { get; set; }
+    public int? VariantId { get; set; }
+    public int Quantity { get; set; } = 1;
+    public string? Observations { get; set; }
+}
+
 public sealed class ProductionTimelineItem
 {
     public string EventType { get; init; } = string.Empty;
@@ -515,77 +523,192 @@ public sealed class ProductionFlowService
         };
     }
 
-    public async Task<object?> GetCustomerOrderAsync(string publicTrackingCode, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<object>> GetCustomerOrdersAsync(string? customerCode, CancellationToken cancellationToken = default)
+    {
+        var ordersQuery = _db.ManufacturingOrders.AsNoTracking();
+        if (!string.IsNullOrWhiteSpace(customerCode))
+        {
+            var customer = await _db.Customers.AsNoTracking().FirstOrDefaultAsync(x => x.CustomerCode == customerCode, cancellationToken);
+            if (customer is null) return Array.Empty<object>();
+            ordersQuery = ordersQuery.Where(x => x.CustomerId == customer.Id);
+        }
+
+        var orders = await ordersQuery
+            .OrderByDescending(x => x.ScheduledUntil)
+            .ThenByDescending(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        var result = new List<object>();
+        foreach (var order in orders)
+        {
+            result.Add(await BuildCustomerOrderPayloadAsync(order, includeDetail: false, cancellationToken));
+        }
+
+        return result;
+    }
+
+    public async Task<object?> GetCustomerOrderAsync(string publicTrackingCode, string? customerCode = null, CancellationToken cancellationToken = default)
     {
         var code = publicTrackingCode.Trim();
         var order = await _db.ManufacturingOrders.AsNoTracking().FirstOrDefaultAsync(x => x.PublicTrackingCode == code, cancellationToken);
         if (order is null) return null;
 
+        if (!string.IsNullOrWhiteSpace(customerCode))
+        {
+            var customerOwner = await _db.Customers.AsNoTracking().FirstOrDefaultAsync(x => x.CustomerCode == customerCode, cancellationToken);
+            if (customerOwner is null || order.CustomerId != customerOwner.Id) return null;
+        }
+
+        return await BuildCustomerOrderPayloadAsync(order, includeDetail: true, cancellationToken);
+    }
+
+    public async Task<object> CreateCustomerOrderAsync(string customerCode, CustomerOrderCreateRequest request, CancellationToken cancellationToken = default)
+    {
+        var customer = await _db.Customers.FirstOrDefaultAsync(x => x.CustomerCode == customerCode && x.IsActive, cancellationToken);
+        if (customer is null)
+        {
+            throw new InvalidOperationException("Cliente autenticado não encontrado ou inativo.");
+        }
+
+        var quantity = Math.Clamp(request.Quantity, 1, 99);
+        var product = request.ProductId.HasValue
+            ? await _db.Products.FirstOrDefaultAsync(x => x.Id == request.ProductId.Value, cancellationToken)
+            : await _db.Products.OrderBy(x => x.Id).FirstOrDefaultAsync(cancellationToken);
+        if (product is null)
+        {
+            throw new InvalidOperationException("Não existem produtos disponíveis para criar a encomenda.");
+        }
+
+        var variant = request.VariantId.HasValue
+            ? await _db.Variants.FirstOrDefaultAsync(x => x.Id == request.VariantId.Value && x.ProductId == product.Id, cancellationToken)
+            : await _db.Variants.Where(x => x.ProductId == product.Id).OrderBy(x => x.Id).FirstOrDefaultAsync(cancellationToken);
+
+        var process = await _db.ManufacturingProcesses.FirstOrDefaultAsync(x => x.ProductId == product.Id, cancellationToken)
+            ?? await _db.ManufacturingProcesses.OrderBy(x => x.Id).FirstOrDefaultAsync(cancellationToken);
+        var line = await _db.ProductionLines.OrderBy(x => x.DisplayOrder).ThenBy(x => x.Id).FirstOrDefaultAsync(cancellationToken);
+        if (process is null || line is null)
+        {
+            throw new InvalidOperationException("Configuração produtiva insuficiente para criar a encomenda.");
+        }
+
+        var now = DateTime.UtcNow;
+        var token = now.ToString("yyyyMMddHHmmssfff");
+        var order = new ManufacturingOrder
+        {
+            OrderNumber = await UniqueOrderNumberAsync($"OF-CLI-{token}", cancellationToken),
+            CustomerId = customer.Id,
+            ProductId = product.Id,
+            VariantId = variant?.Id,
+            ManufacturingProcessId = process.Id,
+            ProductionLineId = line.Id,
+            PlannedQty = quantity,
+            ScheduledUntil = now.Date.AddDays(7).AddHours(17),
+            Status = "Pedido recebido",
+            CustomerReference = $"Pedido cliente {customer.CustomerCode}",
+            PublicTrackingCode = await UniqueTrackingCodeAsync($"TRC-CLI-{token}", cancellationToken),
+            Observations = string.IsNullOrWhiteSpace(request.Observations) ? "Encomenda submetida pelo portal de cliente." : request.Observations.Trim()
+        };
+
+        _db.ManufacturingOrders.Add(order);
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return await BuildCustomerOrderPayloadAsync(order, includeDetail: true, cancellationToken);
+    }
+
+    private async Task<object> BuildCustomerOrderPayloadAsync(ManufacturingOrder order, bool includeDetail, CancellationToken cancellationToken)
+    {
         var customer = order.CustomerId.HasValue
             ? await _db.Customers.AsNoTracking().FirstOrDefaultAsync(x => x.Id == order.CustomerId.Value, cancellationToken)
+            : null;
+        var product = await _db.Products.AsNoTracking().FirstOrDefaultAsync(x => x.Id == order.ProductId, cancellationToken);
+        var variant = order.VariantId.HasValue
+            ? await _db.Variants.AsNoTracking().FirstOrDefaultAsync(x => x.Id == order.VariantId.Value, cancellationToken)
             : null;
         var units = await _db.ProductUnits.AsNoTracking().Where(x => x.ManufacturingOrderId == order.Id).OrderBy(x => x.UnitCode).ToListAsync(cancellationToken);
         var unitIds = units.Select(x => x.Id).ToArray();
         var sections = await _db.ProductionLineSections.AsNoTracking().ToListAsync(cancellationToken);
         var lines = await _db.ProductionLines.AsNoTracking().ToListAsync(cancellationToken);
-        var supports = await _db.Supports.AsNoTracking().ToListAsync(cancellationToken);
         var histories = await _db.ProductUnitLocationHistory.AsNoTracking().Where(x => unitIds.Contains(x.ProductUnitId)).OrderBy(x => x.OccurredAt).ToListAsync(cancellationToken);
         var sectionById = sections.ToDictionary(x => x.Id);
         var lineById = lines.ToDictionary(x => x.Id);
-        var supportById = supports.ToDictionary(x => x.Id);
         var historyByUnit = histories.GroupBy(x => x.ProductUnitId).ToDictionary(x => x.Key, x => x.ToList());
+        var completed = units.Count(unit => unit.Status.Equals("Completed", StringComparison.OrdinalIgnoreCase));
+        var progress = units.Count == 0 ? 0 : (int)Math.Round((double)completed / units.Count * 100);
+        var lastHistory = histories.OrderByDescending(x => x.OccurredAt).FirstOrDefault();
+        var lastSection = lastHistory is null ? null : Find(sectionById, lastHistory.ToSectionId);
 
         return new
         {
             generatedAt = DateTime.UtcNow,
             publicTrackingCode = order.PublicTrackingCode,
-            customerReference = order.CustomerReference,
             customer = customer is null ? null : new { customer.CustomerCode, customer.Name },
             order = new
             {
-                order.OrderNumber,
                 order.Status,
                 order.PlannedQty,
-                order.ScheduledUntil
+                order.ScheduledUntil,
+                product = product?.Name,
+                variant = variant?.Name
             },
             summary = new
             {
                 units = units.Count,
-                completed = units.Count(unit => unit.Status.Equals("Completed", StringComparison.OrdinalIgnoreCase)),
+                completed,
                 reconditioned = units.Count(unit => unit.IsReconditioned),
                 inFlow = units.Count(IsFlowUnit),
                 attention = units.Count(IsAttentionUnit),
-                lastMovementAt = histories.Count == 0 ? (DateTime?)null : histories.Max(x => x.OccurredAt)
+                lastMovementAt = histories.Count == 0 ? (DateTime?)null : histories.Max(x => x.OccurredAt),
+                progressPercent = progress,
+                progressSummary = CustomerProgressSummary(order, units, completed),
+                lastMilestone = lastHistory is null ? null : PublicMilestoneLabel(lastHistory.EventType, lastSection)
             },
-            units = units.Select(unit =>
+            units = includeDetail ? units.Select(unit =>
             {
                 var section = unit.CurrentSectionId.HasValue ? Find(sectionById, unit.CurrentSectionId.Value) : null;
-                var line = section?.LineId is null ? null : Find(lineById, section.LineId.Value);
                 var unitHistory = historyByUnit.TryGetValue(unit.Id, out var value) ? value : new List<ProductUnitLocationHistory>();
-                return new
+                return (object)new
                 {
-                    unit.UnitCode,
                     unit.Status,
-                    unit.QualityStatus,
+                    qualityStatus = PublicQuality(unit.QualityStatus),
                     customerState = CustomerState(unit),
-                    currentProductionLine = LineRef(line),
-                    currentSection = SectionRef(section),
-                    currentSupport = SupportRef(unit.CurrentSupportId.HasValue ? Find(supportById, unit.CurrentSupportId.Value) : null),
+                    currentStage = PublicSectionName(section),
                     routeState = RouteState(unit, section),
                     lastMovementAt = LastMovementAt(unitHistory)
                 };
-            }),
-            milestones = histories.Select(x => new
+            }).ToList() : new List<object>(),
+            milestones = includeDetail ? histories.Select(x =>
             {
-                unit = UnitRef(units.FirstOrDefault(unit => unit.Id == x.ProductUnitId)),
-                x.EventType,
-                x.Reason,
-                x.OccurredAt,
-                fromProductionLine = LineRef(Find(lineById, x.FromProductionLineId)),
-                toProductionLine = LineRef(Find(lineById, x.ToProductionLineId)),
-                toSection = SectionRef(Find(sectionById, x.ToSectionId))
-            })
+                var section = Find(sectionById, x.ToSectionId);
+                return (object)new
+                {
+                    eventType = PublicMilestoneLabel(x.EventType, section),
+                    x.OccurredAt,
+                    stage = PublicSectionName(section)
+                };
+            }).ToList() : new List<object>()
         };
+    }
+
+    private async Task<string> UniqueOrderNumberAsync(string preferred, CancellationToken cancellationToken)
+    {
+        var value = preferred;
+        var index = 1;
+        while (await _db.ManufacturingOrders.AnyAsync(x => x.OrderNumber == value, cancellationToken))
+        {
+            value = $"{preferred}-{index++}";
+        }
+        return value;
+    }
+
+    private async Task<string> UniqueTrackingCodeAsync(string preferred, CancellationToken cancellationToken)
+    {
+        var value = preferred;
+        var index = 1;
+        while (await _db.ManufacturingOrders.AnyAsync(x => x.PublicTrackingCode == value, cancellationToken))
+        {
+            value = $"{preferred}-{index++}";
+        }
+        return value;
     }
 
     private async Task<object> BuildTransferResponseAsync(int unitId, int movementId, CancellationToken cancellationToken)
@@ -714,6 +837,49 @@ public sealed class ProductionFlowService
         if (unit.Status.Equals("Blocked", StringComparison.OrdinalIgnoreCase) || unit.Status.Equals("Rework", StringComparison.OrdinalIgnoreCase)) return "Em validação";
         if (unit.Status.Equals("Scrap", StringComparison.OrdinalIgnoreCase)) return "Retido";
         if (unit.Status.Equals("Planned", StringComparison.OrdinalIgnoreCase)) return "Planeado";
+        return "Em produção";
+    }
+
+    private static string PublicQuality(string? value)
+    {
+        return value?.ToUpperInvariant() switch
+        {
+            "PASS" => "Conforme",
+            "FAIL" => "Em validação",
+            "PENDING" => "Pendente",
+            _ => string.IsNullOrWhiteSpace(value) ? "Pendente" : value
+        };
+    }
+
+    private static string PublicSectionName(ProductionLineSection? section)
+    {
+        if (section is null) return "Pedido recebido";
+        var text = $"{section.SectionType} {section.Name}".ToLowerInvariant();
+        if (text.Contains("qualidade") || text.Contains("controlo")) return "Validação de qualidade";
+        if (text.Contains("retrabalho")) return "Validação técnica";
+        if (text.Contains("rack") || text.Contains("expedi")) return "Preparação para entrega";
+        if (text.Contains("pint")) return "Acabamento";
+        if (text.Contains("sold") || text.Contains("corte") || text.Contains("estamp") || text.Contains("mont")) return "Produção";
+        if (text.Contains("transfer")) return "Transferência interna";
+        return "Preparação";
+    }
+
+    private static string PublicMilestoneLabel(string eventType, ProductionLineSection? section)
+    {
+        var value = eventType.ToLowerInvariant();
+        if (value.Contains("quality")) return "Validação de qualidade registada";
+        if (value.Contains("rack") || value.Contains("completed")) return "Preparação final atualizada";
+        if (value.Contains("transfer") || value.Contains("movement") || value.Contains("unittransfer")) return $"{PublicSectionName(section)} atualizada";
+        return "Estado da encomenda atualizado";
+    }
+
+    private static string CustomerProgressSummary(ManufacturingOrder order, IReadOnlyList<ProductUnit> units, int completed)
+    {
+        if (order.Status.Equals("Pedido recebido", StringComparison.OrdinalIgnoreCase)) return "Pedido recebido";
+        if (order.Status.Equals("Planned", StringComparison.OrdinalIgnoreCase)) return "Planeada";
+        if (units.Count == 0) return "A aguardar início de produção";
+        if (completed >= units.Count) return "Produção concluída";
+        if (units.Any(IsAttentionUnit)) return "Em validação";
         return "Em produção";
     }
 

@@ -140,9 +140,10 @@ try {
 $demoUsers = Invoke-Json -Name "Demo users" -Path "/auth/demo-users" -Role "Administrator" -User "admin"
 if ($demoUsers) {
   $usernames = @($demoUsers | ForEach-Object { $_.username })
-  foreach ($username in @("admin", "supervisor", "operador", "qualidade", "logistica", "cliente", "demo")) {
+  foreach ($username in @("admin", "supervisor", "operador", "qualidade", "logistica", "cliente")) {
     Assert-Condition ($usernames -contains $username) "Demo user $username exists." "Demo user $username is missing."
   }
+  Assert-Condition (-not ($usernames -contains "demo")) "Demo user is no longer exposed." "Demo user should not be exposed by /auth/demo-users."
 }
 
 $profiles = @(
@@ -151,8 +152,7 @@ $profiles = @(
   @{ User = "operador"; Role = "Operator"; RoleKey = "operator"; Required = @("ProductUnits.Transfer", "ProductUnits.Trace"); Forbidden = @("Fiware.View", "Racks.View", "Materials.View") },
   @{ User = "qualidade"; Role = "QualityTechnician"; RoleKey = "quality"; Required = @("Quality.View", "Quality.Record", "Quality.Decide"); Forbidden = @("Racks.View", "Fiware.View") },
   @{ User = "logistica"; Role = "Logistics"; RoleKey = "logistics"; Required = @("Racks.View", "Racks.Manage", "Materials.Manage"); Forbidden = @("Quality.View", "Fiware.View") },
-  @{ User = "cliente"; Role = "Customer"; RoleKey = "client"; Required = @("CustomerPortal.View"); Forbidden = @("ProductUnits.View", "ProductUnits.Trace", "Fiware.View", "Grafana.View") },
-  @{ User = "demo"; Role = "DemoViewer"; RoleKey = "demoViewer"; Required = @("ProductUnits.View", "Fiware.View", "Grafana.View"); Forbidden = @("Racks.Manage", "Quality.Record", "Users.Manage") }
+  @{ User = "cliente"; Role = "Customer"; RoleKey = "client"; Required = @("CustomerPortal.View"); Forbidden = @("ProductUnits.View", "ProductUnits.Trace", "Fiware.View", "Grafana.View") }
 )
 
 foreach ($profileCase in $profiles) {
@@ -174,13 +174,18 @@ Invoke-ExpectedStatus -Name "Logistics can read racks" -Path "/racks" -Role "Log
 Invoke-ExpectedStatus -Name "Logistics can read materials" -Path "/raw-materials" -Role "Logistics" -User "logistica" -ExpectedStatus 200
 Invoke-ExpectedStatus -Name "Logistics cannot read quality" -Path "/quality-results" -Role "Logistics" -User "logistica" -ExpectedStatus 403
 Invoke-ExpectedStatus -Name "Customer can read public order" -Path "/customer/orders/TRC-PORTA-001" -Role "Customer" -User "cliente" -ExpectedStatus 200
+Invoke-ExpectedStatus -Name "Customer can list own orders" -Path "/customer/orders" -Role "Customer" -User "cliente" -ExpectedStatus 200
+Invoke-ExpectedStatus -Name "Customer cannot read another customer order" -Path "/customer/orders/TRC-PORTA-002" -Role "Customer" -User "cliente" -ExpectedStatus 404
 Invoke-ExpectedStatus -Name "Customer cannot read dashboard summary" -Path "/dashboard/summary" -Role "Customer" -User "cliente" -ExpectedStatus 403
 Invoke-ExpectedStatus -Name "Customer cannot read product units" -Path "/product-units" -Role "Customer" -User "cliente" -ExpectedStatus 403
 Invoke-ExpectedStatus -Name "Customer cannot read FIWARE" -Path "/fiware/context" -Role "Customer" -User "cliente" -ExpectedStatus 403
-Invoke-ExpectedStatus -Name "Demo viewer can read FIWARE" -Path "/fiware/context" -Role "DemoViewer" -User "demo" -ExpectedStatus 200
-Invoke-ExpectedStatus -Name "Demo viewer cannot create rack" -Path "/racks" -Role "DemoViewer" -User "demo" -Method "POST" -ExpectedStatus 403 -Body @{
-  rackCode = "RACK-BLOCKED-DEMO"
-  status = "Available"
+
+$createdCustomerOrder = Invoke-Json -Name "Customer can create demo order" -Path "/customer/orders" -Role "Customer" -User "cliente" -Method "POST" -Body @{
+  quantity = 1
+  observations = "Pedido criado pelo smoke test de cliente."
+}
+if ($createdCustomerOrder) {
+  Assert-Condition (-not [string]::IsNullOrWhiteSpace($createdCustomerOrder.publicTrackingCode)) "Customer order creation returns a public tracking code." "Customer order creation did not return a public tracking code."
 }
 
 if ($PublishFiware) {

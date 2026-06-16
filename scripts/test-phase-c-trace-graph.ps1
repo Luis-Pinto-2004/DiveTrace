@@ -222,7 +222,7 @@ Invoke-ExpectedStatus -Name "Customer cannot read factory graph" -Path "/trace-g
 Invoke-ExpectedStatus -Name "Customer cannot read product-unit graph" -Path "/trace-graph/product-unit/1" -Role "Customer" -User "cliente" -ExpectedStatus 403
 Invoke-ExpectedStatus -Name "Operator can read scoped factory graph" -Path "/trace-graph/factory" -Role "Operator" -User "operador" -ExpectedStatus 200
 Invoke-ExpectedStatus -Name "Supervisor cannot read FIWARE graph status" -Path "/trace-graph/fiware-status" -Role "Supervisor" -User "supervisor" -ExpectedStatus 403
-Invoke-ExpectedStatus -Name "Demo viewer can read FIWARE graph status" -Path "/trace-graph/fiware-status" -Role "DemoViewer" -User "demo" -ExpectedStatus 200
+Invoke-ExpectedStatus -Name "Technical read role can read FIWARE graph status" -Path "/trace-graph/fiware-status" -Role "DemoViewer" -User "admin" -ExpectedStatus 200
 
 $operatorOptions = Invoke-Json -Name "Trace graph options as operator" -Path "/trace-graph/options" -Role "Operator" -User "operador"
 if ($operatorOptions) {
@@ -246,7 +246,7 @@ if ($customerOptions) {
   }
 }
 
-$fiwareStatus = Invoke-Json -Name "Trace graph FIWARE status" -Path "/trace-graph/fiware-status" -Role "DemoViewer" -User "demo"
+$fiwareStatus = Invoke-Json -Name "Trace graph FIWARE status" -Path "/trace-graph/fiware-status" -Role "DemoViewer" -User "admin"
 if ($fiwareStatus) {
   Assert-Condition ($fiwareStatus.relationalSnapshotCount -gt 0) "FIWARE graph status exposes relational snapshot count." "FIWARE graph status has no relational snapshot count."
 }

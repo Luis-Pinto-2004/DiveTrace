@@ -93,8 +93,7 @@ public sealed class PermissionCatalogService
         new("operador", "Operador Linha 1", "operador", RoleNames.Operator, "operador@drivetrace.local", "Linha 1", "LINHA-01", "SEC-SOLD", null),
         new("qualidade", "Técnico de Qualidade", "qualidade", RoleNames.QualityTechnician, "qualidade@drivetrace.local", "Qualidade", "LINHA-04", "SEC-CQ", null),
         new("logistica", "Responsável de Logística", "logistica", RoleNames.Logistics, "logistica@drivetrace.local", "Logística", "LINHA-04", "SEC-RACK", null),
-        new("cliente", "Cliente Demo", "cliente", RoleNames.Customer, "cliente@drivetrace.local", "Cliente", null, null, "CLI-AUTO-001"),
-        new("demo", "Visualizador Demo", "demo", RoleNames.DemoViewer, "demo@drivetrace.local", "Demonstração", null, null, null)
+        new("cliente", "Cliente industrial", "cliente", RoleNames.Customer, "cliente@drivetrace.local", "Cliente", null, null, "CLI-AUTO-001")
     ];
 
     private static readonly IReadOnlyDictionary<string, string> RoleAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -112,7 +111,6 @@ public sealed class PermissionCatalogService
         ["client"] = RoleNames.Customer,
         ["cliente"] = RoleNames.Customer,
         ["customer"] = RoleNames.Customer,
-        ["demo"] = RoleNames.DemoViewer,
         ["demoviewer"] = RoleNames.DemoViewer
     };
 
@@ -339,7 +337,7 @@ public sealed class PermissionCatalogService
             RoleNames.QualityTechnician => "Técnico de qualidade",
             RoleNames.Logistics => "Logística",
             RoleNames.Customer => "Cliente",
-            RoleNames.DemoViewer => "Visualizador demo",
+            RoleNames.DemoViewer => "Leitura técnica",
             _ => role
         };
     }

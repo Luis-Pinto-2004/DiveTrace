@@ -578,7 +578,7 @@ const operationalMetrics = computed(() => [
     key: 'quality',
     label: t('Quality PASS rate'),
     value: passRate.value === null ? '-' : `${passRate.value}%`,
-    detail: `${passResults.value} PASS / ${failResults.value} FAIL`,
+    detail: `${passResults.value} aprovados / ${failResults.value} reprovados`,
   },
   {
     key: 'reconditioning',
@@ -695,7 +695,7 @@ const primaryOperationalDecision = computed(() => {
     state: t('Fluxo operacional estável'),
     attention: t('No blocked units right now.'),
     action: t('Keep monitoring quality gates.'),
-    evidence: `${activeUnits.value} unidades ativas / ${passRate.value === null ? '-' : `${passRate.value}%`} PASS`,
+    evidence: `${activeUnits.value} unidades ativas / ${passRate.value === null ? '-' : `${passRate.value}%`} aprovadas`,
     tab: 'executive' as TabKey,
     toneClass: 'tone-success',
   }

@@ -102,11 +102,11 @@ powershell -ExecutionPolicy Bypass -File .\scripts\test-phase-b-roles.ps1 -Publi
 Validar:
 
 1. `GET /api/auth/me` devolve `roleKey` e permissoes do perfil ativo.
-2. Cliente so acede a `GET /api/customer/orders/{publicTrackingCode}`.
+2. Cliente acede a `GET /api/customer/orders`, `GET /api/customer/orders/{publicTrackingCode}` e `POST /api/customer/orders`.
 3. Operador acede a `/api/operator/workbench`, mas nao a FIWARE, racks ou materiais.
 4. Qualidade acede a resultados/nao conformidades, mas nao a racks.
 5. Logistica acede a racks e materiais, mas nao a qualidade.
-6. Demo viewer fica em leitura; escritas protegidas devolvem `403`.
+6. O utilizador `demo` nao aparece em `/api/auth/demo-users`.
 
 ## Fase C - mapa de rastreabilidade
 

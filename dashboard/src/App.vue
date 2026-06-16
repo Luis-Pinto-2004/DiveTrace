@@ -85,14 +85,13 @@ type PermissionCatalog = {
   activePermissions: string[]
 }
 
-const roleProfiles: Record<RoleKey, { label: string; backendRole: string; jobTitle: string }> = {
+const roleProfiles: Partial<Record<RoleKey, { label: string; backendRole: string; jobTitle: string }>> = {
   admin: { label: 'Administrador', backendRole: 'Administrator', jobTitle: 'Administrador do sistema' },
   supervisor: { label: 'Supervisor', backendRole: 'Supervisor', jobTitle: 'Supervisor de produção' },
   operator: { label: 'Operador', backendRole: 'Operator', jobTitle: 'Operador de produção' },
   quality: { label: 'Técnico de qualidade', backendRole: 'QualityTechnician', jobTitle: 'Técnico de qualidade' },
   logistics: { label: 'Logística', backendRole: 'Logistics', jobTitle: 'Técnico de logística' },
   client: { label: 'Cliente', backendRole: 'Customer', jobTitle: 'Cliente' },
-  demoViewer: { label: 'Visualizador demo', backendRole: 'DemoViewer', jobTitle: 'Visualizador demo' },
 }
 
 const fallbackPermissionCatalog: PermissionCatalog = {
@@ -318,19 +317,6 @@ const defaultDemoUsers: UserProfile[] = [
     password: 'cliente',
     active: true,
   },
-  {
-    id: 'demo',
-    name: 'Visualizador demo',
-    username: 'demo',
-    email: 'demo@drivetrace.local',
-    role: 'Visualizador demo',
-    roleKey: 'demoViewer',
-    organization: 'DRIVOLUTION WP3',
-    project: 'DriveTrace Core',
-    jobTitle: 'Visualizador demo',
-    password: 'demo',
-    active: true,
-  },
 ]
 
 const users = ref<UserProfile[]>([])
@@ -370,6 +356,7 @@ function defaultJobTitle(roleKey: RoleKey) {
 }
 
 function persistUsers() {
+  users.value = users.value.filter((profile) => profile.username !== 'demo' && profile.roleKey !== 'demoViewer')
   localStorage.setItem('users', JSON.stringify(users.value))
 }
 
@@ -473,6 +460,7 @@ function ensureAdminUser() {
   } catch {
     users.value = []
   }
+  users.value = users.value.filter((profile) => profile.username !== 'demo' && profile.roleKey !== 'demoViewer')
   if (!users.value.some((u) => u.username === defaultUser.username)) {
     users.value.unshift({ ...defaultUser })
   }
@@ -729,6 +717,8 @@ onMounted(() => {
 type ViewKey =
   | 'overview'
   | 'operator'
+  | 'customerOrders'
+  | 'customerNewOrder'
   | 'customer'
   | 'traceGraph'
   | 'orders'
@@ -942,20 +932,18 @@ type ProductUnitTrace = {
 
 type CustomerOrderLookup = {
   publicTrackingCode?: string
-  customerReference?: string
   customer?: { customerCode?: string; name?: string }
-  order?: { orderNumber?: string; status?: string; plannedQty?: number; scheduledUntil?: string }
-  summary?: { units: number; completed: number; inFlow: number; attention: number; lastMovementAt?: string }
+  order?: { status?: string; plannedQty?: number; scheduledUntil?: string; product?: string; variant?: string }
+  summary?: { units: number; completed: number; inFlow: number; attention: number; lastMovementAt?: string; progressPercent?: number; progressSummary?: string; lastMilestone?: string }
   units?: Array<{
-    unitCode: string
     status: string
     qualityStatus: string
-    currentProductionLine?: ReferenceRecord
-    currentSection?: ReferenceRecord
+    customerState?: string
+    currentStage?: string
     routeState?: string
     lastMovementAt?: string
   }>
-  milestones?: FlowSummary['recentTransfers']
+  milestones?: Array<{ eventType: string; occurredAt: string; stage?: string }>
 }
 
 function emptyFiwareContext(): FiwareContextSnapshot {
@@ -1027,6 +1015,50 @@ const transferForm = ref({
 const customerLookupCode = ref('TRC-PORTA-001')
 const customerLookup = ref<CustomerOrderLookup | null>(null)
 const customerLookupStatus = ref('')
+const customerOrders = ref<CustomerOrderLookup[]>([])
+const customerOrderStatus = ref('')
+const customerOrderForm = ref({ productId: '', variantId: '', quantity: 1, observations: '' })
+const customerOrderFilter = ref<'all' | 'active' | 'ready' | 'completed'>('all')
+const customerCreatedOrder = ref<CustomerOrderLookup | null>(null)
+const customerProductOptions = computed(() => (products.value.length ? products.value : demoProducts))
+const customerVariantOptions = computed(() => {
+  const source = variants.value.length ? variants.value : demoVariants
+  const productId = Number(customerOrderForm.value.productId)
+  return productId ? source.filter((variant) => variant.productId === productId) : source
+})
+const selectedCustomerProduct = computed(() => customerProductOptions.value.find((product) => product.id === Number(customerOrderForm.value.productId)))
+const selectedCustomerVariant = computed(() => customerVariantOptions.value.find((variant) => variant.id === Number(customerOrderForm.value.variantId)))
+const customerOrderSummary = computed(() => {
+  const counts = { total: customerOrders.value.length, active: 0, production: 0, ready: 0, completed: 0 }
+  for (const order of customerOrders.value) {
+    const bucket = customerOrderBucket(order)
+    if (bucket !== 'completed') counts.active++
+    if (bucket === 'production') counts.production++
+    if (bucket === 'ready') counts.ready++
+    if (bucket === 'completed') counts.completed++
+  }
+  return counts
+})
+const filteredCustomerOrders = computed(() => {
+  if (customerOrderFilter.value === 'all') return customerOrders.value
+  return customerOrders.value.filter((order) => {
+    const bucket = customerOrderBucket(order)
+    if (customerOrderFilter.value === 'active') return bucket !== 'completed'
+    return bucket === customerOrderFilter.value
+  })
+})
+const customerOrderFilters = computed(() => [
+  { key: 'all' as const, label: t('Todas'), count: customerOrderSummary.value.total },
+  { key: 'active' as const, label: t('Ativas'), count: customerOrderSummary.value.active },
+  { key: 'ready' as const, label: t('Prontas'), count: customerOrderSummary.value.ready },
+  { key: 'completed' as const, label: t('Concluídas'), count: customerOrderSummary.value.completed },
+])
+
+watch(() => customerOrderForm.value.productId, () => {
+  if (customerOrderForm.value.variantId && !customerVariantOptions.value.some((variant) => variant.id === Number(customerOrderForm.value.variantId))) {
+    customerOrderForm.value.variantId = ''
+  }
+})
 
 const manualEvent = ref({
   eventType: 'MoveSupport',
@@ -1043,6 +1075,8 @@ const manualEvent = ref({
 const nav = [
   { key: 'overview', label: 'Dashboard / Line Overview', icon: '⌁' },
   { key: 'operator', label: 'Operator Workbench', icon: 'OP' },
+  { key: 'customerOrders', label: 'As minhas encomendas', icon: 'EC' },
+  { key: 'customerNewOrder', label: 'Nova encomenda', icon: 'NE' },
   { key: 'customer', label: 'Customer Lookup', icon: 'CU' },
   { key: 'traceGraph', label: 'Traceability Map', icon: 'MAP' },
   { key: 'orders', label: 'Manufacturing Orders', icon: 'MO' },
@@ -1076,6 +1110,8 @@ const viewPermissions: Partial<Record<ViewKey, string>> = {
   users: 'Users.Manage',
   parameters: 'MasterData.Manage',
   operator: 'ProductUnits.Transfer',
+  customerOrders: 'CustomerPortal.View',
+  customerNewOrder: 'CustomerPortal.View',
   customer: 'CustomerPortal.View',
   traceGraph: 'ProductUnits.View',
 }
@@ -1086,11 +1122,12 @@ const roleHomeViews: Record<RoleKey, ViewKey> = {
   operator: 'operator',
   quality: 'reconditioning',
   logistics: 'racks',
-  client: 'customer',
+  client: 'customerOrders',
   demoViewer: 'overview',
 }
 
 const navGroups = [
+  { key: 'Cliente', items: ['customerOrders', 'customerNewOrder', 'customer'] },
   { key: 'Operation', items: ['overview', 'operator', 'orders', 'racks', 'simulation'] },
   { key: 'Traceability', items: ['traceGraph', 'units', 'supports', 'materials', 'quality', 'reconditioning', 'customer'] },
   { key: 'Monitoring', items: ['events', 'fiware', 'analytics'] },
@@ -1103,6 +1140,8 @@ function navByGroup(groupKey: typeof navGroups[number]['key']) {
 }
 
 function canShowNav(key: ViewKey) {
+  if (key === 'customerOrders' || key === 'customerNewOrder') return user.value?.roleKey === 'client'
+  if (user.value?.roleKey === 'client') return false
   const permission = viewPermissions[key]
   return !permission || can(permission)
 }
@@ -1138,6 +1177,8 @@ function openTraceGraphForOrder(orderId: number) {
 const viewTitles: Record<ViewKey, string> = {
   overview: 'Dashboard / Line Overview',
   operator: 'Operator Workbench',
+  customerOrders: 'As minhas encomendas',
+  customerNewOrder: 'Nova encomenda',
   customer: 'Customer Lookup',
   traceGraph: 'Traceability Map',
   orders: 'Manufacturing Orders',
@@ -1161,6 +1202,8 @@ const activeViewTitle = computed(() => viewTitles[activeView.value])
 const viewSubtitles: Record<ViewKey, string> = {
   overview: 'Line overview subtitle',
   operator: 'Operator workbench subtitle',
+  customerOrders: 'Customer orders subtitle',
+  customerNewOrder: 'New customer order subtitle',
   customer: 'Customer lookup subtitle',
   traceGraph: 'Traceability map subtitle',
   orders: 'Manufacturing orders subtitle',
@@ -1224,7 +1267,6 @@ const apiHealthClass = computed(() => {
   return ''
 })
 const apiHealthTitle = computed(() => t(apiStatus.value || 'API status'))
-const sidebarProfileLine = computed(() => `${locale.value === 'pt-PT' ? 'PT' : 'EN'} · ${theme.value === 'dark' ? t('Dark') : t('Light')}`)
 const currentRoleLabel = computed(() => user.value ? getRoleLabel(user.value.roleKey) : '')
 const roleContextCards = computed(() => {
   const roleKey = user.value?.roleKey ?? 'demoViewer'
@@ -1237,7 +1279,7 @@ const roleContextCards = computed(() => {
   }
   if (roleKey === 'quality') {
     return [
-      { key: 'fail', label: 'Resultados reprovados', value: failQualityCount.value, detail: 'Registos FAIL sob análise', tone: failQualityCount.value ? 'tone-warning' : 'tone-success' },
+      { key: 'fail', label: 'Resultados reprovados', value: failQualityCount.value, detail: 'Registos reprovados sob análise', tone: failQualityCount.value ? 'tone-warning' : 'tone-success' },
       { key: 'nc', label: 'Não conformidades abertas', value: openNonconformities.value.length, detail: 'Decisão de qualidade pendente', tone: openNonconformities.value.length ? 'tone-warning' : 'tone-success' },
       { key: 'rework', label: 'Retrabalhos ativos', value: activeReworkRecords.value.length, detail: 'Unidades em recuperação controlada', tone: activeReworkRecords.value.length ? 'tone-info' : 'tone-muted' },
     ]
@@ -1289,9 +1331,9 @@ const recentOperationalEvents = computed(() => {
   return (flowSummary.value.recentOperationalEvents?.length ? flowSummary.value.recentOperationalEvents : operationalEvents.value).slice(0, 12)
 })
 const eventKpis = computed(() => [
-  { key: 'events-total', label: 'Operational events', value: flowSummary.value.totals.operationalEvents ?? operationalEvents.value.length, detail: 'Centralized event log', tone: 'tone-info' },
-  { key: 'events-today', label: 'Events today', value: flowSummary.value.totals.operationalEventsLast24h ?? 0, detail: 'Events registered in the last 24 hours', tone: 'tone-muted' },
-  { key: 'event-types', label: 'Event types', value: new Set(operationalEvents.value.map((event) => event.eventType)).size, detail: 'Current recent sample', tone: 'tone-success' },
+  { key: 'events-total', label: 'Eventos operacionais', value: flowSummary.value.totals.operationalEvents ?? operationalEvents.value.length, detail: 'Registo centralizado de eventos', tone: 'tone-info' },
+  { key: 'events-today', label: 'Eventos hoje', value: flowSummary.value.totals.operationalEventsLast24h ?? 0, detail: 'Eventos registados nas últimas 24 horas', tone: 'tone-muted' },
+  { key: 'event-types', label: 'Tipos de evento', value: new Set(operationalEvents.value.map((event) => event.eventType)).size, detail: 'Amostra recente atual', tone: 'tone-success' },
 ])
 const transferTargetSections = computed(() => {
   const targets = productionLineSections.value.filter((section) => section.allowsLineTransferIn || section.isTransferPoint)
@@ -1358,10 +1400,10 @@ const analyticsOperationalData = computed(() => ({
 
 function statusClass(status: string | undefined) {
   const value = (status || '').toLowerCase()
-  if (value.includes('pass') || value.includes('active') || value.includes('loaded') || value.includes('progress')) return 'badge-blue'
-  if (value.includes('fail') || value.includes('blocked') || value.includes('scrap')) return 'badge-red'
-  if (value.includes('rework') || value.includes('pending')) return 'badge-amber'
-  if (value.includes('completed') || value.includes('stored')) return 'badge-green'
+  if (value.includes('fail') || value.includes('blocked') || value.includes('scrap') || value.includes('rejected')) return 'badge-red'
+  if (value.includes('rework') || value.includes('pending') || value.includes('recover') || value.includes('recondition')) return 'badge-amber'
+  if (value.includes('transfer') || value.includes('move') || value.includes('active') || value.includes('loaded') || value.includes('progress')) return 'badge-blue'
+  if (value.includes('pass') || value.includes('completed') || value.includes('stored') || value.includes('available')) return 'badge-green'
   return 'badge-gray'
 }
 
@@ -1684,7 +1726,7 @@ const optionalUnitOptions = () => entityOptions(units.value, (item) => item.unit
 const materialOptions = () => entityOptions(materials.value, (item) => translateMaterialName(item.name), false)
 const lotOptions = () => entityOptions(lots.value, (item) => item.lotNumber, false)
 const qualityResultOptions = () => entityOptions(quality.value, (item) => `${unitCode(item.productUnitId)} · ${translateQualityResult(item.result)}`)
-const nonconformityOptions = () => entityOptions(nonconformities.value, (item) => `${unitCode(item.productUnitId)} · ${translateStatus(item.status)}`)
+const nonconformityOptions = () => entityOptions(nonconformities.value, (item) => `${unitCode(item.productUnitId)} · ${displayStatus(item.status)}`)
 const checkpointOptions = () => entityOptions(checkpoints.value, (item) => `${item.checkpointCode} · ${item.name}`)
 const rackOptions = () => entityOptions(racks.value, (item) => item.rackCode, false)
 const phaseOptions = () => entityOptions(manufacturingSectionPhases.value, (item) => item.phaseInfo, false)
@@ -1733,6 +1775,124 @@ function referenceLabel(value?: ReferenceRecord | null) {
   return value.name || value.code || '-'
 }
 
+const operationalEventDisplayLabels: Record<string, string> = {
+  Assign: 'Atribuição',
+  ASSIGN: 'Atribuição',
+  Blocked: 'Bloqueado',
+  Fail: 'Reprovado',
+  FAIL: 'Reprovado',
+  FiwarePublished: 'Contexto FIWARE publicado',
+  LineTransfer: 'Transferência entre linhas',
+  MoveSupport: 'Movimento de suporte',
+  Movement: 'Movimento',
+  PASS: 'Aprovado',
+  ProductUnitMarkedReconditioned: 'Unidade marcada como recondicionada',
+  QualityRecorded: 'Qualidade registada',
+  RackAssigned: 'Rack atribuída',
+  ReconditioningCompleted: 'Recondicionamento concluído',
+  ReconditioningRejected: 'Recondicionamento rejeitado',
+  ReworkCompleted: 'Retrabalho concluído',
+  ScrapRecorded: 'Sucata registada',
+  SeededCurrentLocation: 'Localização atual demonstrativa',
+  SupportAssigned: 'Suporte atribuído',
+  Transfer: 'Transferência',
+  TRANSFER: 'Transferência',
+  TransferToRack: 'Transferência para rack',
+}
+
+const demoTextDisplayLabels: Record<string, string> = {
+  'Alignment outside nominal tolerance; quality manager decision required.': 'Alinhamento fora da tolerância nominal; decisão do responsável de qualidade necessária.',
+}
+
+function displayStatus(value?: string | null) {
+  if (!value) return '-'
+  return operationalEventDisplayLabels[value] ?? translateStatus(value)
+}
+
+function displayOperationalEvent(value?: string | null) {
+  if (!value) return '-'
+  return operationalEventDisplayLabels[value] ?? translateStatus(value)
+}
+
+function displayDemoText(value?: string | null) {
+  if (!value) return '-'
+  return demoTextDisplayLabels[value] ?? t(value)
+}
+
+function customerOrderBucket(order: CustomerOrderLookup): 'received' | 'planning' | 'production' | 'validation' | 'ready' | 'completed' {
+  const status = `${order.order?.status || ''} ${order.summary?.progressSummary || ''} ${order.summary?.lastMilestone || ''}`.toLowerCase()
+  const progress = order.summary?.progressPercent ?? 0
+  if (status.includes('conclu') || status.includes('completed') || progress >= 100) return 'completed'
+  if (status.includes('pronta') || status.includes('entrega') || status.includes('expedi')) return 'ready'
+  if (status.includes('valida') || status.includes('qualidade') || order.summary?.attention) return 'validation'
+  if (status.includes('produção') || status.includes('producao') || status.includes('in progress') || progress > 0) return 'production'
+  if (status.includes('plane') || status.includes('planned')) return 'planning'
+  return 'received'
+}
+
+function customerOrderState(order: CustomerOrderLookup) {
+  const bucket = customerOrderBucket(order)
+  return {
+    received: t('Pedido recebido'),
+    planning: t('A preparar produção'),
+    production: t('Em produção'),
+    validation: t('Em validação'),
+    ready: t('Pronta'),
+    completed: t('Concluída'),
+  }[bucket]
+}
+
+function customerOrderTone(order: CustomerOrderLookup) {
+  const bucket = customerOrderBucket(order)
+  if (bucket === 'completed' || bucket === 'ready') return 'tone-success'
+  if (bucket === 'validation') return 'tone-warning'
+  if (bucket === 'production') return 'tone-info'
+  return 'tone-muted'
+}
+
+function customerNextStep(order: CustomerOrderLookup) {
+  const bucket = customerOrderBucket(order)
+  return {
+    received: t('Próximo passo: planeamento'),
+    planning: t('Próximo passo: produção'),
+    production: t('Próximo passo: controlo de qualidade'),
+    validation: t('Próximo passo: preparação para entrega'),
+    ready: t('Próximo passo: levantamento ou expedição'),
+    completed: t('Encomenda concluída'),
+  }[bucket]
+}
+
+function customerProgressPercent(order?: CustomerOrderLookup | null) {
+  if (!order) return 0
+  const explicit = order.summary?.progressPercent
+  if (typeof explicit === 'number' && Number.isFinite(explicit)) return Math.min(100, Math.max(0, explicit))
+  return {
+    received: 8,
+    planning: 20,
+    production: 55,
+    validation: 75,
+    ready: 92,
+    completed: 100,
+  }[customerOrderBucket(order)]
+}
+
+function customerProgressSteps(order?: CustomerOrderLookup | null) {
+  const steps = [
+    { key: 'received', label: t('Pedido recebido') },
+    { key: 'planning', label: t('Planeamento') },
+    { key: 'production', label: t('Produção') },
+    { key: 'validation', label: t('Controlo de qualidade') },
+    { key: 'ready', label: t('Pronta') },
+    { key: 'completed', label: t('Concluída') },
+  ]
+  if (!order) return steps.map((step) => ({ ...step, state: 'pending' }))
+  const currentIndex = steps.findIndex((step) => step.key === customerOrderBucket(order))
+  return steps.map((step, index) => ({
+    ...step,
+    state: index < currentIndex ? 'done' : index === currentIndex ? 'current' : 'pending',
+  }))
+}
+
 function movementText(value?: ReferenceRecord | null) {
   if (!value) return '-'
   return value.code || value.name || '-'
@@ -1757,7 +1917,7 @@ function movementBadge(movement: FlowSummary['recentTransfers'][number]) {
   if (eventText.includes('quality') || eventText.includes('fail')) return t('Quality')
   if (eventText.includes('paint') || eventText.includes('pintura')) return t('Painting')
   if (isLineTransfer(movement)) return t('Transfer')
-  return translateStatus(movement.eventType)
+  return displayOperationalEvent(movement.eventType)
 }
 
 function movementTitle(movement: FlowSummary['recentTransfers'][number]) {
@@ -1775,7 +1935,7 @@ function operationalEventLocation(event: OperationalEventRecord) {
 }
 
 function operationalEventDetail(event: OperationalEventRecord) {
-  return event.notes || event.label || translateStatus(event.eventType)
+  return displayDemoText(event.notes || event.label || displayOperationalEvent(event.eventType))
 }
 
 function checkpointLabel(id: unknown) {
@@ -1933,7 +2093,7 @@ function lotQuantityValidation(form: EntityRecord) {
 }
 
 function qualityResultValidation(form: EntityRecord) {
-  return ['PASS', 'FAIL'].includes(String(form.result)) ? '' : 'Result must be PASS or FAIL'
+  return ['PASS', 'FAIL'].includes(String(form.result)) ? '' : 'O resultado deve ser Aprovado ou Reprovado'
 }
 
 function supportDeleteRule(item: EntityRecord) {
@@ -2502,6 +2662,7 @@ async function loadData(showSpinner = true) {
     permissionCatalogData,
     operationalEventsData,
     authContextData,
+    customerOrdersData,
   ] = await Promise.all([
     apiGetAllowed('ProductUnits.View', '/dashboard/summary', demoDashboard, emptyDashboardSummary()),
     apiGetAllowed('MasterData.Manage', '/products', demoProducts, [] as Product[]),
@@ -2533,6 +2694,7 @@ async function loadData(showSpinner = true) {
     apiGet(`/permissions/catalog?role=${encodeURIComponent(backendRoleFor(user.value?.roleKey))}`, fallbackPermissionCatalog),
     apiGetAllowed('OperationalEvents.View', '/operational-events/recent?limit=20', [] as OperationalEventRecord[], [] as OperationalEventRecord[]),
     apiGet('/auth/me', null as AuthUserContext | null),
+    apiGetAllowed('CustomerPortal.View', '/customer/orders', [] as CustomerOrderLookup[], [] as CustomerOrderLookup[]),
   ])
 
   summary.value = dashboardData
@@ -2565,6 +2727,7 @@ async function loadData(showSpinner = true) {
   permissionCatalog.value = permissionCatalogData
   operationalEvents.value = operationalEventsData
   serverUserContext.value = authContextData
+  customerOrders.value = customerOrdersData
   if (authContextData?.customer?.defaultPublicTrackingCode && user.value?.roleKey === 'client') {
     customerLookupCode.value = authContextData.customer.defaultPublicTrackingCode
   }
@@ -2663,6 +2826,47 @@ async function lookupCustomerOrder() {
     customerLookup.value = null
     customerLookupStatus.value = `${t('Customer order not found')}: ${getApiErrorMessage(error)}`
   }
+}
+
+async function openCustomerOrderDetail(publicTrackingCode?: string) {
+  const code = publicTrackingCode?.trim()
+  if (!code) return
+  customerLookupCode.value = code
+  await lookupCustomerOrder()
+}
+
+async function submitCustomerOrder() {
+  customerOrderStatus.value = ''
+  customerCreatedOrder.value = null
+  const quantity = Number(customerOrderForm.value.quantity)
+  if (!customerOrderForm.value.productId || !customerOrderForm.value.variantId || !Number.isFinite(quantity) || quantity < 1) {
+    customerOrderStatus.value = t('Selecione produto, variante e quantidade antes de submeter.')
+    return
+  }
+
+  try {
+    const created = await apiPost('/customer/orders', {
+      productId: customerOrderForm.value.productId ? Number(customerOrderForm.value.productId) : null,
+      variantId: customerOrderForm.value.variantId ? Number(customerOrderForm.value.variantId) : null,
+      quantity,
+      observations: customerOrderForm.value.observations.trim(),
+    })
+    customerLookup.value = created as CustomerOrderLookup
+    customerCreatedOrder.value = customerLookup.value
+    customerLookupCode.value = customerLookup.value.publicTrackingCode || ''
+    customerOrderStatus.value = `${t('Encomenda criada com sucesso')}. ${t('Código de rastreio')}: ${customerLookup.value.publicTrackingCode || '-'}`
+    customerOrderForm.value = { productId: '', variantId: '', quantity: 1, observations: '' }
+    await loadData(false)
+  } catch (error) {
+    customerOrderStatus.value = `${t('Error saving changes')}: ${getApiErrorMessage(error)}`
+  }
+}
+
+function resetCustomerOrderForm() {
+  customerOrderForm.value = { productId: '', variantId: '', quantity: 1, observations: '' }
+  customerOrderStatus.value = ''
+  customerCreatedOrder.value = null
+  activeView.value = 'customerNewOrder'
 }
 
 async function refreshFiwareContext(showStatus = true) {
@@ -2772,7 +2976,6 @@ onBeforeUnmount(() => {
               <option value="quality">{{ t('Quality technician') }}</option>
               <option value="logistics">{{ t('Logistics') }}</option>
               <option value="client">{{ t('Client') }}</option>
-              <option value="demoViewer">{{ t('Demo viewer') }}</option>
             </select>
           </label>
           <p v-if="registerError" class="text-red-600 text-sm">{{ registerError }}</p>
@@ -2812,7 +3015,6 @@ onBeforeUnmount(() => {
         <!-- Quick settings / user info section replacing the academic scope block -->
         <div class="app-sidebar-profile">
           <p class="font-black text-slate-950 dark:text-slate-50">{{ user?.name }}</p>
-          <p class="app-sidebar-profile-meta">{{ user ? getRoleLabel(user.roleKey) : '' }} · {{ sidebarProfileLine }}</p>
           <div class="app-sidebar-profile-actions">
             <button class="btn-secondary btn-compact" @click="openProfileView">{{ t('Profile') }}</button>
             <button class="btn-secondary btn-compact" @click="navigateTo('settings')">{{ t('Settings') }}</button>
@@ -3107,13 +3309,13 @@ onBeforeUnmount(() => {
                     <p class="section-description">{{ referenceLabel(selectedUnitTrace.unit?.currentProductionLine) }} · {{ referenceLabel(selectedUnitTrace.unit?.currentSection) }} · {{ t(selectedUnitTrace.unit?.routeState || 'No data available') }}</p>
                   </div>
                 </div>
-                <div class="table-shell mt-4">
+                <div class="table-shell compact-table-shell mt-4">
                   <table class="data-table">
                     <thead><tr><th>{{ t('Timestamp') }}</th><th>{{ t('Event') }}</th><th>{{ t('Line') }}</th><th>{{ t('Section') }}</th><th>{{ t('Support') }}</th><th>{{ t('Notes') }}</th></tr></thead>
                     <tbody>
                       <tr v-for="item in selectedTraceTimeline" :key="`${item.eventType}-${item.occurredAt}-${item.sectionCode || ''}`">
                         <td>{{ formatDate(item.occurredAt) }}</td>
-                        <td><span :class="statusClass(item.eventType)">{{ translateStatus(item.eventType) }}</span></td>
+                        <td><span class="event-chip" :class="statusClass(item.eventType)">{{ displayOperationalEvent(item.eventType) }}</span></td>
                         <td>{{ item.lineCode || '-' }}</td>
                         <td>{{ item.sectionCode || '-' }}</td>
                         <td>{{ item.supportCode || '-' }}</td>
@@ -3177,8 +3379,8 @@ onBeforeUnmount(() => {
                         <tbody>
                           <tr v-for="item in openNonconformities" :key="item.id">
                             <td class="font-bold">{{ unitCode(item.productUnitId) }}</td>
-                            <td><span :class="statusClass(item.severity)">{{ translateStatus(item.severity) }}</span></td>
-                            <td><span :class="statusClass(item.status)">{{ translateStatus(item.status) }}</span></td>
+                            <td><span :class="statusClass(item.severity)">{{ displayStatus(item.severity) }}</span></td>
+                            <td><span :class="statusClass(item.status)">{{ displayStatus(item.status) }}</span></td>
                             <td class="max-w-[18rem] truncate" :title="item.description || '-'">{{ item.description || '-' }}</td>
                           </tr>
                           <tr v-if="!openNonconformities.length"><td colspan="4" class="text-center">{{ t('No records found') }}</td></tr>
@@ -3368,7 +3570,7 @@ onBeforeUnmount(() => {
                   <button class="mobile-tab" :class="flowTransferFilter === 'transfers' ? 'mobile-tab-active' : ''" type="button" @click="flowTransferFilter = 'transfers'">{{ t('Only transfers') }}</button>
                   <button class="mobile-tab" :class="flowTransferFilter === 'attention' ? 'mobile-tab-active' : ''" type="button" @click="flowTransferFilter = 'attention'">{{ t('Units in attention') }}</button>
                 </div>
-                <div class="mt-4 grid gap-3 xl:grid-cols-2">
+                <div class="compact-card-list mt-4 grid gap-3 xl:grid-cols-2">
                   <div v-for="line in visibleFlowLineSummaries" :key="line.productionLineId" class="line-step flex-col items-stretch">
                     <div class="flex items-center justify-between gap-3">
                       <div class="min-w-0">
@@ -3436,15 +3638,15 @@ onBeforeUnmount(() => {
                       <h3>{{ t('Current WIP by section') }}</h3>
                     </div>
                   </div>
-                  <div class="mt-5 space-y-4">
-                    <div v-for="section in summary.wipBySection" :key="section.sectionCode" class="line-step">
+                  <div class="line-state-list mt-4">
+                    <div v-for="section in summary.wipBySection" :key="section.sectionCode" class="line-step line-state-row">
                       <div class="min-w-0">
                         <p class="font-bold text-slate-950 dark:text-slate-50">{{ translateSectionName(section.section) }}</p>
-                        <p class="text-xs uppercase tracking-normal text-slate-500 dark:text-slate-400">{{ translateSectionName(section.sectionType) }}</p>
+                        <p class="text-xs uppercase tracking-normal text-slate-500 dark:text-slate-400">{{ section.sectionCode }} · {{ translateSectionName(section.sectionType) }}</p>
                       </div>
                       <div class="flex w-full items-center gap-3 sm:min-w-40">
-                        <div class="h-2 flex-1 rounded-full bg-slate-200 dark:bg-slate-700">
-                          <div class="h-2 rounded-full bg-drivolution-500" :style="{ width: `${Math.min(100, section.productUnits * 28)}%` }"></div>
+                        <div class="h-1.5 flex-1 rounded-full bg-slate-200 dark:bg-slate-700">
+                          <div class="h-1.5 rounded-full bg-drivolution-500" :style="{ width: `${Math.min(100, section.productUnits * 28)}%` }"></div>
                         </div>
                         <span class="text-sm font-black text-slate-950 dark:text-slate-50">{{ section.productUnits }}</span>
                       </div>
@@ -3458,14 +3660,14 @@ onBeforeUnmount(() => {
                       <h3>{{ t('Open alerts and deviations') }}</h3>
                     </div>
                   </div>
-                  <div class="mt-5 space-y-3">
+                  <div class="compact-card-list mt-5 space-y-3">
                     <div v-for="alert in summary.qualityAlerts" :key="`${alert.unitCode}-${alert.createdAt}`" class="alert-card">
                       <div class="flex items-center justify-between gap-3">
                         <strong>{{ alert.unitCode }}</strong>
-                        <span :class="statusClass(alert.status)">{{ translateStatus(alert.status) }}</span>
+                        <span :class="statusClass(alert.status)">{{ displayStatus(alert.status) }}</span>
                       </div>
-                      <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">{{ t(alert.description) }}</p>
-                        <p class="mt-2 text-xs font-semibold uppercase tracking-normal text-slate-400 dark:text-slate-500">{{ translateStatus(alert.severity) }}</p>
+                      <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">{{ displayDemoText(alert.description) }}</p>
+                        <p class="mt-2 text-xs font-semibold uppercase tracking-normal text-slate-400 dark:text-slate-500">{{ displayStatus(alert.severity) }}</p>
                     </div>
                     <p v-if="!summary.qualityAlerts.length" class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800 dark:border-emerald-700/70 dark:bg-emerald-900/30 dark:text-emerald-100">{{ t('No blocked units right now.') }}</p>
                   </div>
@@ -3478,12 +3680,12 @@ onBeforeUnmount(() => {
                     <h3>{{ t('Operational event log') }}</h3>
                   </div>
                 </div>
-                <div class="table-shell">
+                <div class="table-shell compact-table-shell">
                   <table class="data-table">
                     <thead><tr><th>{{ t('Event') }}</th><th>{{ t('Target') }}</th><th>{{ t('Location') }}</th><th>{{ t('Timestamp') }}</th></tr></thead>
                     <tbody>
                       <tr v-for="event in recentOperationalEvents.slice(0, 8)" :key="event.eventCode">
-                        <td><span :class="statusClass(event.eventType)">{{ translateStatus(event.eventType) }}</span></td>
+                        <td><span class="event-chip" :class="statusClass(event.eventType)">{{ displayOperationalEvent(event.eventType) }}</span></td>
                         <td>{{ operationalEventTarget(event) }}</td>
                         <td>{{ operationalEventLocation(event) }}</td>
                         <td>{{ formatDate(event.occurredAt) }}</td>
@@ -3532,7 +3734,7 @@ onBeforeUnmount(() => {
                           <td class="font-bold">{{ unit.unitCode }}</td>
                           <td>{{ referenceLabel(unit.currentProductionLine) }}</td>
                           <td>{{ referenceLabel(unit.currentSection) }}</td>
-                          <td><span :class="statusClass(unit.requiresAttention ? 'Blocked' : unit.status)">{{ translateStatus(unit.status) }}</span></td>
+                          <td><span :class="statusClass(unit.requiresAttention ? 'Blocked' : unit.status)">{{ displayStatus(unit.status) }}</span></td>
                           <td>{{ t(unit.routeState) }}</td>
                           <td>
                             <button class="btn-secondary btn-compact" type="button" @click="prepareTransfer(unitsById.get(unit.id) || { id: unit.id, unitCode: unit.unitCode, unitType: 'Subproduto', status: unit.status, qualityStatus: unit.qualityStatus, manufacturingOrderId: 0 })">{{ unit.canTransfer ? t('Transfer') : t('Trace') }}</button>
@@ -3545,7 +3747,7 @@ onBeforeUnmount(() => {
                 </div>
                 <div class="industrial-panel">
                   <div class="section-heading"><div><p>{{ t('Transfer targets') }}</p><h3>{{ t('Available target sections') }}</h3></div></div>
-                  <div class="mt-4 grid gap-3">
+                  <div class="compact-card-list mt-4 grid gap-3">
                     <article v-for="target in operatorWorkbench.transferTargets" :key="target.sectionId" class="decision-card tone-info">
                       <span>{{ referenceLabel(target.productionLine) }}</span>
                       <strong>{{ target.sectionCode }}</strong>
@@ -3558,7 +3760,7 @@ onBeforeUnmount(() => {
 
               <section class="industrial-panel">
                 <div class="section-heading"><div><p>{{ t('Recent transfers') }}</p><h3>{{ t('ProductUnit movement audit') }}</h3></div></div>
-                <div class="table-shell mt-4">
+                <div class="table-shell compact-table-shell mt-4">
                   <table class="data-table">
                     <thead><tr><th>{{ t('Unit') }}</th><th>{{ t('From') }}</th><th>{{ t('To') }}</th><th>{{ t('Event') }}</th><th>{{ t('Timestamp') }}</th></tr></thead>
                     <tbody>
@@ -3566,13 +3768,160 @@ onBeforeUnmount(() => {
                         <td>{{ movement.unit?.code || '-' }}</td>
                         <td>{{ referenceLabel(movement.fromSection) }}</td>
                         <td>{{ referenceLabel(movement.toSection) }}</td>
-                        <td>{{ translateStatus(movement.eventType) }}</td>
+                        <td>{{ displayOperationalEvent(movement.eventType) }}</td>
                         <td>{{ formatDate(movement.occurredAt) }}</td>
                       </tr>
                       <tr v-if="!operatorWorkbench.recentTransfers.length"><td colspan="5" class="text-center">{{ t('No records found') }}</td></tr>
                     </tbody>
                   </table>
                 </div>
+              </section>
+            </div>
+
+            <!-- CUSTOMER ORDERS VIEW -->
+            <div v-if="activeView === 'customerOrders'" class="space-y-5 lg:space-y-6">
+              <section class="kpi-grid">
+                <article class="kpi-card tone-info"><span>{{ t('Encomendas ativas') }}</span><strong>{{ customerOrderSummary.active }}</strong><p>{{ t('A decorrer ou em preparação') }}</p></article>
+                <article class="kpi-card tone-info"><span>{{ t('Em produção') }}</span><strong>{{ customerOrderSummary.production }}</strong><p>{{ t('Em fabrico neste momento') }}</p></article>
+                <article class="kpi-card tone-success"><span>{{ t('Prontas') }}</span><strong>{{ customerOrderSummary.ready }}</strong><p>{{ t('Preparadas para levantamento') }}</p></article>
+                <article class="kpi-card tone-muted"><span>{{ t('Concluídas') }}</span><strong>{{ customerOrderSummary.completed }}</strong><p>{{ t('Entregues ou finalizadas') }}</p></article>
+              </section>
+
+              <section class="industrial-panel customer-toolbar">
+                <div class="mobile-tabs">
+                  <button v-for="filter in customerOrderFilters" :key="filter.key" class="mobile-tab" :class="customerOrderFilter === filter.key ? 'mobile-tab-active' : ''" type="button" @click="customerOrderFilter = filter.key">
+                    {{ filter.label }} <span class="ml-1 opacity-70">{{ filter.count }}</span>
+                  </button>
+                </div>
+                <div class="flex flex-wrap gap-3">
+                  <button class="btn-primary" type="button" @click="navigateTo('customerNewOrder')">{{ t('Nova encomenda') }}</button>
+                  <button class="btn-secondary" type="button" @click="loadData(false)">{{ t('Atualizar') }}</button>
+                </div>
+              </section>
+
+              <section v-if="!customerOrders.length" class="customer-empty-state">
+                <strong>{{ t('Ainda não existem encomendas.') }}</strong>
+                <p>{{ t('Crie uma nova encomenda para começar.') }}</p>
+                <button class="btn-primary" type="button" @click="navigateTo('customerNewOrder')">{{ t('Nova encomenda') }}</button>
+              </section>
+
+              <section v-else-if="!filteredCustomerOrders.length" class="customer-empty-state">
+                <strong>{{ t('Sem encomendas neste filtro.') }}</strong>
+                <p>{{ t('Escolha outro filtro para ver mais encomendas.') }}</p>
+              </section>
+
+              <section v-else class="grid gap-4 xl:grid-cols-2">
+                <article v-for="order in filteredCustomerOrders" :key="order.publicTrackingCode" class="customer-order-card" :class="customerOrderTone(order)">
+                  <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div class="min-w-0">
+                      <span>{{ t('Código de rastreio') }}</span>
+                      <strong class="break-words">{{ order.publicTrackingCode || '-' }}</strong>
+                    </div>
+                    <span class="customer-state-chip">{{ customerOrderState(order) }}</span>
+                  </div>
+                  <p class="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">{{ order.order?.product || '-' }}<span v-if="order.order?.variant"> · {{ order.order.variant }}</span></p>
+                  <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">{{ t('Data prevista') }}: {{ formatDate(order.order?.scheduledUntil) }}</p>
+                  <div class="mt-4">
+                    <div class="flex items-center justify-between gap-3 text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">
+                      <span>{{ customerOrderState(order) }}</span>
+                      <span>{{ customerProgressPercent(order) }}%</span>
+                    </div>
+                    <div class="mt-2 h-2 rounded-full bg-slate-200 dark:bg-slate-700">
+                      <div class="h-2 rounded-full bg-drivolution-500" :style="{ width: `${customerProgressPercent(order)}%` }"></div>
+                    </div>
+                  </div>
+                  <p class="mt-3 text-sm font-semibold text-slate-600 dark:text-slate-300">{{ customerNextStep(order) }}</p>
+                  <button class="btn-secondary mt-4" type="button" @click="openCustomerOrderDetail(order.publicTrackingCode)">{{ t('Ver detalhe') }}</button>
+                </article>
+              </section>
+
+              <section v-if="customerLookup" class="customer-detail-panel">
+                <div class="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p class="text-xs font-black uppercase tracking-normal text-drivolution-700 dark:text-drivolution-300">{{ t('Detalhe da encomenda') }}</p>
+                    <h3 class="mt-1 text-xl font-black text-slate-950 dark:text-white">{{ customerLookup.order?.product || '-' }}<span v-if="customerLookup.order?.variant"> · {{ customerLookup.order.variant }}</span></h3>
+                    <p class="mt-1 text-sm font-semibold text-slate-600 dark:text-slate-300">{{ t('Código de rastreio') }}: {{ customerLookup.publicTrackingCode }}</p>
+                  </div>
+                  <span class="customer-state-chip">{{ customerOrderState(customerLookup) }}</span>
+                </div>
+                <div class="mt-5 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+                  <article class="customer-status-card">
+                    <span>{{ t('Estado da encomenda') }}</span>
+                    <strong>{{ customerOrderState(customerLookup) }}</strong>
+                    <p>{{ customerNextStep(customerLookup) }}</p>
+                    <div class="mt-4 h-2 rounded-full bg-slate-200 dark:bg-slate-700">
+                      <div class="h-2 rounded-full bg-drivolution-500" :style="{ width: `${customerProgressPercent(customerLookup)}%` }"></div>
+                    </div>
+                  </article>
+                  <div class="customer-progress-steps">
+                    <div v-for="step in customerProgressSteps(customerLookup)" :key="step.key" class="customer-progress-step" :class="`customer-progress-step-${step.state}`">
+                      <span></span>
+                      <p>{{ step.label }}</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="mt-5 grid gap-4 md:grid-cols-3">
+                  <article class="customer-info-tile"><span>{{ t('Estado atual') }}</span><strong>{{ customerOrderState(customerLookup) }}</strong></article>
+                  <article class="customer-info-tile"><span>{{ t('Data prevista') }}</span><strong>{{ formatDate(customerLookup.order?.scheduledUntil) }}</strong></article>
+                  <article class="customer-info-tile"><span>{{ t('Atualização mais recente') }}</span><strong>{{ customerLookup.summary?.lastMilestone || customerOrderState(customerLookup) }}</strong></article>
+                </div>
+                <div class="mt-5">
+                  <p class="text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">{{ t('Histórico resumido') }}</p>
+                  <ol class="customer-history-list mt-3">
+                    <li v-for="milestone in (customerLookup.milestones || []).slice(-4)" :key="`${milestone.occurredAt}-${milestone.eventType}`">
+                      <span>{{ formatDate(milestone.occurredAt) }}</span>
+                      <strong>{{ milestone.eventType }}</strong>
+                    </li>
+                    <li v-if="!customerLookup.milestones?.length">
+                      <span>{{ t('Pedido recebido') }}</span>
+                      <strong>{{ t('A encomenda foi registada.') }}</strong>
+                    </li>
+                  </ol>
+                </div>
+              </section>
+            </div>
+
+            <!-- NEW CUSTOMER ORDER VIEW -->
+            <div v-if="activeView === 'customerNewOrder'" class="space-y-5 lg:space-y-6">
+              <section v-if="customerCreatedOrder" class="customer-confirmation">
+                <span>{{ t('Encomenda criada com sucesso') }}</span>
+                <strong>{{ t('Código de rastreio') }}: {{ customerCreatedOrder.publicTrackingCode }}</strong>
+                <p>{{ t('A encomenda será registada como pedido recebido.') }}</p>
+                <div class="mt-5 flex flex-wrap justify-center gap-3">
+                  <button class="btn-primary" type="button" @click="openCustomerOrderDetail(customerCreatedOrder.publicTrackingCode); activeView = 'customerOrders'">{{ t('Ver encomenda') }}</button>
+                  <button class="btn-secondary" type="button" @click="resetCustomerOrderForm">{{ t('Criar nova encomenda') }}</button>
+                  <button class="btn-secondary" type="button" @click="navigateTo('customerOrders')">{{ t('As minhas encomendas') }}</button>
+                </div>
+              </section>
+              <section v-else class="customer-order-form-layout">
+                <form class="industrial-panel customer-order-form" @submit.prevent="submitCustomerOrder">
+                  <label class="form-label">{{ t('Produto') }}
+                    <select v-model="customerOrderForm.productId" class="form-input">
+                      <option value="">{{ t('Selecione produto') }}</option>
+                      <option v-for="product in customerProductOptions" :key="product.id" :value="product.id">{{ translateMaterialName(product.name) }}</option>
+                    </select>
+                  </label>
+                  <label class="form-label">{{ t('Variante') }}
+                    <select v-model="customerOrderForm.variantId" class="form-input">
+                      <option value="">{{ t('Selecione variante') }}</option>
+                      <option v-for="variant in customerVariantOptions" :key="variant.id" :value="variant.id">{{ variant.name }}</option>
+                    </select>
+                  </label>
+                  <label class="form-label">{{ t('Quantidade') }}<input v-model.number="customerOrderForm.quantity" min="1" max="99" type="number" class="form-input" /></label>
+                  <label class="form-label">{{ t('Observações para a encomenda') }}<textarea v-model="customerOrderForm.observations" class="form-input min-h-28"></textarea></label>
+                  <p v-if="customerOrderStatus" class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-100">{{ customerOrderStatus }}</p>
+                </form>
+                <aside class="customer-order-preview">
+                  <span>{{ t('Resumo da encomenda') }}</span>
+                  <strong>{{ selectedCustomerProduct ? translateMaterialName(selectedCustomerProduct.name) : t('Produto por escolher') }}</strong>
+                  <dl>
+                    <div><dt>{{ t('Variante') }}</dt><dd>{{ selectedCustomerVariant?.name || t('Por escolher') }}</dd></div>
+                    <div><dt>{{ t('Quantidade') }}</dt><dd>{{ customerOrderForm.quantity || 0 }}</dd></div>
+                    <div><dt>{{ t('Estado inicial') }}</dt><dd>{{ t('Pedido recebido') }}</dd></div>
+                  </dl>
+                  <p>{{ t('A encomenda será registada como pedido recebido.') }}</p>
+                  <button class="btn-primary w-full" type="button" @click="submitCustomerOrder">{{ t('Submeter encomenda') }}</button>
+                </aside>
               </section>
             </div>
 
@@ -3602,7 +3951,7 @@ onBeforeUnmount(() => {
 
               <template v-if="customerLookup">
                 <section class="kpi-grid">
-                  <article class="kpi-card tone-info"><span>{{ t('Order') }}</span><strong>{{ customerLookup.order?.orderNumber || '-' }}</strong><p>{{ customerLookup.customer?.name || customerLookup.customerReference || '-' }}</p></article>
+                  <article class="kpi-card tone-info"><span>{{ t('Código público de rastreio') }}</span><strong>{{ customerLookup.publicTrackingCode || '-' }}</strong><p>{{ customerLookup.customer?.name || '-' }}</p></article>
                   <article class="kpi-card tone-muted"><span>{{ t('Status') }}</span><strong>{{ translateStatus(customerLookup.order?.status || '-') }}</strong><p>{{ customerLookup.publicTrackingCode }}</p></article>
                   <article class="kpi-card tone-info"><span>{{ t('Units') }}</span><strong>{{ customerLookup.summary?.units ?? 0 }}</strong><p>{{ customerLookup.summary?.inFlow ?? 0 }} {{ t('in flow') }}</p></article>
                   <article class="kpi-card" :class="customerLookup.summary?.attention ? 'tone-warning' : 'tone-success'"><span>{{ t('Attention') }}</span><strong>{{ customerLookup.summary?.attention ?? 0 }}</strong><p>{{ t('Customer-visible quality and route state') }}</p></article>
@@ -3612,14 +3961,12 @@ onBeforeUnmount(() => {
                   <div class="section-heading"><div><p>{{ t('Unit progress') }}</p><h3>{{ t('ProductUnit customer status') }}</h3></div></div>
                   <div class="table-shell mt-4">
                     <table class="data-table">
-                      <thead><tr><th>{{ t('Unit') }}</th><th>{{ t('Line') }}</th><th>{{ t('Section') }}</th><th>{{ t('Status') }}</th><th>{{ t('Quality') }}</th><th>{{ t('Last movement') }}</th></tr></thead>
+                      <thead><tr><th>{{ t('Stage') }}</th><th>{{ t('Status') }}</th><th>{{ t('Quality') }}</th><th>{{ t('Last movement') }}</th></tr></thead>
                       <tbody>
-                        <tr v-for="unit in customerLookup.units || []" :key="unit.unitCode">
-                          <td class="font-bold">{{ unit.unitCode }}</td>
-                          <td>{{ referenceLabel(unit.currentProductionLine) }}</td>
-                          <td>{{ referenceLabel(unit.currentSection) }}</td>
-                          <td><span :class="statusClass(unit.status)">{{ translateStatus(unit.status) }}</span></td>
-                          <td><span :class="statusClass(unit.qualityStatus)">{{ translateQualityResult(unit.qualityStatus) }}</span></td>
+                        <tr v-for="(unit, index) in customerLookup.units || []" :key="`${customerLookup.publicTrackingCode}-${index}`">
+                          <td>{{ unit.currentStage || '-' }}</td>
+                          <td><span :class="statusClass(unit.status)">{{ displayStatus(unit.customerState || unit.status) }}</span></td>
+                          <td>{{ unit.qualityStatus || '-' }}</td>
                           <td>{{ formatDate(unit.lastMovementAt) }}</td>
                         </tr>
                       </tbody>
@@ -3631,16 +3978,14 @@ onBeforeUnmount(() => {
                   <div class="section-heading"><div><p>{{ t('Milestones') }}</p><h3>{{ t('Customer movement timeline') }}</h3></div></div>
                   <div class="table-shell mt-4">
                     <table class="data-table">
-                      <thead><tr><th>{{ t('Timestamp') }}</th><th>{{ t('Unit') }}</th><th>{{ t('Event') }}</th><th>{{ t('Line') }}</th><th>{{ t('Section') }}</th></tr></thead>
+                      <thead><tr><th>{{ t('Timestamp') }}</th><th>{{ t('Último marco') }}</th><th>{{ t('Stage') }}</th></tr></thead>
                       <tbody>
-                        <tr v-for="milestone in customerLookup.milestones || []" :key="`${milestone.unit?.code}-${milestone.occurredAt}-${milestone.eventType}`">
+                        <tr v-for="milestone in customerLookup.milestones || []" :key="`${milestone.occurredAt}-${milestone.eventType}`">
                           <td>{{ formatDate(milestone.occurredAt) }}</td>
-                          <td>{{ milestone.unit?.code || '-' }}</td>
-                          <td>{{ translateStatus(milestone.eventType) }}</td>
-                          <td>{{ referenceLabel(milestone.toProductionLine) }}</td>
-                          <td>{{ referenceLabel(milestone.toSection) }}</td>
+                          <td>{{ milestone.eventType }}</td>
+                          <td>{{ milestone.stage || '-' }}</td>
                         </tr>
-                        <tr v-if="!customerLookup.milestones?.length"><td colspan="5" class="text-center">{{ t('No records found') }}</td></tr>
+                        <tr v-if="!customerLookup.milestones?.length"><td colspan="3" class="text-center">{{ t('No records found') }}</td></tr>
                       </tbody>
                     </table>
                   </div>
@@ -3683,7 +4028,7 @@ onBeforeUnmount(() => {
                       <tr v-for="unit in units" :key="unit.id">
                         <td class="font-bold">{{ unit.unitCode }}</td>
                         <td>{{ translateUnitType(unit.unitType) }}</td>
-                        <td><span :class="statusClass(unit.status)">{{ translateStatus(unit.status) }}</span></td>
+                        <td><span :class="statusClass(unit.status)">{{ displayStatus(unit.status) }}</span></td>
                         <td><span :class="statusClass(unit.qualityStatus)">{{ translateQualityResult(unit.qualityStatus) }}</span></td>
                         <td>{{ supportCode(unit.currentSupportId) }}</td>
                         <td>{{ sectionName(unit.currentSectionId) }}</td>
@@ -3805,7 +4150,12 @@ onBeforeUnmount(() => {
                   <label class="form-label">{{ t('Support code') }}<input v-model="manualEvent.supportCode" class="form-input" /></label>
                   <label class="form-label">{{ t('Section / Rack code') }}<input v-model="manualEvent.sectionCode" class="form-input" /></label>
                   <label class="form-label">{{ t('Unit code') }}<input v-model="manualEvent.productUnitCode" class="form-input" /></label>
-                  <label class="form-label">{{ t('Result') }}<input v-model="manualEvent.result" class="form-input" /></label>
+                  <label class="form-label">{{ t('Result') }}
+                    <select v-model="manualEvent.result" class="form-input">
+                      <option value="PASS">{{ t('PASS') }}</option>
+                      <option value="FAIL">{{ t('FAIL') }}</option>
+                    </select>
+                  </label>
                   <label class="form-label">{{ t('Notes') }}<textarea v-model="manualEvent.notes" class="form-input min-h-24"></textarea></label>
                 </div>
                 <button class="btn-primary mt-5" :disabled="!can('ProductUnits.Transfer') && !can('Quality.Record') && !can('Racks.Manage')" @click="injectManualEvent">{{ t('Inject manual event') }}</button>
@@ -3813,12 +4163,12 @@ onBeforeUnmount(() => {
               <p v-if="eventStatus" class="2xl:col-span-2 rounded-lg border border-slate-200 bg-white p-4 font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">{{ eventStatus }}</p>
               <section class="2xl:col-span-2 card p-5 sm:p-6">
                 <div class="section-heading"><div><p>{{ t('Operational events') }}</p><h3>{{ t('Recent event stream') }}</h3></div></div>
-                <div class="table-shell">
+                <div class="table-shell compact-table-shell">
                   <table class="data-table">
                     <thead><tr><th>{{ t('Event') }}</th><th>{{ t('Target') }}</th><th>{{ t('Location') }}</th><th>{{ t('Source') }}</th><th>{{ t('Detail') }}</th><th>{{ t('Timestamp') }}</th></tr></thead>
                     <tbody>
                       <tr v-for="event in recentOperationalEvents" :key="event.eventCode">
-                        <td><span :class="statusClass(event.eventType)">{{ translateStatus(event.eventType) }}</span></td>
+                        <td><span class="event-chip" :class="statusClass(event.eventType)">{{ displayOperationalEvent(event.eventType) }}</span></td>
                         <td>{{ operationalEventTarget(event) }}</td>
                         <td>{{ operationalEventLocation(event) }}</td>
                         <td>{{ t(event.source) }}</td>
@@ -3840,7 +4190,7 @@ onBeforeUnmount(() => {
                       <tr v-for="history in supportHistory" :key="history.id">
                         <td>{{ supportCode(history.supportId) }}</td>
                         <td>{{ sectionName(history.sectionId) }}</td>
-                        <td>{{ translateStatus(history.eventType) }}</td>
+                        <td>{{ displayOperationalEvent(history.eventType) }}</td>
                         <td>{{ formatDate(history.dateTime) }}</td>
                       </tr>
                       <tr v-if="!supportHistory.length"><td colspan="4" class="text-center">{{ t('No records found') }}</td></tr>
@@ -3894,7 +4244,6 @@ onBeforeUnmount(() => {
                       <option value="quality">{{ t('Quality technician') }}</option>
                       <option value="logistics">{{ t('Logistics') }}</option>
                       <option value="client">{{ t('Client') }}</option>
-                      <option value="demoViewer">{{ t('Demo viewer') }}</option>
                     </select>
                   </label>
                   <label class="form-label">{{ t('Password') }}<input v-model="registerForm.password" type="password" class="form-input" /></label>

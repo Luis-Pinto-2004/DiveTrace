@@ -240,9 +240,9 @@ public static class DemoSeeder
         return new Dictionary<string, ManufacturingOrder>
         {
             ["of1"] = await EnsureOrderAsync(db, "OF-PORTA-001", customers["auto"], products["porta"], variants["std"], process, lines["montagem"], 6, now.Date.AddDays(3).AddHours(17), "In Progress", "OEM-PT-2026-001", PublicTrackingCode, "Ordem demonstrativa para rastreabilidade WIP de portas automóveis.", "MO-DRIVE-DOOR-001", "DT-DEMO-001"),
-            ["of2"] = await EnsureOrderAsync(db, "OF-PORTA-002", customers["oem"], products["porta"], variants["prm"], process, lines["montagem"], 4, now.Date.AddDays(4).AddHours(16), "In Progress", "OEM-PT-2026-002", "TRC-PORTA-002", "Ordem com transferência para pintura alternativa."),
-            ["of3"] = await EnsureOrderAsync(db, "OF-PORTA-003", customers["piloto"], products["subconjunto"], variants["ref"], process, lines["montagem"], 3, now.Date.AddDays(5).AddHours(15), "Blocked", "PILOTO-2026-003", "TRC-PORTA-003", "Ordem usada para cenário de falha de qualidade e retrabalho."),
-            ["of4"] = await EnsureOrderAsync(db, "OF-PORTA-004", customers["auto"], products["porta"], variants["lev"], process, lines["montagem"], 5, now.Date.AddDays(6).AddHours(14), "Planned", "OEM-PT-2026-004", "TRC-PORTA-004", "Ordem planeada para validação de capacidade pós-linha.")
+            ["of2"] = await EnsureOrderAsync(db, "OF-PORTA-002", customers["auto"], products["porta"], variants["prm"], process, lines["montagem"], 4, now.Date.AddDays(4).AddHours(16), "In Quality", "OEM-PT-2026-002", "TRC-PORTA-002", "Ordem em controlo de qualidade antes da preparação para entrega."),
+            ["of3"] = await EnsureOrderAsync(db, "OF-PORTA-003", customers["auto"], products["subconjunto"], variants["ref"], process, lines["montagem"], 3, now.Date.AddDays(5).AddHours(15), "Ready", "OEM-PT-2026-003", "TRC-PORTA-003", "Ordem pronta para levantamento ou expedição."),
+            ["of4"] = await EnsureOrderAsync(db, "OF-PORTA-004", customers["auto"], products["porta"], variants["lev"], process, lines["montagem"], 5, now.Date.AddDays(-1).AddHours(14), "Completed", "OEM-PT-2026-004", "TRC-PORTA-004", "Ordem concluída e entregue ao cliente.")
         };
     }
 

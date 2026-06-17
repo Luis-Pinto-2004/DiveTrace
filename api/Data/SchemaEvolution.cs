@@ -160,6 +160,7 @@ public static class SchemaEvolution
             ALTER TABLE "ProductionLineSections" ADD COLUMN IF NOT EXISTS "AllowsLineTransferOut" boolean NOT NULL DEFAULT FALSE;
 
             ALTER TABLE "ManufacturingOrders" ADD COLUMN IF NOT EXISTS "CustomerId" integer NULL;
+            ALTER TABLE "ManufacturingOrders" ADD COLUMN IF NOT EXISTS "DisplayName" character varying(160) NULL;
             ALTER TABLE "ManufacturingOrders" ADD COLUMN IF NOT EXISTS "CustomerReference" character varying(120) NULL;
             ALTER TABLE "ManufacturingOrders" ADD COLUMN IF NOT EXISTS "PublicTrackingCode" character varying(80) NULL;
 

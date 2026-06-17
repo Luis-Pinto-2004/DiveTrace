@@ -48,6 +48,7 @@ public sealed class ManufacturingOrder : IEntity
     public int PlannedQty { get; set; }
     public DateTime ScheduledUntil { get; set; }
     [MaxLength(40)] public string Status { get; set; } = "Planned";
+    [MaxLength(160)] public string? DisplayName { get; set; }
     [MaxLength(120)] public string? CustomerReference { get; set; }
     [MaxLength(80)] public string? PublicTrackingCode { get; set; }
     public string? Observations { get; set; }

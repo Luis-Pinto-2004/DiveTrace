@@ -175,7 +175,7 @@ Invoke-ExpectedStatus -Name "Logistics can read materials" -Path "/raw-materials
 Invoke-ExpectedStatus -Name "Logistics cannot read quality" -Path "/quality-results" -Role "Logistics" -User "logistica" -ExpectedStatus 403
 Invoke-ExpectedStatus -Name "Customer can read public order" -Path "/customer/orders/TRC-PORTA-001" -Role "Customer" -User "cliente" -ExpectedStatus 200
 Invoke-ExpectedStatus -Name "Customer can list own orders" -Path "/customer/orders" -Role "Customer" -User "cliente" -ExpectedStatus 200
-Invoke-ExpectedStatus -Name "Customer cannot read another customer order" -Path "/customer/orders/TRC-PORTA-002" -Role "Customer" -User "cliente" -ExpectedStatus 404
+Invoke-ExpectedStatus -Name "Customer cannot read another customer order" -Path "/customer/orders/TRC-SIM-002" -Role "Customer" -User "cliente" -ExpectedStatus 404
 Invoke-ExpectedStatus -Name "Customer cannot read dashboard summary" -Path "/dashboard/summary" -Role "Customer" -User "cliente" -ExpectedStatus 403
 Invoke-ExpectedStatus -Name "Customer cannot read product units" -Path "/product-units" -Role "Customer" -User "cliente" -ExpectedStatus 403
 Invoke-ExpectedStatus -Name "Customer cannot read FIWARE" -Path "/fiware/context" -Role "Customer" -User "cliente" -ExpectedStatus 403

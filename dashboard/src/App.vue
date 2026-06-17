@@ -933,7 +933,7 @@ type ProductUnitTrace = {
 type CustomerOrderLookup = {
   publicTrackingCode?: string
   customer?: { customerCode?: string; name?: string }
-  order?: { status?: string; plannedQty?: number; scheduledUntil?: string; product?: string; variant?: string }
+  order?: { name?: string; status?: string; plannedQty?: number; scheduledUntil?: string; product?: string; variant?: string }
   summary?: { units: number; completed: number; inFlow: number; attention: number; lastMovementAt?: string; progressPercent?: number; progressSummary?: string; lastMilestone?: string }
   units?: Array<{
     status: string
@@ -945,6 +945,7 @@ type CustomerOrderLookup = {
   }>
   milestones?: Array<{ eventType: string; occurredAt: string; stage?: string }>
 }
+type CustomerMilestone = NonNullable<CustomerOrderLookup['milestones']>[number]
 
 function emptyFiwareContext(): FiwareContextSnapshot {
   return {
@@ -1017,8 +1018,9 @@ const customerLookup = ref<CustomerOrderLookup | null>(null)
 const customerLookupStatus = ref('')
 const customerOrders = ref<CustomerOrderLookup[]>([])
 const customerOrderStatus = ref('')
-const customerOrderForm = ref({ productId: '', variantId: '', quantity: 1, observations: '' })
+const customerOrderForm = ref({ name: '', productId: '', variantId: '', quantity: 1, observations: '' })
 const customerOrderFilter = ref<'all' | 'active' | 'ready' | 'completed'>('all')
+const customerOrderSearch = ref('')
 const customerCreatedOrder = ref<CustomerOrderLookup | null>(null)
 const customerProductOptions = computed(() => (products.value.length ? products.value : demoProducts))
 const customerVariantOptions = computed(() => {
@@ -1028,11 +1030,12 @@ const customerVariantOptions = computed(() => {
 })
 const selectedCustomerProduct = computed(() => customerProductOptions.value.find((product) => product.id === Number(customerOrderForm.value.productId)))
 const selectedCustomerVariant = computed(() => customerVariantOptions.value.find((variant) => variant.id === Number(customerOrderForm.value.variantId)))
+const customerOrderDisplayName = computed(() => customerOrderForm.value.name.trim() || customerOrderFallbackName(selectedCustomerProduct.value?.name, selectedCustomerVariant.value?.name))
 const customerOrderSummary = computed(() => {
   const counts = { total: customerOrders.value.length, active: 0, production: 0, ready: 0, completed: 0 }
   for (const order of customerOrders.value) {
     const bucket = customerOrderBucket(order)
-    if (bucket !== 'completed') counts.active++
+    if (bucket !== 'completed' && bucket !== 'ready') counts.active++
     if (bucket === 'production') counts.production++
     if (bucket === 'ready') counts.ready++
     if (bucket === 'completed') counts.completed++
@@ -1040,11 +1043,23 @@ const customerOrderSummary = computed(() => {
   return counts
 })
 const filteredCustomerOrders = computed(() => {
-  if (customerOrderFilter.value === 'all') return customerOrders.value
+  const search = customerOrderSearch.value.trim().toLowerCase()
   return customerOrders.value.filter((order) => {
     const bucket = customerOrderBucket(order)
-    if (customerOrderFilter.value === 'active') return bucket !== 'completed'
-    return bucket === customerOrderFilter.value
+    const matchesFilter = customerOrderFilter.value === 'all'
+      ? true
+      : customerOrderFilter.value === 'active'
+        ? bucket !== 'completed' && bucket !== 'ready'
+        : bucket === customerOrderFilter.value
+    if (!matchesFilter) return false
+    if (!search) return true
+    return [
+      customerOrderName(order),
+      order.publicTrackingCode,
+      order.order?.product,
+      order.order?.variant,
+      customerOrderState(order),
+    ].some((value) => String(value || '').toLowerCase().includes(search))
   })
 })
 const customerOrderFilters = computed(() => [
@@ -1263,10 +1278,10 @@ const latestDataUpdateShort = computed(() => summary.value.generatedAt ? formatS
 const apiHealthClass = computed(() => {
   const value = apiStatus.value.toLowerCase()
   if (value.includes('offline') || value.includes('error') || value.includes('fail')) return 'api-health-error'
-  if (value.includes('demo') || !fiwareCoherenceOk.value) return 'api-health-warn'
+  if (value.includes('connecting') || value.includes('loading') || value.includes('demo')) return 'api-health-warn'
   return ''
 })
-const apiHealthTitle = computed(() => t(apiStatus.value || 'API status'))
+const apiHealthTitle = computed(() => apiHealthClass.value === '' ? t('API disponível') : t(apiStatus.value || 'API status'))
 const currentRoleLabel = computed(() => user.value ? getRoleLabel(user.value.roleKey) : '')
 const roleContextCards = computed(() => {
   const roleKey = user.value?.roleKey ?? 'demoViewer'
@@ -1383,6 +1398,7 @@ const userStatusCards = computed(() => [
   { key: 'admins', label: 'Administrators', value: administratorCount.value, detail: 'Profiles with management permissions', tone: 'tone-warning' },
   { key: 'operators', label: 'Operators', value: operatorCount.value, detail: 'Operational profiles', tone: 'tone-muted' },
 ])
+const sidebarProfileName = computed(() => (user.value ? getRoleLabel(user.value.roleKey) : ''))
 const analyticsOperationalData = computed(() => ({
   summary: summary.value,
   flowSummary: flowSummary.value,
@@ -1401,9 +1417,9 @@ const analyticsOperationalData = computed(() => ({
 function statusClass(status: string | undefined) {
   const value = (status || '').toLowerCase()
   if (value.includes('fail') || value.includes('blocked') || value.includes('scrap') || value.includes('rejected')) return 'badge-red'
-  if (value.includes('rework') || value.includes('pending') || value.includes('recover') || value.includes('recondition')) return 'badge-amber'
+  if (value.includes('rework') || value.includes('pending') || value.includes('recover') || value.includes('recondition') || value.includes('quality')) return 'badge-amber'
   if (value.includes('transfer') || value.includes('move') || value.includes('active') || value.includes('loaded') || value.includes('progress')) return 'badge-blue'
-  if (value.includes('pass') || value.includes('completed') || value.includes('stored') || value.includes('available')) return 'badge-green'
+  if (value.includes('pass') || value.includes('completed') || value.includes('stored') || value.includes('available') || value.includes('ready')) return 'badge-green'
   return 'badge-gray'
 }
 
@@ -1825,6 +1841,7 @@ function customerOrderBucket(order: CustomerOrderLookup): 'received' | 'planning
   if (status.includes('conclu') || status.includes('completed') || progress >= 100) return 'completed'
   if (status.includes('pronta') || status.includes('entrega') || status.includes('expedi')) return 'ready'
   if (status.includes('valida') || status.includes('qualidade') || order.summary?.attention) return 'validation'
+  if (status.includes('pedido recebido') || status.includes('request received')) return 'received'
   if (status.includes('produção') || status.includes('producao') || status.includes('in progress') || progress > 0) return 'production'
   if (status.includes('plane') || status.includes('planned')) return 'planning'
   return 'received'
@@ -1834,12 +1851,21 @@ function customerOrderState(order: CustomerOrderLookup) {
   const bucket = customerOrderBucket(order)
   return {
     received: t('Pedido recebido'),
-    planning: t('A preparar produção'),
+    planning: t('Planeada'),
     production: t('Em produção'),
-    validation: t('Em validação'),
+    validation: t('Em controlo de qualidade'),
     ready: t('Pronta'),
     completed: t('Concluída'),
   }[bucket]
+}
+
+function customerOrderFallbackName(product?: string | null, variant?: string | null, trackingCode?: string | null) {
+  if (product) return variant ? `${translateMaterialName(product)} · ${variant}` : translateMaterialName(product)
+  return trackingCode ? `${t('Encomenda')} ${trackingCode}` : t('Encomenda sem nome')
+}
+
+function customerOrderName(order: CustomerOrderLookup) {
+  return order.order?.name?.trim() || customerOrderFallbackName(order.order?.product, order.order?.variant, order.publicTrackingCode)
 }
 
 function customerOrderTone(order: CustomerOrderLookup) {
@@ -1886,11 +1912,35 @@ function customerProgressSteps(order?: CustomerOrderLookup | null) {
     { key: 'completed', label: t('Concluída') },
   ]
   if (!order) return steps.map((step) => ({ ...step, state: 'pending' }))
-  const currentIndex = steps.findIndex((step) => step.key === customerOrderBucket(order))
+  const bucket = customerOrderBucket(order)
+  const currentIndex = steps.findIndex((step) => step.key === bucket)
   return steps.map((step, index) => ({
     ...step,
-    state: index < currentIndex ? 'done' : index === currentIndex ? 'current' : 'pending',
+    state: bucket === 'completed' || index < currentIndex ? 'done' : index === currentIndex ? 'current' : 'pending',
   }))
+}
+
+function customerHistoryLabel(milestone: CustomerMilestone) {
+  const text = `${milestone.eventType || ''} ${milestone.stage || ''}`.toLowerCase()
+  if (text.includes('conclu') || text.includes('completed')) return t('Encomenda concluída')
+  if (text.includes('pronta') || text.includes('ready')) return t('Encomenda pronta')
+  if (text.includes('qualidade') || text.includes('valida') || text.includes('quality')) return t('Validação de qualidade atualizada')
+  if (text.includes('rack') || text.includes('expedi') || text.includes('entrega') || text.includes('preparação final')) return t('Preparação final atualizada')
+  if (text.includes('produção') || text.includes('producao') || text.includes('acabamento') || text.includes('pint') || text.includes('corte') || text.includes('sold') || text.includes('mont')) return t('Produção atualizada')
+  if (text.includes('pedido recebido')) return t('Pedido recebido')
+  return t('Produção atualizada')
+}
+
+function customerLatestUpdate(order?: CustomerOrderLookup | null) {
+  if (!order) return '-'
+  return {
+    received: t('Pedido recebido'),
+    planning: t('Pedido recebido'),
+    production: t('Produção atualizada'),
+    validation: t('Validação de qualidade atualizada'),
+    ready: t('Encomenda pronta para levantamento/expedição'),
+    completed: t('Encomenda concluída'),
+  }[customerOrderBucket(order)]
 }
 
 function movementText(value?: ReferenceRecord | null) {
@@ -2839,13 +2889,15 @@ async function submitCustomerOrder() {
   customerOrderStatus.value = ''
   customerCreatedOrder.value = null
   const quantity = Number(customerOrderForm.value.quantity)
-  if (!customerOrderForm.value.productId || !customerOrderForm.value.variantId || !Number.isFinite(quantity) || quantity < 1) {
-    customerOrderStatus.value = t('Selecione produto, variante e quantidade antes de submeter.')
+  const orderName = customerOrderForm.value.name.trim()
+  if (!orderName || !customerOrderForm.value.productId || !customerOrderForm.value.variantId || !Number.isFinite(quantity) || quantity < 1) {
+    customerOrderStatus.value = t('Preencha nome, produto, variante e quantidade antes de submeter.')
     return
   }
 
   try {
     const created = await apiPost('/customer/orders', {
+      name: orderName,
       productId: customerOrderForm.value.productId ? Number(customerOrderForm.value.productId) : null,
       variantId: customerOrderForm.value.variantId ? Number(customerOrderForm.value.variantId) : null,
       quantity,
@@ -2855,7 +2907,7 @@ async function submitCustomerOrder() {
     customerCreatedOrder.value = customerLookup.value
     customerLookupCode.value = customerLookup.value.publicTrackingCode || ''
     customerOrderStatus.value = `${t('Encomenda criada com sucesso')}. ${t('Código de rastreio')}: ${customerLookup.value.publicTrackingCode || '-'}`
-    customerOrderForm.value = { productId: '', variantId: '', quantity: 1, observations: '' }
+    customerOrderForm.value = { name: '', productId: '', variantId: '', quantity: 1, observations: '' }
     await loadData(false)
   } catch (error) {
     customerOrderStatus.value = `${t('Error saving changes')}: ${getApiErrorMessage(error)}`
@@ -2863,7 +2915,7 @@ async function submitCustomerOrder() {
 }
 
 function resetCustomerOrderForm() {
-  customerOrderForm.value = { productId: '', variantId: '', quantity: 1, observations: '' }
+  customerOrderForm.value = { name: '', productId: '', variantId: '', quantity: 1, observations: '' }
   customerOrderStatus.value = ''
   customerCreatedOrder.value = null
   activeView.value = 'customerNewOrder'
@@ -3014,7 +3066,7 @@ onBeforeUnmount(() => {
         </div>
         <!-- Quick settings / user info section replacing the academic scope block -->
         <div class="app-sidebar-profile">
-          <p class="font-black text-slate-950 dark:text-slate-50">{{ user?.name }}</p>
+          <p class="font-black text-slate-950 dark:text-slate-50">{{ sidebarProfileName }}</p>
           <div class="app-sidebar-profile-actions">
             <button class="btn-secondary btn-compact" @click="openProfileView">{{ t('Profile') }}</button>
             <button class="btn-secondary btn-compact" @click="navigateTo('settings')">{{ t('Settings') }}</button>
@@ -3788,10 +3840,16 @@ onBeforeUnmount(() => {
               </section>
 
               <section class="industrial-panel customer-toolbar">
-                <div class="mobile-tabs">
-                  <button v-for="filter in customerOrderFilters" :key="filter.key" class="mobile-tab" :class="customerOrderFilter === filter.key ? 'mobile-tab-active' : ''" type="button" @click="customerOrderFilter = filter.key">
-                    {{ filter.label }} <span class="ml-1 opacity-70">{{ filter.count }}</span>
-                  </button>
+                <div class="customer-toolbar-main">
+                  <label class="customer-search-field">
+                    <span>{{ t('Pesquisar') }}</span>
+                    <input v-model="customerOrderSearch" class="form-input" :placeholder="t('Pesquisar por nome ou código de rastreio')" />
+                  </label>
+                  <div class="mobile-tabs">
+                    <button v-for="filter in customerOrderFilters" :key="filter.key" class="mobile-tab" :class="customerOrderFilter === filter.key ? 'mobile-tab-active' : ''" type="button" @click="customerOrderFilter = filter.key">
+                      {{ filter.label }} <span class="ml-1 opacity-70">{{ filter.count }}</span>
+                    </button>
+                  </div>
                 </div>
                 <div class="flex flex-wrap gap-3">
                   <button class="btn-primary" type="button" @click="navigateTo('customerNewOrder')">{{ t('Nova encomenda') }}</button>
@@ -3806,20 +3864,21 @@ onBeforeUnmount(() => {
               </section>
 
               <section v-else-if="!filteredCustomerOrders.length" class="customer-empty-state">
-                <strong>{{ t('Sem encomendas neste filtro.') }}</strong>
-                <p>{{ t('Escolha outro filtro para ver mais encomendas.') }}</p>
+                <strong>{{ t('Nenhuma encomenda encontrada com estes filtros.') }}</strong>
+                <p>{{ t('Ajuste a pesquisa ou escolha outro filtro.') }}</p>
               </section>
 
               <section v-else class="grid gap-4 xl:grid-cols-2">
                 <article v-for="order in filteredCustomerOrders" :key="order.publicTrackingCode" class="customer-order-card" :class="customerOrderTone(order)">
                   <div class="flex flex-wrap items-start justify-between gap-3">
-                    <div class="min-w-0">
-                      <span>{{ t('Código de rastreio') }}</span>
-                      <strong class="break-words">{{ order.publicTrackingCode || '-' }}</strong>
-                    </div>
+                    <p class="customer-card-code">
+                      <span>{{ t('Código de rastreio') }}:</span>
+                      <strong>{{ order.publicTrackingCode || '-' }}</strong>
+                    </p>
                     <span class="customer-state-chip">{{ customerOrderState(order) }}</span>
                   </div>
-                  <p class="mt-3 text-sm font-bold text-slate-800 dark:text-slate-100">{{ order.order?.product || '-' }}<span v-if="order.order?.variant"> · {{ order.order.variant }}</span></p>
+                  <h4 class="customer-order-name">{{ customerOrderName(order) }}</h4>
+                  <p class="mt-1 text-sm font-bold text-slate-800 dark:text-slate-100">{{ order.order?.product || '-' }}<span v-if="order.order?.variant"> · {{ order.order.variant }}</span></p>
                   <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">{{ t('Data prevista') }}: {{ formatDate(order.order?.scheduledUntil) }}</p>
                   <div class="mt-4">
                     <div class="flex items-center justify-between gap-3 text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">
@@ -3839,12 +3898,13 @@ onBeforeUnmount(() => {
                 <div class="flex flex-wrap items-start justify-between gap-4">
                   <div>
                     <p class="text-xs font-black uppercase tracking-normal text-drivolution-700 dark:text-drivolution-300">{{ t('Detalhe da encomenda') }}</p>
-                    <h3 class="mt-1 text-xl font-black text-slate-950 dark:text-white">{{ customerLookup.order?.product || '-' }}<span v-if="customerLookup.order?.variant"> · {{ customerLookup.order.variant }}</span></h3>
+                    <h3 class="mt-1 text-xl font-black text-slate-950 dark:text-white">{{ customerOrderName(customerLookup) }}</h3>
+                    <p class="mt-1 text-sm font-bold text-slate-700 dark:text-slate-200">{{ customerLookup.order?.product || '-' }}<span v-if="customerLookup.order?.variant"> · {{ customerLookup.order.variant }}</span></p>
                     <p class="mt-1 text-sm font-semibold text-slate-600 dark:text-slate-300">{{ t('Código de rastreio') }}: {{ customerLookup.publicTrackingCode }}</p>
                   </div>
                   <span class="customer-state-chip">{{ customerOrderState(customerLookup) }}</span>
                 </div>
-                <div class="mt-5 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+                <div class="customer-detail-progress">
                   <article class="customer-status-card">
                     <span>{{ t('Estado da encomenda') }}</span>
                     <strong>{{ customerOrderState(customerLookup) }}</strong>
@@ -3863,14 +3923,14 @@ onBeforeUnmount(() => {
                 <div class="mt-5 grid gap-4 md:grid-cols-3">
                   <article class="customer-info-tile"><span>{{ t('Estado atual') }}</span><strong>{{ customerOrderState(customerLookup) }}</strong></article>
                   <article class="customer-info-tile"><span>{{ t('Data prevista') }}</span><strong>{{ formatDate(customerLookup.order?.scheduledUntil) }}</strong></article>
-                  <article class="customer-info-tile"><span>{{ t('Atualização mais recente') }}</span><strong>{{ customerLookup.summary?.lastMilestone || customerOrderState(customerLookup) }}</strong></article>
+                  <article class="customer-info-tile"><span>{{ t('Atualização mais recente') }}</span><strong>{{ customerLatestUpdate(customerLookup) }}</strong></article>
                 </div>
                 <div class="mt-5">
                   <p class="text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">{{ t('Histórico resumido') }}</p>
                   <ol class="customer-history-list mt-3">
                     <li v-for="milestone in (customerLookup.milestones || []).slice(-4)" :key="`${milestone.occurredAt}-${milestone.eventType}`">
                       <span>{{ formatDate(milestone.occurredAt) }}</span>
-                      <strong>{{ milestone.eventType }}</strong>
+                      <strong>{{ customerHistoryLabel(milestone) }}</strong>
                     </li>
                     <li v-if="!customerLookup.milestones?.length">
                       <span>{{ t('Pedido recebido') }}</span>
@@ -3885,6 +3945,7 @@ onBeforeUnmount(() => {
             <div v-if="activeView === 'customerNewOrder'" class="space-y-5 lg:space-y-6">
               <section v-if="customerCreatedOrder" class="customer-confirmation">
                 <span>{{ t('Encomenda criada com sucesso') }}</span>
+                <h3>{{ customerOrderName(customerCreatedOrder) }}</h3>
                 <strong>{{ t('Código de rastreio') }}: {{ customerCreatedOrder.publicTrackingCode }}</strong>
                 <p>{{ t('A encomenda será registada como pedido recebido.') }}</p>
                 <div class="mt-5 flex flex-wrap justify-center gap-3">
@@ -3893,35 +3954,48 @@ onBeforeUnmount(() => {
                   <button class="btn-secondary" type="button" @click="navigateTo('customerOrders')">{{ t('As minhas encomendas') }}</button>
                 </div>
               </section>
-              <section v-else class="customer-order-form-layout">
-                <form class="industrial-panel customer-order-form" @submit.prevent="submitCustomerOrder">
-                  <label class="form-label">{{ t('Produto') }}
-                    <select v-model="customerOrderForm.productId" class="form-input">
-                      <option value="">{{ t('Selecione produto') }}</option>
-                      <option v-for="product in customerProductOptions" :key="product.id" :value="product.id">{{ translateMaterialName(product.name) }}</option>
-                    </select>
+              <section v-else class="industrial-panel customer-order-single-card">
+                <form class="customer-order-form" @submit.prevent="submitCustomerOrder">
+                  <label class="form-label">{{ t('Nome da encomenda') }}
+                    <input v-model="customerOrderForm.name" class="form-input" :placeholder="t('Ex.: Porta esquerda lote junho')" />
                   </label>
-                  <label class="form-label">{{ t('Variante') }}
-                    <select v-model="customerOrderForm.variantId" class="form-input">
-                      <option value="">{{ t('Selecione variante') }}</option>
-                      <option v-for="variant in customerVariantOptions" :key="variant.id" :value="variant.id">{{ variant.name }}</option>
-                    </select>
-                  </label>
-                  <label class="form-label">{{ t('Quantidade') }}<input v-model.number="customerOrderForm.quantity" min="1" max="99" type="number" class="form-input" /></label>
+                  <div class="grid gap-4 md:grid-cols-2">
+                    <label class="form-label">{{ t('Produto') }}
+                      <select v-model="customerOrderForm.productId" class="form-input">
+                        <option value="">{{ t('Selecione produto') }}</option>
+                        <option v-for="product in customerProductOptions" :key="product.id" :value="product.id">{{ translateMaterialName(product.name) }}</option>
+                      </select>
+                    </label>
+                    <label class="form-label">{{ t('Variante') }}
+                      <select v-model="customerOrderForm.variantId" class="form-input">
+                        <option value="">{{ t('Selecione variante') }}</option>
+                        <option v-for="variant in customerVariantOptions" :key="variant.id" :value="variant.id">{{ variant.name }}</option>
+                      </select>
+                    </label>
+                    <label class="form-label">{{ t('Quantidade') }}<input v-model.number="customerOrderForm.quantity" min="1" max="99" type="number" class="form-input" /></label>
+                  </div>
                   <label class="form-label">{{ t('Observações para a encomenda') }}<textarea v-model="customerOrderForm.observations" class="form-input min-h-28"></textarea></label>
+                  <div class="customer-order-summary-table">
+                    <div>
+                      <span>{{ t('Resumo da encomenda') }}</span>
+                      <strong>{{ customerOrderDisplayName }}</strong>
+                    </div>
+                    <table>
+                      <tbody>
+                        <tr><th>{{ t('Nome') }}</th><td>{{ customerOrderDisplayName }}</td></tr>
+                        <tr><th>{{ t('Produto') }}</th><td>{{ selectedCustomerProduct ? translateMaterialName(selectedCustomerProduct.name) : t('Por escolher') }}</td></tr>
+                        <tr><th>{{ t('Variante') }}</th><td>{{ selectedCustomerVariant?.name || t('Por escolher') }}</td></tr>
+                        <tr><th>{{ t('Quantidade') }}</th><td>{{ customerOrderForm.quantity || 0 }}</td></tr>
+                        <tr><th>{{ t('Estado inicial') }}</th><td>{{ t('Pedido recebido') }}</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
                   <p v-if="customerOrderStatus" class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-100">{{ customerOrderStatus }}</p>
+                  <div class="customer-order-submit-row">
+                    <p>{{ t('A encomenda será registada como pedido recebido.') }}</p>
+                    <button class="btn-primary" type="submit">{{ t('Submeter encomenda') }}</button>
+                  </div>
                 </form>
-                <aside class="customer-order-preview">
-                  <span>{{ t('Resumo da encomenda') }}</span>
-                  <strong>{{ selectedCustomerProduct ? translateMaterialName(selectedCustomerProduct.name) : t('Produto por escolher') }}</strong>
-                  <dl>
-                    <div><dt>{{ t('Variante') }}</dt><dd>{{ selectedCustomerVariant?.name || t('Por escolher') }}</dd></div>
-                    <div><dt>{{ t('Quantidade') }}</dt><dd>{{ customerOrderForm.quantity || 0 }}</dd></div>
-                    <div><dt>{{ t('Estado inicial') }}</dt><dd>{{ t('Pedido recebido') }}</dd></div>
-                  </dl>
-                  <p>{{ t('A encomenda será registada como pedido recebido.') }}</p>
-                  <button class="btn-primary w-full" type="button" @click="submitCustomerOrder">{{ t('Submeter encomenda') }}</button>
-                </aside>
               </section>
             </div>
 

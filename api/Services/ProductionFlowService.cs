@@ -17,6 +17,7 @@ public sealed class ProductUnitTransferRequest
 
 public sealed class CustomerOrderCreateRequest
 {
+    public string? Name { get; set; }
     public int? ProductId { get; set; }
     public int? VariantId { get; set; }
     public int Quantity { get; set; } = 1;
@@ -533,10 +534,12 @@ public sealed class ProductionFlowService
             ordersQuery = ordersQuery.Where(x => x.CustomerId == customer.Id);
         }
 
-        var orders = await ordersQuery
-            .OrderByDescending(x => x.ScheduledUntil)
+        var orders = await ordersQuery.ToListAsync(cancellationToken);
+        orders = orders
+            .OrderBy(CustomerOrderSortGroup)
+            .ThenByDescending(x => x.ScheduledUntil)
             .ThenByDescending(x => x.Id)
-            .ToListAsync(cancellationToken);
+            .ToList();
 
         var result = new List<object>();
         foreach (var order in orders)
@@ -604,6 +607,7 @@ public sealed class ProductionFlowService
             PlannedQty = quantity,
             ScheduledUntil = now.Date.AddDays(7).AddHours(17),
             Status = "Pedido recebido",
+            DisplayName = CleanValue(request.Name, $"Encomenda {now:yyyyMMdd-HHmm}"),
             CustomerReference = $"Pedido cliente {customer.CustomerCode}",
             PublicTrackingCode = await UniqueTrackingCodeAsync($"TRC-CLI-{token}", cancellationToken),
             Observations = string.IsNullOrWhiteSpace(request.Observations) ? "Encomenda submetida pelo portal de cliente." : request.Observations.Trim()
@@ -633,7 +637,7 @@ public sealed class ProductionFlowService
         var lineById = lines.ToDictionary(x => x.Id);
         var historyByUnit = histories.GroupBy(x => x.ProductUnitId).ToDictionary(x => x.Key, x => x.ToList());
         var completed = units.Count(unit => unit.Status.Equals("Completed", StringComparison.OrdinalIgnoreCase));
-        var progress = units.Count == 0 ? 0 : (int)Math.Round((double)completed / units.Count * 100);
+        var progress = CustomerProgressPercent(order, units, completed);
         var lastHistory = histories.OrderByDescending(x => x.OccurredAt).FirstOrDefault();
         var lastSection = lastHistory is null ? null : Find(sectionById, lastHistory.ToSectionId);
 
@@ -644,6 +648,7 @@ public sealed class ProductionFlowService
             customer = customer is null ? null : new { customer.CustomerCode, customer.Name },
             order = new
             {
+                name = OrderDisplayName(order, product, variant),
                 order.Status,
                 order.PlannedQty,
                 order.ScheduledUntil,
@@ -877,10 +882,32 @@ public sealed class ProductionFlowService
     {
         if (order.Status.Equals("Pedido recebido", StringComparison.OrdinalIgnoreCase)) return "Pedido recebido";
         if (order.Status.Equals("Planned", StringComparison.OrdinalIgnoreCase)) return "Planeada";
+        if (order.Status.Equals("In Quality", StringComparison.OrdinalIgnoreCase) || order.Status.Equals("Quality", StringComparison.OrdinalIgnoreCase)) return "Em controlo de qualidade";
+        if (order.Status.Equals("Ready", StringComparison.OrdinalIgnoreCase)) return "Pronta";
+        if (order.Status.Equals("Completed", StringComparison.OrdinalIgnoreCase)) return "Concluída";
         if (units.Count == 0) return "A aguardar início de produção";
         if (completed >= units.Count) return "Produção concluída";
-        if (units.Any(IsAttentionUnit)) return "Em validação";
+        if (units.Any(IsAttentionUnit)) return "Em controlo de qualidade";
         return "Em produção";
+    }
+
+    private static int CustomerProgressPercent(ManufacturingOrder order, IReadOnlyList<ProductUnit> units, int completed)
+    {
+        if (order.Status.Equals("Completed", StringComparison.OrdinalIgnoreCase)) return 100;
+        if (order.Status.Equals("Ready", StringComparison.OrdinalIgnoreCase)) return 92;
+        if (order.Status.Equals("In Quality", StringComparison.OrdinalIgnoreCase) || order.Status.Equals("Quality", StringComparison.OrdinalIgnoreCase)) return 75;
+        if (order.Status.Equals("In Progress", StringComparison.OrdinalIgnoreCase)) return 55;
+        if (order.Status.Equals("Planned", StringComparison.OrdinalIgnoreCase)) return 20;
+        if (order.Status.Equals("Pedido recebido", StringComparison.OrdinalIgnoreCase)) return 8;
+        if (units.Count == 0) return 0;
+        return (int)Math.Round((double)completed / units.Count * 100);
+    }
+
+    private static int CustomerOrderSortGroup(ManufacturingOrder order)
+    {
+        if (order.Status.Equals("Completed", StringComparison.OrdinalIgnoreCase)) return 2;
+        if (order.Status.Equals("Ready", StringComparison.OrdinalIgnoreCase)) return 1;
+        return 0;
     }
 
     private static bool Matches(string? value, string expected)
@@ -897,6 +924,21 @@ public sealed class ProductionFlowService
     private static string CleanValue(string? value, string fallback)
     {
         return string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+    }
+
+    private static string OrderDisplayName(ManufacturingOrder order, Product? product, Variant? variant)
+    {
+        if (!string.IsNullOrWhiteSpace(order.DisplayName)) return order.DisplayName.Trim();
+        if (!string.IsNullOrWhiteSpace(product?.Name))
+        {
+            return string.IsNullOrWhiteSpace(variant?.Name)
+                ? product.Name
+                : $"{product.Name} · {variant.Name}";
+        }
+
+        return string.IsNullOrWhiteSpace(order.PublicTrackingCode)
+            ? order.OrderNumber
+            : $"Encomenda {order.PublicTrackingCode}";
     }
 
     private static T? Find<T>(IReadOnlyDictionary<int, T> items, int? id)

@@ -946,6 +946,7 @@ type CustomerOrderLookup = {
   milestones?: Array<{ eventType: string; occurredAt: string; stage?: string }>
 }
 type CustomerMilestone = NonNullable<CustomerOrderLookup['milestones']>[number]
+type ClientStepVisualState = 'completed' | 'current' | 'upcoming'
 
 function emptyFiwareContext(): FiwareContextSnapshot {
   return {
@@ -1902,21 +1903,43 @@ function customerProgressPercent(order?: CustomerOrderLookup | null) {
   }[customerOrderBucket(order)]
 }
 
+const clientOrderStages = [
+  { key: 'received', label: 'Pedido recebido' },
+  { key: 'planning', label: 'Planeamento' },
+  { key: 'production', label: 'Produção' },
+  { key: 'quality', label: 'Controlo de qualidade' },
+  { key: 'ready', label: 'Pronta' },
+  { key: 'completed', label: 'Concluída' },
+] as const
+
+type ClientOrderStageKey = typeof clientOrderStages[number]['key']
+
+function customerStageIndex(order?: CustomerOrderLookup | null) {
+  if (!order) return 0
+  return {
+    received: 0,
+    planning: 1,
+    production: 2,
+    validation: 3,
+    ready: 4,
+    completed: 5,
+  }[customerOrderBucket(order)]
+}
+
+function clientOrderStageState(order: CustomerOrderLookup | null | undefined, stageKey: ClientOrderStageKey): ClientStepVisualState {
+  const stageIndex = clientOrderStages.findIndex((stage) => stage.key === stageKey)
+  const currentIndex = customerStageIndex(order)
+  if (order && customerOrderBucket(order) === 'completed') return 'completed'
+  if (stageIndex < currentIndex) return 'completed'
+  if (stageIndex === currentIndex) return 'current'
+  return 'upcoming'
+}
+
 function customerProgressSteps(order?: CustomerOrderLookup | null) {
-  const steps = [
-    { key: 'received', label: t('Pedido recebido') },
-    { key: 'planning', label: t('Planeamento') },
-    { key: 'production', label: t('Produção') },
-    { key: 'validation', label: t('Controlo de qualidade') },
-    { key: 'ready', label: t('Pronta') },
-    { key: 'completed', label: t('Concluída') },
-  ]
-  if (!order) return steps.map((step) => ({ ...step, state: 'pending' }))
-  const bucket = customerOrderBucket(order)
-  const currentIndex = steps.findIndex((step) => step.key === bucket)
-  return steps.map((step, index) => ({
+  return clientOrderStages.map((step) => ({
     ...step,
-    state: bucket === 'completed' || index < currentIndex ? 'done' : index === currentIndex ? 'current' : 'pending',
+    label: t(step.label),
+    state: clientOrderStageState(order, step.key),
   }))
 }
 
@@ -3913,10 +3936,16 @@ onBeforeUnmount(() => {
                       <div class="h-2 rounded-full bg-drivolution-500" :style="{ width: `${customerProgressPercent(customerLookup)}%` }"></div>
                     </div>
                   </article>
-                  <div class="customer-progress-steps">
-                    <div v-for="step in customerProgressSteps(customerLookup)" :key="step.key" class="customer-progress-step" :class="`customer-progress-step-${step.state}`">
-                      <span></span>
-                      <p>{{ step.label }}</p>
+                  <div class="client-order-stages">
+                    <div
+                      v-for="step in customerProgressSteps(customerLookup)"
+                      :key="step.key"
+                      class="client-order-stage"
+                      :class="`client-order-stage--${step.state}`"
+                      :data-stage-state="step.state"
+                    >
+                      <span class="client-order-stage__dot"></span>
+                      <span class="client-order-stage__label">{{ step.label }}</span>
                     </div>
                   </div>
                 </div>

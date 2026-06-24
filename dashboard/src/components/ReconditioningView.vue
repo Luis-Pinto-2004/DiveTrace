@@ -206,12 +206,32 @@ function formatDate(value?: string) {
         <div class="min-w-0">
           <p>Qualidade operacional</p>
           <h3>Recuperação / Recondicionamento</h3>
-          <p class="section-description">{{ summary.recommendation }}</p>
+          <p class="section-description">
+            {{ summary.recommendation }}
+          </p>
         </div>
         <div class="button-row">
-          <button class="btn-secondary" :class="{ active: activeFilter === 'all' }" @click="selectFilter('all')">Todos</button>
-          <button class="btn-secondary" :class="{ active: activeFilter === 'candidates' }" @click="selectFilter('candidates')">Candidatos</button>
-          <button class="btn-primary" :disabled="loading" @click="loadReconditioning">Atualizar</button>
+          <button
+            class="btn-secondary"
+            :class="{ active: activeFilter === 'all' }"
+            @click="selectFilter('all')"
+          >
+            Todos
+          </button>
+          <button
+            class="btn-secondary"
+            :class="{ active: activeFilter === 'candidates' }"
+            @click="selectFilter('candidates')"
+          >
+            Candidatos
+          </button>
+          <button
+            class="btn-primary"
+            :disabled="loading"
+            @click="loadReconditioning"
+          >
+            Atualizar
+          </button>
         </div>
       </div>
       <div class="kpi-grid mt-5">
@@ -238,8 +258,18 @@ function formatDate(value?: string) {
       </div>
     </section>
 
-    <p v-if="errorMessage" class="alert-error">{{ errorMessage }}</p>
-    <p v-if="actionMessage" class="alert-ok">{{ actionMessage }}</p>
+    <p
+      v-if="errorMessage"
+      class="alert-error"
+    >
+      {{ errorMessage }}
+    </p>
+    <p
+      v-if="actionMessage"
+      class="alert-ok"
+    >
+      {{ actionMessage }}
+    </p>
 
     <section class="reconditioning-grid">
       <div class="industrial-panel">
@@ -276,17 +306,47 @@ function formatDate(value?: string) {
                   <span>{{ item.nonconformityStatus || 'n/d' }}</span>
                 </td>
                 <td>
-                  <span class="state-pill" :class="statusTone(item)">{{ statusLabel(item.recoveryStatus) }}</span>
+                  <span
+                    class="state-pill"
+                    :class="statusTone(item)"
+                  >{{ statusLabel(item.recoveryStatus) }}</span>
                 </td>
                 <td>
                   <strong>{{ item.currentSection || 'n/d' }}</strong>
                   <span>{{ item.currentLine || 'n/d' }}</span>
                 </td>
                 <td class="row-actions">
-                  <button class="icon-button" title="Abrir grafo" @click.stop="emit('openTraceGraph', item.productUnitId)">MAP</button>
-                  <button class="icon-button" title="Marcar recuperável" :disabled="!item.canMarkRecoverable || actionLoading" @click.stop="markRecoverable(item)">REC</button>
-                  <button class="icon-button" title="Concluir recondicionamento" :disabled="!item.canComplete || actionLoading" @click.stop="completeReconditioning(item)">OK</button>
-                  <button class="icon-button danger" title="Rejeitar recuperação" :disabled="!item.canReject || actionLoading" @click.stop="rejectReconditioning(item)">RJ</button>
+                  <button
+                    class="icon-button"
+                    title="Abrir grafo"
+                    @click.stop="emit('openTraceGraph', item.productUnitId)"
+                  >
+                    MAP
+                  </button>
+                  <button
+                    class="icon-button"
+                    title="Marcar recuperável"
+                    :disabled="!item.canMarkRecoverable || actionLoading"
+                    @click.stop="markRecoverable(item)"
+                  >
+                    REC
+                  </button>
+                  <button
+                    class="icon-button"
+                    title="Concluir recondicionamento"
+                    :disabled="!item.canComplete || actionLoading"
+                    @click.stop="completeReconditioning(item)"
+                  >
+                    OK
+                  </button>
+                  <button
+                    class="icon-button danger"
+                    title="Rejeitar recuperação"
+                    :disabled="!item.canReject || actionLoading"
+                    @click.stop="rejectReconditioning(item)"
+                  >
+                    RJ
+                  </button>
                 </td>
               </tr>
               <tr v-if="!items.length">
@@ -308,7 +368,10 @@ function formatDate(value?: string) {
               <p>{{ selectedItem.unitCode }}</p>
               <h3>{{ statusLabel(selectedItem.recoveryStatus) }}</h3>
             </div>
-            <span class="state-pill" :class="statusTone(selectedItem)">{{ statusLabel(selectedItem.qualityDisposition) }}</span>
+            <span
+              class="state-pill"
+              :class="statusTone(selectedItem)"
+            >{{ statusLabel(selectedItem.qualityDisposition) }}</span>
           </div>
 
           <dl class="detail-grid">
@@ -327,34 +390,69 @@ function formatDate(value?: string) {
 
           <label class="form-label">
             Justificação
-            <textarea v-model="reason" class="form-input min-h-[92px]"></textarea>
+            <textarea
+              v-model="reason"
+              class="form-input min-h-[92px]"
+            />
           </label>
 
           <label class="form-label">
             Notas
-            <textarea v-model="notes" class="form-input min-h-[76px]"></textarea>
+            <textarea
+              v-model="notes"
+              class="form-input min-h-[76px]"
+            />
           </label>
 
           <div class="form-grid">
             <label class="form-label">
               Disposição se rejeitada
-              <select v-model="nextDisposition" class="form-input">
+              <select
+                v-model="nextDisposition"
+                class="form-input"
+              >
                 <option value="Sucata">Sucata</option>
                 <option value="Retrabalho">Retrabalho</option>
                 <option value="Bloqueado">Bloqueado</option>
               </select>
             </label>
             <label class="check-row">
-              <input v-model="functionalValidation" type="checkbox" />
+              <input
+                v-model="functionalValidation"
+                type="checkbox"
+              >
               <span>Validação funcional final</span>
             </label>
           </div>
 
           <div class="button-row">
-            <button class="btn-secondary" @click="emit('openTraceGraph', selectedItem.productUnitId)">Abrir grafo</button>
-            <button class="btn-secondary" :disabled="!selectedItem.canMarkRecoverable || actionLoading" @click="markRecoverable()">Marcar recuperável</button>
-            <button class="btn-primary" :disabled="!selectedItem.canComplete || actionLoading" @click="completeReconditioning()">Concluir</button>
-            <button class="btn-danger" :disabled="!selectedItem.canReject || actionLoading" @click="rejectReconditioning()">Rejeitar</button>
+            <button
+              class="btn-secondary"
+              @click="emit('openTraceGraph', selectedItem.productUnitId)"
+            >
+              Abrir grafo
+            </button>
+            <button
+              class="btn-secondary"
+              :disabled="!selectedItem.canMarkRecoverable || actionLoading"
+              @click="markRecoverable()"
+            >
+              Marcar recuperável
+            </button>
+            <button
+              class="btn-primary"
+              :disabled="!selectedItem.canComplete || actionLoading"
+              @click="completeReconditioning()"
+            >
+              Concluir
+            </button>
+            <button
+              class="btn-danger"
+              :disabled="!selectedItem.canReject || actionLoading"
+              @click="rejectReconditioning()"
+            >
+              Rejeitar
+            </button>
           </div>
         </template>
       </aside>

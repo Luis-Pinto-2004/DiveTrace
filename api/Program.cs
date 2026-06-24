@@ -1,21 +1,31 @@
 using System.Text.Json.Serialization;
 using DriveTraceCore.Api.Data;
+using DriveTraceCore.Api.Middleware;
 using DriveTraceCore.Api.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Origens CORS configuráveis (Cors:AllowedOrigins) com defaults locais.
+var allowedOrigins = builder.Configuration
+    .GetSection("Cors:AllowedOrigins")
+    .Get<string[]>()
+    ?? new[] { "http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:8088" };
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("DriveTraceFrontend", policy =>
     {
         policy
-            .WithOrigins("http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:8088")
+            .WithOrigins(allowedOrigins)
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
 });
+
+// Respostas de erro normalizadas (RFC 7807 / ProblemDetails).
+builder.Services.AddProblemDetails();
 
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
@@ -52,6 +62,11 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
+// Tratamento centralizado de exceções -> ProblemDetails.
+app.UseExceptionHandler();
+app.UseStatusCodePages();
+app.UseSecurityHeaders();
+
 using (var scope = app.Services.CreateScope())
 {
     var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
@@ -80,6 +95,13 @@ app.UseSwaggerUI(options =>
 app.UseCors("DriveTraceFrontend");
 app.UseRouting();
 app.MapControllers();
+
+// Endpoint de saúde para healthchecks do docker-compose e CI.
+app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "drivetrace-core-api" }));
+
 app.MapGet("/", () => Results.Redirect("/swagger"));
 
 app.Run();
+
+// Necessário para os testes de integração (WebApplicationFactory<Program>).
+public partial class Program { }

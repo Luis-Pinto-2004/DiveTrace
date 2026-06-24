@@ -472,58 +472,126 @@ function buildLayout(nodes: TraceGraphNodeDto[], edges: TraceGraphEdgeDto[], mod
 
 function buildFactoryLayout(nodes: TraceGraphNodeDto[], edges: TraceGraphEdgeDto[]) {
   const positions = new Map<string, { x: number; y: number }>()
+
+  // Espaçamentos generosos para evitar caixas e ligações sobrepostas.
+  const LINE_GAP = 460 // distância vertical entre linhas
+  const COL_X0 = 220 // x da 1.ª secção
+  const COL_GAP = 280 // distância horizontal entre secções/colunas
+  const UNIT_TOP = 104 // deslocamento da 1.ª unidade abaixo da secção
+  const UNIT_GAP = 80 // distância vertical entre unidades
+  const SUP_GAP = 56 // distância vertical entre suportes
+  const OUTCOME_GAP = 96
+
   const lineNodes = nodes.filter((node) => node.type === 'ProductionLine').sort(sortByDisplay)
   const sectionNodes = nodes.filter((node) => node.type === 'Section').sort(sortByDisplay)
   const sectionPositions = new Map<number, { x: number; y: number }>()
+  const sectionStackBottom = new Map<number, number>()
   const lineRows = new Map<string, number>()
 
   lineNodes.forEach((node, index) => {
-    const y = index * 300
+    const y = index * LINE_GAP
     lineRows.set(node.group ?? node.subtitle ?? node.id, y)
     positions.set(node.id, { x: 0, y })
   })
 
   sectionNodes.forEach((node, index) => {
     const lineKey = node.group ?? ''
-    const baseY = lineRows.get(lineKey) ?? Math.floor(index / 5) * 300
+    const baseY = lineRows.get(lineKey) ?? Math.floor(index / 5) * LINE_GAP
     const column = getNumber(node.metadata, 'layoutColumn') ?? (index % 6) + 1
-    const row = getNumber(node.metadata, 'layoutRow') ?? 0
-    const position = { x: 240 + column * 220, y: baseY + row * 92 }
+    const position = { x: COL_X0 + column * COL_GAP, y: baseY }
     const sectionId = getNumber(node.metadata, 'sectionId')
-    if (sectionId) sectionPositions.set(sectionId, position)
+    if (sectionId) {
+      sectionPositions.set(sectionId, position)
+      sectionStackBottom.set(sectionId, position.y + UNIT_TOP)
+    }
     positions.set(node.id, position)
   })
 
+  // Unidades empilhadas SOB a respetiva secção (mesma coluna).
   const unitsBySection = new Map<number, TraceGraphNodeDto[]>()
-  nodes.filter((node) => node.type === 'ProductUnit').forEach((node) => {
-    const sectionId = getNumber(node.metadata, 'currentSectionId') ?? 0
-    if (!unitsBySection.has(sectionId)) unitsBySection.set(sectionId, [])
-    unitsBySection.get(sectionId)?.push(node)
+  nodes
+    .filter((node) => node.type === 'ProductUnit')
+    .forEach((node) => {
+      const sectionId = getNumber(node.metadata, 'currentSectionId') ?? 0
+      if (!unitsBySection.has(sectionId)) unitsBySection.set(sectionId, [])
+      unitsBySection.get(sectionId)?.push(node)
+    })
+  unitsBySection.forEach((unitNodes, sectionId) => {
+    const anchor = sectionPositions.get(sectionId) ?? { x: COL_X0, y: 0 }
+    let y = anchor.y + UNIT_TOP
+    unitNodes
+      .sort((a, b) => a.label.localeCompare(b.label))
+      .forEach((node) => {
+        positions.set(node.id, { x: anchor.x, y })
+        y += UNIT_GAP
+      })
+    sectionStackBottom.set(sectionId, y)
   })
 
-  unitsBySection.forEach((unitNodes, sectionId) => {
-    const anchor = sectionPositions.get(sectionId) ?? { x: 360, y: 0 }
-    unitNodes.sort((a, b) => a.label.localeCompare(b.label)).forEach((node, index) => {
-      positions.set(node.id, { x: anchor.x + 8, y: anchor.y + 118 + index * 66 })
+  // Suportes empilhados ABAIXO das unidades da mesma secção (mesma coluna).
+  const supportsBySection = new Map<number, TraceGraphNodeDto[]>()
+  nodes
+    .filter((node) => node.type === 'Support')
+    .forEach((node) => {
+      const sectionId = getNumber(node.metadata, 'currentSectionId') ?? 0
+      if (!supportsBySection.has(sectionId)) supportsBySection.set(sectionId, [])
+      supportsBySection.get(sectionId)?.push(node)
+    })
+  supportsBySection.forEach((supNodes, sectionId) => {
+    const anchor = sectionPositions.get(sectionId)
+    let y = (sectionStackBottom.get(sectionId) ?? (anchor?.y ?? 0) + UNIT_TOP) + 14
+    supNodes.forEach((node, index) => {
+      if (anchor) {
+        positions.set(node.id, { x: anchor.x, y })
+        y += SUP_GAP
+      } else {
+        positions.set(node.id, { x: 980, y: index * SUP_GAP })
+      }
     })
   })
 
-  nodes.filter((node) => node.type === 'Support').forEach((node, index) => {
-    const sectionId = getNumber(node.metadata, 'currentSectionId') ?? 0
-    const anchor = sectionPositions.get(sectionId) ?? { x: 980, y: index * 82 }
-    positions.set(node.id, { x: anchor.x + 190, y: anchor.y + 96 + index * 38 })
+  // Coluna dedicada para racks, à direita do fluxo.
+  const maxSectionX = Array.from(sectionPositions.values()).reduce((m, p) => Math.max(m, p.x), COL_X0)
+  const rackX = maxSectionX + COL_GAP
+  nodes
+    .filter((node) => node.type === 'Rack')
+    .forEach((node, index) => {
+      positions.set(node.id, { x: rackX, y: index * OUTCOME_GAP })
+    })
+
+  // Resultados de qualidade / recondicionamento / sucata / eventos: colunas
+  // próprias mais à direita, agrupadas por tipo (separadas do fluxo principal).
+  const outcomeCol: Record<string, number> = {
+    Quality: 0,
+    Nonconformity: 1,
+    Scrap: 1,
+    Rework: 2,
+    ReconditionRecord: 2,
+    Event: 3,
+  }
+  const outcomeNextY = new Map<number, number>()
+  nodes.forEach((node) => {
+    if (positions.has(node.id)) return
+    const col = outcomeCol[node.type]
+    if (col === undefined) return
+    const x = rackX + COL_GAP + col * COL_GAP
+    const y = outcomeNextY.get(col) ?? 0
+    positions.set(node.id, { x, y })
+    outcomeNextY.set(col, y + OUTCOME_GAP)
   })
 
-  const rackNodes = nodes.filter((node) => node.type === 'Rack')
-  rackNodes.forEach((node, index) => {
-    positions.set(node.id, { x: 1660, y: index * 92 })
-  })
-
-  nodes.forEach((node, index) => {
+  // Resto (fallback): junto a um vizinho com afastamento, ou numa coluna final.
+  let fallbackY = 0
+  nodes.forEach((node) => {
     if (positions.has(node.id)) return
     const edge = edges.find((candidate) => candidate.target === node.id || candidate.source === node.id)
     const neighbor = edge ? positions.get(edge.source) ?? positions.get(edge.target) : null
-    positions.set(node.id, neighbor ? { x: neighbor.x + 210, y: neighbor.y + 70 } : { x: 1200, y: index * 90 })
+    if (neighbor) {
+      positions.set(node.id, { x: neighbor.x + COL_GAP, y: neighbor.y + 70 })
+    } else {
+      positions.set(node.id, { x: rackX + COL_GAP * 5, y: fallbackY })
+      fallbackY += OUTCOME_GAP
+    }
   })
 
   return positions
@@ -557,9 +625,9 @@ function buildTraceLayout(nodes: TraceGraphNodeDto[]) {
   })
 
   Array.from(buckets.entries()).sort((a, b) => a[0] - b[0]).forEach(([rank, bucket]) => {
-    const x = rank * 240
+    const x = rank * 280
     bucket.sort(sortByDisplay).forEach((node, index) => {
-      positions.set(node.id, { x, y: index * 110 })
+      positions.set(node.id, { x, y: index * 122 })
     })
   })
 
@@ -692,7 +760,10 @@ function nodeTooltip(node: TraceGraphNodeDto) {
 <template>
   <section class="trace-graph-page">
     <div class="trace-graph-toolbar">
-      <div class="trace-mode-group" aria-label="Modo de visualização">
+      <div
+        class="trace-mode-group"
+        aria-label="Modo de visualização"
+      >
         <button
           v-for="mode in availableModes"
           :key="mode"
@@ -706,31 +777,91 @@ function nodeTooltip(node: TraceGraphNodeDto) {
       </div>
 
       <div class="trace-toolbar-fields">
-        <label v-if="activeMode === 'product-unit'" class="trace-field">
+        <label
+          v-if="activeMode === 'product-unit'"
+          class="trace-field"
+        >
           <span>Unidade</span>
-          <select v-model.number="selectedProductUnitId" class="form-input" :disabled="!canSelectProductUnit">
-            <option v-for="unit in options?.productUnits ?? []" :key="unit.id" :value="unit.id">{{ unit.label }}</option>
+          <select
+            v-model.number="selectedProductUnitId"
+            class="form-input"
+            :disabled="!canSelectProductUnit"
+          >
+            <option
+              v-for="unit in options?.productUnits ?? []"
+              :key="unit.id"
+              :value="unit.id"
+            >{{ unit.label }}</option>
           </select>
         </label>
 
-        <label v-if="activeMode === 'order'" class="trace-field">
+        <label
+          v-if="activeMode === 'order'"
+          class="trace-field"
+        >
           <span>Ordem</span>
-          <select v-model.number="selectedOrderId" class="form-input" :disabled="!canSelectOrder">
-            <option v-for="order in options?.manufacturingOrders ?? []" :key="order.id" :value="order.id">{{ order.label }}</option>
+          <select
+            v-model.number="selectedOrderId"
+            class="form-input"
+            :disabled="!canSelectOrder"
+          >
+            <option
+              v-for="order in options?.manufacturingOrders ?? []"
+              :key="order.id"
+              :value="order.id"
+            >{{ order.label }}</option>
           </select>
         </label>
 
-        <div class="trace-mode-group trace-detail-mode" aria-label="Detalhe do mapa">
-          <button type="button" class="trace-mode-button" :class="{ 'trace-mode-button-active': displayMode === 'simple' }" @click="setDisplayMode('simple')">Simples</button>
-          <button type="button" class="trace-mode-button" :class="{ 'trace-mode-button-active': displayMode === 'technical' }" @click="setDisplayMode('technical')">Técnico</button>
+        <div
+          class="trace-mode-group trace-detail-mode"
+          aria-label="Detalhe do mapa"
+        >
+          <button
+            type="button"
+            class="trace-mode-button"
+            :class="{ 'trace-mode-button-active': displayMode === 'simple' }"
+            @click="setDisplayMode('simple')"
+          >
+            Simples
+          </button>
+          <button
+            type="button"
+            class="trace-mode-button"
+            :class="{ 'trace-mode-button-active': displayMode === 'technical' }"
+            @click="setDisplayMode('technical')"
+          >
+            Técnico
+          </button>
         </div>
-        <button type="button" class="btn-secondary" @click="fitGraph">Ajustar à vista</button>
-        <button type="button" class="btn-secondary" @click="resetViewport">Recentrar</button>
-        <button type="button" class="btn-primary" @click="loadGraph">Atualizar</button>
+        <button
+          type="button"
+          class="btn-secondary"
+          @click="fitGraph"
+        >
+          Ajustar à vista
+        </button>
+        <button
+          type="button"
+          class="btn-secondary"
+          @click="resetViewport"
+        >
+          Recentrar
+        </button>
+        <button
+          type="button"
+          class="btn-primary"
+          @click="loadGraph"
+        >
+          Atualizar
+        </button>
       </div>
     </div>
 
-    <div class="trace-decision-panel" :class="graphDecision.tone">
+    <div
+      class="trace-decision-panel"
+      :class="graphDecision.tone"
+    >
       <div>
         <span>Estado operacional</span>
         <strong>{{ graphDecision.state }}</strong>
@@ -749,20 +880,38 @@ function nodeTooltip(node: TraceGraphNodeDto) {
       </div>
     </div>
 
-    <div v-if="graph" class="trace-summary-grid">
-      <div class="trace-summary-card trace-summary-state" :class="graph.summary.hasOpenIssues ? 'trace-summary-alert' : 'trace-summary-ok'">
+    <div
+      v-if="graph"
+      class="trace-summary-grid"
+    >
+      <div
+        class="trace-summary-card trace-summary-state"
+        :class="graph.summary.hasOpenIssues ? 'trace-summary-alert' : 'trace-summary-ok'"
+      >
         <span>Estado operacional</span>
         <strong>{{ statusLabel(graph.summary.status) }}</strong>
         <p>{{ graph.summary.recommendation }}</p>
       </div>
-      <div v-for="metric in metricEntries" :key="metric.key" class="trace-summary-card">
+      <div
+        v-for="metric in metricEntries"
+        :key="metric.key"
+        class="trace-summary-card"
+      >
         <span>{{ metric.label }}</span>
         <strong>{{ metric.value }}</strong>
       </div>
     </div>
 
-    <div v-if="graph?.warnings.length" class="trace-warning-row">
-      <div v-for="warning in graph.warnings" :key="warning.code" class="trace-warning" :class="`trace-warning-${warning.severity}`">
+    <div
+      v-if="graph?.warnings.length"
+      class="trace-warning-row"
+    >
+      <div
+        v-for="warning in graph.warnings"
+        :key="warning.code"
+        class="trace-warning"
+        :class="`trace-warning-${warning.severity}`"
+      >
         <strong>{{ severityLabel(warning.severity) }}</strong>
         <span>{{ warning.message }}</span>
       </div>
@@ -776,54 +925,116 @@ function nodeTooltip(node: TraceGraphNodeDto) {
             <h3>{{ graph?.title ?? 'Sem grafo carregado' }}</h3>
           </div>
           <div class="trace-filter-grid">
-            <label v-if="activeMode === 'factory'" class="trace-filter">
+            <label
+              v-if="activeMode === 'factory'"
+              class="trace-filter"
+            >
               <span>Linha</span>
-              <select v-model="selectedLine" class="compact-select">
+              <select
+                v-model="selectedLine"
+                class="compact-select"
+              >
                 <option value="all">Todas</option>
-                <option v-for="line in options?.lines ?? []" :key="line.id" :value="line.code">{{ line.label }}</option>
+                <option
+                  v-for="line in options?.lines ?? []"
+                  :key="line.id"
+                  :value="line.code"
+                >{{ line.label }}</option>
               </select>
             </label>
             <label class="trace-filter">
               <span>Estado</span>
-              <select v-model="selectedStatus" class="compact-select">
+              <select
+                v-model="selectedStatus"
+                class="compact-select"
+              >
                 <option value="all">Todos</option>
-                <option v-for="status in options?.statuses ?? []" :key="status" :value="status">{{ statusLabel(status) }}</option>
+                <option
+                  v-for="status in options?.statuses ?? []"
+                  :key="status"
+                  :value="status"
+                >{{ statusLabel(status) }}</option>
               </select>
             </label>
             <label class="trace-filter">
               <span>Qualidade</span>
-              <select v-model="selectedQuality" class="compact-select">
+              <select
+                v-model="selectedQuality"
+                class="compact-select"
+              >
                 <option value="all">Todas</option>
-                <option v-for="status in options?.qualityStatuses ?? []" :key="status" :value="status">{{ statusLabel(status) }}</option>
+                <option
+                  v-for="status in options?.qualityStatuses ?? []"
+                  :key="status"
+                  :value="status"
+                >{{ statusLabel(status) }}</option>
               </select>
             </label>
             <label class="trace-filter">
               <span>Tipo</span>
-              <select v-model="selectedNodeType" class="compact-select">
+              <select
+                v-model="selectedNodeType"
+                class="compact-select"
+              >
                 <option value="all">Todos</option>
-                <option v-for="type in options?.nodeTypes ?? []" :key="type" :value="type">{{ nodeTypeLabel(type) }}</option>
+                <option
+                  v-for="type in options?.nodeTypes ?? []"
+                  :key="type"
+                  :value="type"
+                >{{ nodeTypeLabel(type) }}</option>
               </select>
             </label>
           </div>
         </div>
 
         <div class="trace-toggle-row">
-          <label class="trace-toggle"><input v-model="compactMode" type="checkbox" /> Vista compacta</label>
-          <label v-if="displayMode === 'technical'" class="trace-toggle"><input v-model="showMaterials" type="checkbox" /> Materiais</label>
-          <label v-if="displayMode === 'technical'" class="trace-toggle"><input v-model="showEvents" type="checkbox" /> Eventos</label>
-          <button v-if="focusedSectionId" type="button" class="btn-ghost btn-compact" @click="clearFocusedSection">Limpar foco da secção</button>
+          <label class="trace-toggle"><input
+            v-model="compactMode"
+            type="checkbox"
+          > Vista compacta</label>
+          <label
+            v-if="displayMode === 'technical'"
+            class="trace-toggle"
+          ><input
+            v-model="showMaterials"
+            type="checkbox"
+          > Materiais</label>
+          <label
+            v-if="displayMode === 'technical'"
+            class="trace-toggle"
+          ><input
+            v-model="showEvents"
+            type="checkbox"
+          > Eventos</label>
+          <button
+            v-if="focusedSectionId"
+            type="button"
+            class="btn-ghost btn-compact"
+            @click="clearFocusedSection"
+          >
+            Limpar foco da secção
+          </button>
         </div>
 
         <div class="trace-flow-frame">
-          <div v-if="loading" class="trace-state">
+          <div
+            v-if="loading"
+            class="trace-state"
+          >
             <strong>A carregar grafo...</strong>
             <span>A recolher relações operacionais, materiais e qualidade.</span>
           </div>
-          <div v-else-if="errorMessage" class="trace-state trace-state-error">
+          <div
+            v-else-if="errorMessage"
+            class="trace-state trace-state-error"
+          >
             <strong>Não foi possível carregar o grafo</strong>
             <span>{{ errorMessage }}</span>
           </div>
-          <div v-else-if="!graph || !flowNodes.length" class="trace-state">
+          <div
+            v-else-if="!graph || !flowNodes.length"
+            class="trace-state"
+          >
             <strong>Sem dados para apresentar</strong>
             <span>Ajuste os filtros ou selecione outra unidade/ordem.</span>
           </div>
@@ -853,37 +1064,70 @@ function nodeTooltip(node: TraceGraphNodeDto) {
               >
                 <span class="trace-node-kind">{{ nodeTypeLabel(data.graphNode.type) }}</span>
                 <strong>{{ data.graphNode.label }}</strong>
-                <span v-if="!data.compact && data.graphNode.subtitle" class="trace-node-subtitle">{{ data.graphNode.subtitle }}</span>
+                <span
+                  v-if="!data.compact && data.graphNode.subtitle"
+                  class="trace-node-subtitle"
+                >{{ data.graphNode.subtitle }}</span>
                 <span class="trace-node-status">{{ statusLabel(data.graphNode.status) }}</span>
               </button>
             </template>
           </VueFlow>
         </div>
 
-        <div v-if="graph?.legend.length" class="trace-legend">
-          <div v-for="item in graph.legend" :key="item.type" class="trace-legend-item">
-            <span class="trace-legend-dot" :style="{ backgroundColor: item.color }"></span>
+        <div
+          v-if="graph?.legend.length"
+          class="trace-legend"
+        >
+          <div
+            v-for="item in graph.legend"
+            :key="item.type"
+            class="trace-legend-item"
+            :title="item.description"
+          >
+            <span
+              class="trace-legend-dot"
+              :style="{ backgroundColor: item.color }"
+            />
             <strong>{{ item.label }}</strong>
-            <small>{{ item.description }}</small>
           </div>
         </div>
       </div>
 
       <aside class="trace-detail-panel">
         <div v-if="selectedNode">
-          <p class="trace-panel-eyebrow">{{ nodeTypeLabel(selectedNode.type) }}</p>
+          <p class="trace-panel-eyebrow">
+            {{ nodeTypeLabel(selectedNode.type) }}
+          </p>
           <h3>{{ selectedNode.label }}</h3>
-          <p v-if="selectedNode.subtitle" class="trace-panel-subtitle">{{ selectedNode.subtitle }}</p>
+          <p
+            v-if="selectedNode.subtitle"
+            class="trace-panel-subtitle"
+          >
+            {{ selectedNode.subtitle }}
+          </p>
           <div class="trace-detail-badges">
             <span>{{ statusLabel(selectedNode.status) }}</span>
             <span>{{ severityLabel(selectedNode.severity) }}</span>
           </div>
-          <button v-if="selectedNode.type === 'ProductUnit'" type="button" class="btn-primary w-full" @click="openSelectedProductUnit">Abrir rota da unidade</button>
+          <button
+            v-if="selectedNode.type === 'ProductUnit'"
+            type="button"
+            class="btn-primary w-full"
+            @click="openSelectedProductUnit"
+          >
+            Abrir rota da unidade
+          </button>
 
-          <div v-if="selectedMetadataEntries.length" class="trace-detail-section">
+          <div
+            v-if="selectedMetadataEntries.length"
+            class="trace-detail-section"
+          >
             <h4>Dados operacionais</h4>
             <dl>
-              <div v-for="entry in selectedMetadataEntries" :key="entry.key">
+              <div
+                v-for="entry in selectedMetadataEntries"
+                :key="entry.key"
+              >
                 <dt>{{ entry.label }}</dt>
                 <dd>{{ entry.value }}</dd>
               </div>
@@ -892,17 +1136,31 @@ function nodeTooltip(node: TraceGraphNodeDto) {
 
           <div class="trace-detail-section">
             <h4>Relações</h4>
-            <ul v-if="selectedNodeEdges.length" class="trace-edge-list">
-              <li v-for="edge in selectedNodeEdges" :key="edge.id">
+            <ul
+              v-if="selectedNodeEdges.length"
+              class="trace-edge-list"
+            >
+              <li
+                v-for="edge in selectedNodeEdges"
+                :key="edge.id"
+              >
                 <strong>{{ edge.label }}</strong>
                 <span>{{ edge.source }} → {{ edge.target }}</span>
               </li>
             </ul>
-            <p v-else class="trace-muted">Sem relações visíveis com os filtros atuais.</p>
+            <p
+              v-else
+              class="trace-muted"
+            >
+              Sem relações visíveis com os filtros atuais.
+            </p>
           </div>
         </div>
 
-        <div v-else class="trace-detail-empty">
+        <div
+          v-else
+          class="trace-detail-empty"
+        >
           <strong>Selecione um nó</strong>
           <span>Use o mapa para ver detalhes de linhas, secções, unidades, suportes, racks, materiais, qualidade e eventos.</span>
         </div>
@@ -1045,6 +1303,24 @@ function nodeTooltip(node: TraceGraphNodeDto) {
   border-color: rgb(30 41 59);
 }
 
+/* Modo escuro: o painel e os gradientes de estado desvaneciam para branco
+   (corretos no claro). Aqui passam a desvanecer para o fundo escuro. */
+.dark .trace-decision-panel {
+  background: rgb(15 23 42 / 0.96);
+}
+
+.dark .trace-decision-ok {
+  background: linear-gradient(90deg, rgb(16 185 129 / 0.22), rgb(15 23 42 / 0.96));
+}
+
+.dark .trace-decision-danger {
+  background: linear-gradient(90deg, rgb(239 68 68 / 0.22), rgb(15 23 42 / 0.96));
+}
+
+.dark .trace-decision-panel span {
+  color: rgb(148 163 184);
+}
+
 .trace-toolbar-fields,
 .trace-filter-grid,
 .trace-toggle-row,
@@ -1153,7 +1429,7 @@ function nodeTooltip(node: TraceGraphNodeDto) {
 
 .trace-workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(18rem, 23rem);
+  grid-template-columns: minmax(0, 1fr) minmax(15rem, 18rem);
   gap: 1rem;
   align-items: start;
 }
@@ -1229,7 +1505,7 @@ function nodeTooltip(node: TraceGraphNodeDto) {
   background:
     linear-gradient(90deg, rgb(148 163 184 / 0.12) 1px, transparent 1px),
     linear-gradient(180deg, rgb(148 163 184 / 0.12) 1px, transparent 1px),
-    #020617;
+    var(--dt-app-bg);
   background-size: 28px 28px;
 }
 
@@ -1337,10 +1613,10 @@ function nodeTooltip(node: TraceGraphNodeDto) {
 
 .trace-legend {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
-  gap: 0.45rem;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: 0.3rem 0.6rem;
   border-top: 1px solid rgb(226 232 240);
-  padding: 0.75rem 0.85rem;
+  padding: 0.5rem 0.7rem;
 }
 
 .dark .trace-legend {
@@ -1349,40 +1625,42 @@ function nodeTooltip(node: TraceGraphNodeDto) {
 
 .trace-legend-item {
   display: grid;
-  grid-template-columns: auto minmax(0, auto) minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 0.35rem;
   align-items: center;
   min-width: 0;
-  font-size: 0.73rem;
+  font-size: 0.7rem;
 }
 
 .trace-legend-dot {
-  width: 0.65rem;
-  height: 0.65rem;
+  width: 0.6rem;
+  height: 0.6rem;
   border-radius: 999px;
+  flex-shrink: 0;
 }
 
 .trace-legend-item strong,
 .trace-detail-section h4,
 .trace-detail-empty strong {
-  font-weight: 950;
+  font-weight: 800;
   color: rgb(15 23 42);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .trace-legend-item small {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  color: rgb(100 116 139);
+  display: none;
 }
 
 .trace-detail-panel {
   position: sticky;
   top: 5rem;
   display: grid;
-  gap: 0.9rem;
+  gap: 0.7rem;
   max-height: calc(100vh - 6rem);
   overflow: auto;
-  padding: 1rem;
+  padding: 0.8rem;
 }
 
 .trace-panel-subtitle,

@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 import logoUrl from './assets/branding/drivolution-logo.png'
 import lineDoorUrl from './assets/branding/production-line-door.png'
 import lineCarUrl from './assets/branding/production-line-car.png'
 import CrudPanel from './components/CrudPanel.vue'
-import GrafanaAnalyticsView from './components/GrafanaAnalyticsView.vue'
-import ProductionSimulatorView from './components/ProductionSimulatorView.vue'
-import ReconditioningView from './components/ReconditioningView.vue'
-import TraceGraphView from './components/TraceGraphView.vue'
+// Vistas pesadas carregadas sob procura (code-splitting por rota).
+// Reduz drasticamente o chunk inicial: o motor de grafo (@vue-flow),
+// os dashboards e o simulador deixam de pesar no arranque.
+const GrafanaAnalyticsView = defineAsyncComponent(() => import('./components/GrafanaAnalyticsView.vue'))
+const ProductionSimulatorView = defineAsyncComponent(() => import('./components/ProductionSimulatorView.vue'))
+const ReconditioningView = defineAsyncComponent(() => import('./components/ReconditioningView.vue'))
+const TraceGraphView = defineAsyncComponent(() => import('./components/TraceGraphView.vue'))
 import { api, apiGet, apiPost, baseURL as apiBaseUrl, createEntity, deleteEntity, getApiErrorMessage, updateEntity } from './services/api'
 import {
   demoCheckpoints,
@@ -946,7 +949,6 @@ type CustomerOrderLookup = {
   milestones?: Array<{ eventType: string; occurredAt: string; stage?: string }>
 }
 type CustomerMilestone = NonNullable<CustomerOrderLookup['milestones']>[number]
-type ClientStepVisualState = 'completed' | 'current' | 'upcoming'
 
 function emptyFiwareContext(): FiwareContextSnapshot {
   return {
@@ -1903,43 +1905,21 @@ function customerProgressPercent(order?: CustomerOrderLookup | null) {
   }[customerOrderBucket(order)]
 }
 
-const clientOrderStages = [
-  { key: 'received', label: 'Pedido recebido' },
-  { key: 'planning', label: 'Planeamento' },
-  { key: 'production', label: 'Produção' },
-  { key: 'quality', label: 'Controlo de qualidade' },
-  { key: 'ready', label: 'Pronta' },
-  { key: 'completed', label: 'Concluída' },
-] as const
-
-type ClientOrderStageKey = typeof clientOrderStages[number]['key']
-
-function customerStageIndex(order?: CustomerOrderLookup | null) {
-  if (!order) return 0
-  return {
-    received: 0,
-    planning: 1,
-    production: 2,
-    validation: 3,
-    ready: 4,
-    completed: 5,
-  }[customerOrderBucket(order)]
-}
-
-function clientOrderStageState(order: CustomerOrderLookup | null | undefined, stageKey: ClientOrderStageKey): ClientStepVisualState {
-  const stageIndex = clientOrderStages.findIndex((stage) => stage.key === stageKey)
-  const currentIndex = customerStageIndex(order)
-  if (order && customerOrderBucket(order) === 'completed') return 'completed'
-  if (stageIndex < currentIndex) return 'completed'
-  if (stageIndex === currentIndex) return 'current'
-  return 'upcoming'
-}
-
 function customerProgressSteps(order?: CustomerOrderLookup | null) {
-  return clientOrderStages.map((step) => ({
+  const steps = [
+    { key: 'received', label: t('Pedido recebido') },
+    { key: 'planning', label: t('Planeamento') },
+    { key: 'production', label: t('Produção') },
+    { key: 'validation', label: t('Controlo de qualidade') },
+    { key: 'ready', label: t('Pronta') },
+    { key: 'completed', label: t('Concluída') },
+  ]
+  if (!order) return steps.map((step) => ({ ...step, state: 'pending' }))
+  const bucket = customerOrderBucket(order)
+  const currentIndex = steps.findIndex((step) => step.key === bucket)
+  return steps.map((step, index) => ({
     ...step,
-    label: t(step.label),
-    state: clientOrderStageState(order, step.key),
+    state: bucket === 'completed' || index < currentIndex ? 'done' : index === currentIndex ? 'current' : 'pending',
   }))
 }
 
@@ -3015,36 +2995,107 @@ onBeforeUnmount(() => {
        change. -->
   <div class="min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-900 dark:text-slate-100">
     <!-- LOGIN / REGISTO -->
-    <div v-if="!isAuthenticated" class="flex items-center justify-center min-h-screen p-4">
+    <div
+      v-if="!isAuthenticated"
+      class="flex items-center justify-center min-h-screen p-4"
+    >
       <div class="w-full max-w-md card p-8">
         <div class="mb-6 text-center">
-          <img :src="logoUrl" alt="DRIVOLUTION logo" class="mx-auto h-20 w-auto object-contain" />
-          <h1 class="mt-4 text-2xl font-black tracking-normal">{{ isRegistering ? t('Register new user') : t('Login') }}</h1>
-          <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">DriveTrace Core · DRIVOLUTION WP3</p>
+          <img
+            :src="logoUrl"
+            alt="DRIVOLUTION logo"
+            class="mx-auto h-20 w-auto object-contain"
+          >
+          <h1 class="mt-4 text-2xl font-black tracking-normal">
+            {{ isRegistering ? t('Register new user') : t('Login') }}
+          </h1>
+          <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">
+            DriveTrace Core · DRIVOLUTION WP3
+          </p>
         </div>
-        <form v-if="!isRegistering" @submit.prevent="login" class="space-y-4">
-          <label class="form-label">{{ t('Username') }}<input v-model="loginForm.username" class="form-input" /></label>
-          <label class="form-label">{{ t('Password') }}<input type="password" v-model="loginForm.password" class="form-input" /></label>
-          <p v-if="loginError" class="text-red-600 text-sm">{{ loginError }}</p>
-          <button type="submit" class="btn-primary w-full">{{ t('Submit') }}</button>
-          <button type="button" class="btn-secondary w-full" @click="isRegistering = true; loginError = ''">{{ t('Create account') }}</button>
+        <form
+          v-if="!isRegistering"
+          class="space-y-4"
+          @submit.prevent="login"
+        >
+          <label class="form-label">{{ t('Username') }}<input
+            v-model="loginForm.username"
+            class="form-input"
+          ></label>
+          <label class="form-label">{{ t('Password') }}<input
+            v-model="loginForm.password"
+            type="password"
+            class="form-input"
+          ></label>
+          <p
+            v-if="loginError"
+            class="text-red-600 text-sm"
+          >
+            {{ loginError }}
+          </p>
+          <button
+            type="submit"
+            class="btn-primary w-full"
+          >
+            {{ t('Submit') }}
+          </button>
+          <button
+            type="button"
+            class="btn-secondary w-full"
+            @click="isRegistering = true; loginError = ''"
+          >
+            {{ t('Create account') }}
+          </button>
           <div class="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900/50">
-            <p class="text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">Contas demo</p>
+            <p class="text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">
+              Contas demo
+            </p>
             <div class="mt-2 grid grid-cols-2 gap-2">
-              <button v-for="profile in demoLoginProfiles" :key="profile.username" type="button" class="btn-secondary btn-compact justify-center" @click="loginAsDemo(profile)">
+              <button
+                v-for="profile in demoLoginProfiles"
+                :key="profile.username"
+                type="button"
+                class="btn-secondary btn-compact justify-center"
+                @click="loginAsDemo(profile)"
+              >
                 {{ profile.username }}
               </button>
             </div>
           </div>
         </form>
-        <form v-else @submit.prevent="registerUser(false)" class="space-y-4">
-          <label class="form-label">{{ t('Name / full name') }}<input v-model="registerForm.name" class="form-input" /></label>
-          <label class="form-label">{{ t('Username') }}<input v-model="registerForm.username" class="form-input" /></label>
-          <label class="form-label">{{ t('Email') }}<input v-model="registerForm.email" type="email" class="form-input" /></label>
-          <label class="form-label">{{ t('Password') }}<input v-model="registerForm.password" type="password" class="form-input" /></label>
-          <label class="form-label">{{ t('Confirm password') }}<input v-model="registerForm.confirmPassword" type="password" class="form-input" /></label>
+        <form
+          v-else
+          class="space-y-4"
+          @submit.prevent="registerUser(false)"
+        >
+          <label class="form-label">{{ t('Name / full name') }}<input
+            v-model="registerForm.name"
+            class="form-input"
+          ></label>
+          <label class="form-label">{{ t('Username') }}<input
+            v-model="registerForm.username"
+            class="form-input"
+          ></label>
+          <label class="form-label">{{ t('Email') }}<input
+            v-model="registerForm.email"
+            type="email"
+            class="form-input"
+          ></label>
+          <label class="form-label">{{ t('Password') }}<input
+            v-model="registerForm.password"
+            type="password"
+            class="form-input"
+          ></label>
+          <label class="form-label">{{ t('Confirm password') }}<input
+            v-model="registerForm.confirmPassword"
+            type="password"
+            class="form-input"
+          ></label>
           <label class="form-label">{{ t('Role') }}
-            <select v-model="registerForm.roleKey" class="form-input">
+            <select
+              v-model="registerForm.roleKey"
+              class="form-input"
+            >
               <option value="admin">{{ t('Administrator') }}</option>
               <option value="supervisor">{{ t('Supervisor') }}</option>
               <option value="operator">{{ t('Operator') }}</option>
@@ -3053,27 +3104,73 @@ onBeforeUnmount(() => {
               <option value="client">{{ t('Client') }}</option>
             </select>
           </label>
-          <p v-if="registerError" class="text-red-600 text-sm">{{ registerError }}</p>
-          <p v-if="registerSuccess" class="text-green-600 text-sm">{{ registerSuccess }}</p>
-          <button type="submit" class="btn-primary w-full">{{ t('Create user') }}</button>
-          <button type="button" class="btn-secondary w-full" @click="isRegistering = false; registerError = ''; registerSuccess = ''">{{ t('Already have an account?') }}</button>
+          <p
+            v-if="registerError"
+            class="text-red-600 text-sm"
+          >
+            {{ registerError }}
+          </p>
+          <p
+            v-if="registerSuccess"
+            class="text-green-600 text-sm"
+          >
+            {{ registerSuccess }}
+          </p>
+          <button
+            type="submit"
+            class="btn-primary w-full"
+          >
+            {{ t('Create user') }}
+          </button>
+          <button
+            type="button"
+            class="btn-secondary w-full"
+            @click="isRegistering = false; registerError = ''; registerSuccess = ''"
+          >
+            {{ t('Already have an account?') }}
+          </button>
         </form>
       </div>
     </div>
 
     <!-- MAIN APPLICATION -->
-    <div v-else class="app-shell" :style="appShellStyle">
+    <div
+      v-else
+      class="app-shell"
+      :style="appShellStyle"
+    >
       <!-- SIDEBAR -->
-      <aside class="app-sidebar" :class="{ 'app-sidebar-open': mobileSidebarOpen }">
+      <aside
+        class="app-sidebar"
+        :class="{ 'app-sidebar-open': mobileSidebarOpen }"
+      >
         <div class="app-sidebar-brand">
-          <button class="app-sidebar-close lg:hidden" type="button" @click="closeMobileSidebar" :aria-label="t('Close navigation')">×</button>
-          <img :src="logoUrl" alt="DRIVOLUTION logo" class="h-9 w-auto max-w-full object-contain" />
+          <button
+            class="app-sidebar-close lg:hidden"
+            type="button"
+            :aria-label="t('Close navigation')"
+            @click="closeMobileSidebar"
+          >
+            ×
+          </button>
+          <img
+            :src="logoUrl"
+            alt="DRIVOLUTION logo"
+            class="h-9 w-auto max-w-full object-contain"
+          >
           <h1>DriveTrace Core</h1>
         </div>
         <div class="app-sidebar-nav">
           <nav>
-            <div v-for="group in navGroups" :key="group.key" v-show="navByGroup(group.key).length" class="nav-group">
-              <p class="nav-group-title">{{ t(group.key) }}</p>
+            <div
+              v-for="group in navGroups"
+              v-show="navByGroup(group.key).length"
+              :key="group.key"
+              class="nav-group"
+            >
+              <p class="nav-group-title">
+                {{ t(group.key) }}
+              </p>
               <button
                 v-for="item in navByGroup(group.key)"
                 :key="item.key"
@@ -3089,11 +3186,28 @@ onBeforeUnmount(() => {
         </div>
         <!-- Quick settings / user info section replacing the academic scope block -->
         <div class="app-sidebar-profile">
-          <p class="font-black text-slate-950 dark:text-slate-50">{{ sidebarProfileName }}</p>
+          <p class="font-black text-slate-950 dark:text-slate-50">
+            {{ sidebarProfileName }}
+          </p>
           <div class="app-sidebar-profile-actions">
-            <button class="btn-secondary btn-compact" @click="openProfileView">{{ t('Profile') }}</button>
-            <button class="btn-secondary btn-compact" @click="navigateTo('settings')">{{ t('Settings') }}</button>
-            <button class="btn-secondary btn-compact" @click="logout">{{ t('Sign out') }}</button>
+            <button
+              class="btn-secondary btn-compact"
+              @click="openProfileView"
+            >
+              {{ t('Profile') }}
+            </button>
+            <button
+              class="btn-secondary btn-compact"
+              @click="navigateTo('settings')"
+            >
+              {{ t('Settings') }}
+            </button>
+            <button
+              class="btn-secondary btn-compact"
+              @click="logout"
+            >
+              {{ t('Sign out') }}
+            </button>
           </div>
         </div>
         <button
@@ -3103,9 +3217,15 @@ onBeforeUnmount(() => {
           :title="t('Resize sidebar')"
           @pointerdown="startSidebarResize"
           @dblclick="resetSidebarWidth"
-        ></button>
+        />
       </aside>
-      <button v-if="mobileSidebarOpen" type="button" class="app-sidebar-overlay lg:hidden" @click="closeMobileSidebar" :aria-label="t('Close navigation')"></button>
+      <button
+        v-if="mobileSidebarOpen"
+        type="button"
+        class="app-sidebar-overlay lg:hidden"
+        :aria-label="t('Close navigation')"
+        @click="closeMobileSidebar"
+      />
 
       <main class="app-main">
         <!-- TOP BAR -->
@@ -3113,42 +3233,112 @@ onBeforeUnmount(() => {
           <div class="content-shell px-3 py-2.5 sm:px-4 lg:px-5 xl:px-6">
             <div class="flex flex-col justify-between gap-2 lg:flex-row lg:items-center">
               <div class="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
-                <button class="icon-button lg:hidden" type="button" @click="toggleMobileSidebar" :aria-label="mobileSidebarOpen ? t('Close navigation') : t('Open navigation')">☰</button>
-                <img :src="logoUrl" alt="DRIVOLUTION logo" class="h-8 w-8 shrink-0 rounded-lg object-contain lg:hidden" />
+                <button
+                  class="icon-button lg:hidden"
+                  type="button"
+                  :aria-label="mobileSidebarOpen ? t('Close navigation') : t('Open navigation')"
+                  @click="toggleMobileSidebar"
+                >
+                  ☰
+                </button>
+                <img
+                  :src="logoUrl"
+                  alt="DRIVOLUTION logo"
+                  class="h-8 w-8 shrink-0 rounded-lg object-contain lg:hidden"
+                >
                 <div class="min-w-0">
-                  <h2 class="truncate text-lg font-black leading-tight tracking-normal sm:text-xl">{{ t(activeViewTitle) }}</h2>
-                  <p class="truncate text-xs font-semibold text-slate-600 dark:text-slate-300 sm:text-sm">{{ t(activeViewSubtitle) }}</p>
+                  <h2 class="truncate text-lg font-black leading-tight tracking-normal sm:text-xl">
+                    {{ t(activeViewTitle) }}
+                  </h2>
+                  <p class="truncate text-xs font-semibold text-slate-600 dark:text-slate-300 sm:text-sm">
+                    {{ t(activeViewSubtitle) }}
+                  </p>
                 </div>
               </div>
               <div class="topbar-controls">
-                <button class="icon-button" type="button" :title="t('Refresh')" :aria-label="t('Refresh data')" @click="() => loadData()">⟳</button>
+                <button
+                  class="icon-button"
+                  type="button"
+                  :title="t('Refresh')"
+                  :aria-label="t('Refresh data')"
+                  @click="() => loadData()"
+                >
+                  ⟳
+                </button>
                 <span class="text-xs font-bold text-slate-500 dark:text-slate-400">{{ t('Updated') }}: {{ latestDataUpdateShort }}</span>
-                <select v-model="locale" class="compact-select" :aria-label="t('Language')">
-                  <option value="pt-PT">Português</option>
-                  <option value="en">English</option>
+                <select
+                  v-model="locale"
+                  class="compact-select"
+                  :aria-label="t('Language')"
+                >
+                  <option value="pt-PT">
+                    Português
+                  </option>
+                  <option value="en">
+                    English
+                  </option>
                 </select>
-                <button class="icon-button" type="button" :title="theme === 'dark' ? t('Light mode') : t('Dark mode')" :aria-label="theme === 'dark' ? t('Light mode') : t('Dark mode')" @click="toggleTheme">
+                <button
+                  class="icon-button"
+                  type="button"
+                  :title="theme === 'dark' ? t('Light mode') : t('Dark mode')"
+                  :aria-label="theme === 'dark' ? t('Light mode') : t('Dark mode')"
+                  @click="toggleTheme"
+                >
                   {{ theme === 'dark' ? '☀' : '☾' }}
                 </button>
-                <span class="api-health" :class="apiHealthClass" :title="apiHealthTitle">
-                  <span class="api-health-dot"></span>
+                <span
+                  class="api-health"
+                  :class="apiHealthClass"
+                  :title="apiHealthTitle"
+                >
+                  <span class="api-health-dot" />
                   <span>API</span>
                 </span>
                 <div class="relative">
-                  <button @click="showUserMenu = !showUserMenu" class="avatar-button" :title="user?.name">
+                  <button
+                    class="avatar-button"
+                    :title="user?.name"
+                    @click="showUserMenu = !showUserMenu"
+                  >
                     <span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-drivolution-500 text-xs font-black text-white">{{ user?.name.charAt(0) }}</span>
                   </button>
-                  <div v-if="showUserMenu" class="absolute right-0 z-30 mt-2 w-44 rounded-lg border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
-                    <button class="w-full rounded-lg px-4 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800" @click="openProfileView">{{ t('Profile') }}</button>
-                    <button class="w-full rounded-lg px-4 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800" @click="navigateTo('settings')">{{ t('Settings') }}</button>
-                    <button class="w-full rounded-lg px-4 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800" @click="logout(); showUserMenu = false">{{ t('Sign out') }}</button>
+                  <div
+                    v-if="showUserMenu"
+                    class="absolute right-0 z-30 mt-2 w-44 rounded-lg border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+                  >
+                    <button
+                      class="w-full rounded-lg px-4 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800"
+                      @click="openProfileView"
+                    >
+                      {{ t('Profile') }}
+                    </button>
+                    <button
+                      class="w-full rounded-lg px-4 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800"
+                      @click="navigateTo('settings')"
+                    >
+                      {{ t('Settings') }}
+                    </button>
+                    <button
+                      class="w-full rounded-lg px-4 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800"
+                      @click="logout(); showUserMenu = false"
+                    >
+                      {{ t('Sign out') }}
+                    </button>
                   </div>
                 </div>
               </div>
             </div>
             <!-- Mobile tab navigation -->
             <div class="mt-2 flex gap-2 overflow-x-auto pb-1 lg:hidden">
-              <button v-for="item in nav" v-show="canShowNav(item.key)" :key="item.key" class="mobile-tab" :class="activeView === item.key ? 'mobile-tab-active' : ''" @click="navigateTo(item.key)">
+              <button
+                v-for="item in nav"
+                v-show="canShowNav(item.key)"
+                :key="item.key"
+                class="mobile-tab"
+                :class="activeView === item.key ? 'mobile-tab-active' : ''"
+                @click="navigateTo(item.key)"
+              >
                 {{ t(item.label) }}
               </button>
             </div>
@@ -3157,13 +3347,24 @@ onBeforeUnmount(() => {
         <!-- MAIN CONTENT -->
         <section class="app-content">
           <div class="content-shell">
-            <p v-if="permissionNotice" class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-100">
+            <p
+              v-if="permissionNotice"
+              class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-100"
+            >
               {{ permissionNotice }}
             </p>
-            <div v-if="loading" class="card p-6 text-center text-slate-600 dark:bg-slate-800 dark:text-slate-200 sm:p-8">{{ t('Loading DriveTrace Core data...') }}</div>
+            <div
+              v-if="loading"
+              class="card p-6 text-center text-slate-600 dark:bg-slate-800 dark:text-slate-200 sm:p-8"
+            >
+              {{ t('Loading DriveTrace Core data...') }}
+            </div>
             <template v-else>
               <div v-if="activeView === 'traceGraph'">
-                <TraceGraphView :initial-product-unit-id="traceGraphInitialUnitId" :initial-order-id="traceGraphInitialOrderId" />
+                <TraceGraphView
+                  :initial-product-unit-id="traceGraphInitialUnitId"
+                  :initial-order-id="traceGraphInitialOrderId"
+                />
               </div>
 
               <div v-if="activeView === 'reconditioning'">
@@ -3181,1292 +3382,2501 @@ onBeforeUnmount(() => {
               </div>
 
               <!-- PROFILE VIEW -->
-              <div v-if="activeView === 'profile'" class="mx-auto w-full max-w-4xl">
+              <div
+                v-if="activeView === 'profile'"
+                class="mx-auto w-full max-w-4xl"
+              >
                 <section class="card p-5 sm:p-6 lg:p-8">
                   <div class="flex flex-col gap-4 border-b border-slate-200 pb-5 dark:border-slate-700 sm:flex-row sm:items-center sm:justify-between">
                     <div class="flex items-center gap-4">
                       <span class="inline-flex h-14 w-14 items-center justify-center rounded-full bg-drivolution-500 text-xl font-black text-white">{{ user?.name?.charAt(0)?.toUpperCase() || 'U' }}</span>
                       <div>
-                        <p class="text-xs font-bold uppercase tracking-normal text-drivolution-700 dark:text-drivolution-300">{{ t('Profile') }}</p>
-                        <h3 class="mt-1 text-2xl font-black text-slate-950 dark:text-white">{{ user?.name }}</h3>
-                        <p class="mt-1 text-sm font-semibold text-slate-600 dark:text-slate-300">{{ user ? getRoleLabel(user.roleKey) : '' }}</p>
+                        <p class="text-xs font-bold uppercase tracking-normal text-drivolution-700 dark:text-drivolution-300">
+                          {{ t('Profile') }}
+                        </p>
+                        <h3 class="mt-1 text-2xl font-black text-slate-950 dark:text-white">
+                          {{ user?.name }}
+                        </h3>
+                        <p class="mt-1 text-sm font-semibold text-slate-600 dark:text-slate-300">
+                          {{ user ? getRoleLabel(user.roleKey) : '' }}
+                        </p>
                       </div>
                     </div>
-                    <button v-if="!isEditingProfile" class="btn-primary w-full sm:w-auto" @click="startProfileEdit">{{ t('Edit profile') }}</button>
+                    <button
+                      v-if="!isEditingProfile"
+                      class="btn-primary w-full sm:w-auto"
+                      @click="startProfileEdit"
+                    >
+                      {{ t('Edit profile') }}
+                    </button>
                   </div>
 
                   <div class="mt-5">
-                    <h4 class="text-xs font-bold uppercase tracking-normal text-slate-500 dark:text-slate-400">{{ t('Account information') }}</h4>
+                    <h4 class="text-xs font-bold uppercase tracking-normal text-slate-500 dark:text-slate-400">
+                      {{ t('Account information') }}
+                    </h4>
                     <div class="mt-3 divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200 dark:divide-slate-700 dark:border-slate-700">
                       <div class="grid gap-3 px-4 py-4 sm:grid-cols-[10rem_minmax(0,1fr)_auto] sm:items-center">
-                        <p class="text-sm font-bold text-slate-600 dark:text-slate-300">{{ t('Name') }}</p>
+                        <p class="text-sm font-bold text-slate-600 dark:text-slate-300">
+                          {{ t('Name') }}
+                        </p>
                         <div>
-                          <input v-if="isEditingProfile" v-model="profileForm.name" class="form-input py-2 sm:py-2.5" />
-                          <p v-else class="text-sm font-semibold text-slate-900 dark:text-slate-100">{{ user?.name }}</p>
+                          <input
+                            v-if="isEditingProfile"
+                            v-model="profileForm.name"
+                            class="form-input py-2 sm:py-2.5"
+                          >
+                          <p
+                            v-else
+                            class="text-sm font-semibold text-slate-900 dark:text-slate-100"
+                          >
+                            {{ user?.name }}
+                          </p>
                         </div>
-                        <button v-if="!isEditingProfile" class="btn-secondary px-3 py-1.5 text-xs sm:px-3 sm:py-2" @click="startProfileEdit">{{ t('Edit') }}</button>
+                        <button
+                          v-if="!isEditingProfile"
+                          class="btn-secondary px-3 py-1.5 text-xs sm:px-3 sm:py-2"
+                          @click="startProfileEdit"
+                        >
+                          {{ t('Edit') }}
+                        </button>
                       </div>
 
                       <div class="grid gap-3 px-4 py-4 sm:grid-cols-[10rem_minmax(0,1fr)_auto] sm:items-center">
-                        <p class="text-sm font-bold text-slate-600 dark:text-slate-300">{{ t('Username') }}</p>
-                        <p class="text-sm font-semibold text-slate-900 dark:text-slate-100">{{ user?.username }}</p>
+                        <p class="text-sm font-bold text-slate-600 dark:text-slate-300">
+                          {{ t('Username') }}
+                        </p>
+                        <p class="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                          {{ user?.username }}
+                        </p>
                         <span class="inline-flex justify-center rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600 dark:bg-slate-700 dark:text-slate-200">{{ t('Read-only') }}</span>
                       </div>
 
                       <div class="grid gap-3 px-4 py-4 sm:grid-cols-[10rem_minmax(0,1fr)_auto] sm:items-center">
-                        <p class="text-sm font-bold text-slate-600 dark:text-slate-300">{{ t('Email') }}</p>
+                        <p class="text-sm font-bold text-slate-600 dark:text-slate-300">
+                          {{ t('Email') }}
+                        </p>
                         <div>
-                          <input v-if="isEditingProfile" v-model="profileForm.email" type="email" class="form-input py-2 sm:py-2.5" />
-                          <p v-else class="text-sm font-semibold text-slate-900 dark:text-slate-100">{{ user?.email }}</p>
+                          <input
+                            v-if="isEditingProfile"
+                            v-model="profileForm.email"
+                            type="email"
+                            class="form-input py-2 sm:py-2.5"
+                          >
+                          <p
+                            v-else
+                            class="text-sm font-semibold text-slate-900 dark:text-slate-100"
+                          >
+                            {{ user?.email }}
+                          </p>
                         </div>
-                        <button v-if="!isEditingProfile" class="btn-secondary px-3 py-1.5 text-xs sm:px-3 sm:py-2" @click="startProfileEdit">{{ t('Edit') }}</button>
+                        <button
+                          v-if="!isEditingProfile"
+                          class="btn-secondary px-3 py-1.5 text-xs sm:px-3 sm:py-2"
+                          @click="startProfileEdit"
+                        >
+                          {{ t('Edit') }}
+                        </button>
                       </div>
 
                       <div class="grid gap-3 px-4 py-4 sm:grid-cols-[10rem_minmax(0,1fr)_auto] sm:items-center">
-                        <p class="text-sm font-bold text-slate-600 dark:text-slate-300">{{ t('Role') }}</p>
-                        <p class="text-sm font-semibold text-slate-900 dark:text-slate-100">{{ user ? getRoleLabel(user.roleKey) : '' }}</p>
+                        <p class="text-sm font-bold text-slate-600 dark:text-slate-300">
+                          {{ t('Role') }}
+                        </p>
+                        <p class="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                          {{ user ? getRoleLabel(user.roleKey) : '' }}
+                        </p>
                         <span class="inline-flex justify-center rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600 dark:bg-slate-700 dark:text-slate-200">{{ t('Read-only') }}</span>
                       </div>
 
                       <div class="grid gap-3 px-4 py-4 sm:grid-cols-[10rem_minmax(0,1fr)_auto] sm:items-center">
-                        <p class="text-sm font-bold text-slate-600 dark:text-slate-300">{{ t('Organization') }}</p>
+                        <p class="text-sm font-bold text-slate-600 dark:text-slate-300">
+                          {{ t('Organization') }}
+                        </p>
                         <div>
-                          <input v-if="isEditingProfile" v-model="profileForm.organization" class="form-input py-2 sm:py-2.5" />
-                          <p v-else class="text-sm font-semibold text-slate-900 dark:text-slate-100">{{ profileValue(user?.organization) }}</p>
+                          <input
+                            v-if="isEditingProfile"
+                            v-model="profileForm.organization"
+                            class="form-input py-2 sm:py-2.5"
+                          >
+                          <p
+                            v-else
+                            class="text-sm font-semibold text-slate-900 dark:text-slate-100"
+                          >
+                            {{ profileValue(user?.organization) }}
+                          </p>
                         </div>
-                        <button v-if="!isEditingProfile" class="btn-secondary px-3 py-1.5 text-xs sm:px-3 sm:py-2" @click="startProfileEdit">{{ t('Edit') }}</button>
+                        <button
+                          v-if="!isEditingProfile"
+                          class="btn-secondary px-3 py-1.5 text-xs sm:px-3 sm:py-2"
+                          @click="startProfileEdit"
+                        >
+                          {{ t('Edit') }}
+                        </button>
                       </div>
 
                       <div class="grid gap-3 px-4 py-4 sm:grid-cols-[10rem_minmax(0,1fr)_auto] sm:items-center">
-                        <p class="text-sm font-bold text-slate-600 dark:text-slate-300">{{ t('Job title') }}</p>
+                        <p class="text-sm font-bold text-slate-600 dark:text-slate-300">
+                          {{ t('Job title') }}
+                        </p>
                         <div>
-                          <input v-if="isEditingProfile" v-model="profileForm.jobTitle" class="form-input py-2 sm:py-2.5" />
-                          <p v-else class="text-sm font-semibold text-slate-900 dark:text-slate-100">{{ profileJobTitle(user?.jobTitle) }}</p>
+                          <input
+                            v-if="isEditingProfile"
+                            v-model="profileForm.jobTitle"
+                            class="form-input py-2 sm:py-2.5"
+                          >
+                          <p
+                            v-else
+                            class="text-sm font-semibold text-slate-900 dark:text-slate-100"
+                          >
+                            {{ profileJobTitle(user?.jobTitle) }}
+                          </p>
                         </div>
-                        <button v-if="!isEditingProfile" class="btn-secondary px-3 py-1.5 text-xs sm:px-3 sm:py-2" @click="startProfileEdit">{{ t('Edit') }}</button>
+                        <button
+                          v-if="!isEditingProfile"
+                          class="btn-secondary px-3 py-1.5 text-xs sm:px-3 sm:py-2"
+                          @click="startProfileEdit"
+                        >
+                          {{ t('Edit') }}
+                        </button>
                       </div>
 
                       <div class="grid gap-3 px-4 py-4 sm:grid-cols-[10rem_minmax(0,1fr)_auto] sm:items-center">
-                        <p class="text-sm font-bold text-slate-600 dark:text-slate-300">{{ t('Current language') }}</p>
-                        <p class="text-sm font-semibold text-slate-900 dark:text-slate-100">{{ locale === 'pt-PT' ? t('Portuguese') : t('English') }}</p>
-                        <button class="btn-secondary px-3 py-1.5 text-xs sm:px-3 sm:py-2" @click="activeView = 'settings'">{{ t('Manage in Settings') }}</button>
+                        <p class="text-sm font-bold text-slate-600 dark:text-slate-300">
+                          {{ t('Current language') }}
+                        </p>
+                        <p class="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                          {{ locale === 'pt-PT' ? t('Portuguese') : t('English') }}
+                        </p>
+                        <button
+                          class="btn-secondary px-3 py-1.5 text-xs sm:px-3 sm:py-2"
+                          @click="activeView = 'settings'"
+                        >
+                          {{ t('Manage in Settings') }}
+                        </button>
                       </div>
 
                       <div class="grid gap-3 px-4 py-4 sm:grid-cols-[10rem_minmax(0,1fr)_auto] sm:items-center">
-                        <p class="text-sm font-bold text-slate-600 dark:text-slate-300">{{ t('Current theme') }}</p>
-                        <p class="text-sm font-semibold text-slate-900 dark:text-slate-100">{{ theme === 'dark' ? t('Dark') : t('Light') }}</p>
-                        <button class="btn-secondary px-3 py-1.5 text-xs sm:px-3 sm:py-2" @click="activeView = 'settings'">{{ t('Manage in Settings') }}</button>
+                        <p class="text-sm font-bold text-slate-600 dark:text-slate-300">
+                          {{ t('Current theme') }}
+                        </p>
+                        <p class="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                          {{ theme === 'dark' ? t('Dark') : t('Light') }}
+                        </p>
+                        <button
+                          class="btn-secondary px-3 py-1.5 text-xs sm:px-3 sm:py-2"
+                          @click="activeView = 'settings'"
+                        >
+                          {{ t('Manage in Settings') }}
+                        </button>
                       </div>
                     </div>
                   </div>
 
-                  <p v-if="profileError" class="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 dark:border-red-700/60 dark:bg-red-900/30 dark:text-red-100">{{ profileError }}</p>
-                  <p v-if="profileSuccess" class="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 dark:border-emerald-700/60 dark:bg-emerald-900/30 dark:text-emerald-100">{{ profileSuccess }}</p>
+                  <p
+                    v-if="profileError"
+                    class="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 dark:border-red-700/60 dark:bg-red-900/30 dark:text-red-100"
+                  >
+                    {{ profileError }}
+                  </p>
+                  <p
+                    v-if="profileSuccess"
+                    class="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 dark:border-emerald-700/60 dark:bg-emerald-900/30 dark:text-emerald-100"
+                  >
+                    {{ profileSuccess }}
+                  </p>
 
                   <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
-                    <button v-if="isEditingProfile" class="btn-primary sm:order-2" @click="saveProfileChanges">{{ t('Save changes') }}</button>
-                    <button v-if="isEditingProfile" class="btn-secondary sm:order-1" @click="cancelProfileEdit">{{ t('Cancel') }}</button>
-                    <button class="btn-secondary sm:order-3" @click="navigateTo(homeViewForRole(user?.roleKey))">{{ t('Back to dashboard') }}</button>
-                    <button class="btn-secondary sm:order-4" @click="activeView = 'settings'">{{ t('Open settings') }}</button>
+                    <button
+                      v-if="isEditingProfile"
+                      class="btn-primary sm:order-2"
+                      @click="saveProfileChanges"
+                    >
+                      {{ t('Save changes') }}
+                    </button>
+                    <button
+                      v-if="isEditingProfile"
+                      class="btn-secondary sm:order-1"
+                      @click="cancelProfileEdit"
+                    >
+                      {{ t('Cancel') }}
+                    </button>
+                    <button
+                      class="btn-secondary sm:order-3"
+                      @click="navigateTo(homeViewForRole(user?.roleKey))"
+                    >
+                      {{ t('Back to dashboard') }}
+                    </button>
+                    <button
+                      class="btn-secondary sm:order-4"
+                      @click="activeView = 'settings'"
+                    >
+                      {{ t('Open settings') }}
+                    </button>
                   </div>
                 </section>
               </div>
 
-            <!-- SETTINGS VIEW -->
-            <div v-if="activeView === 'settings'" class="card space-y-5 p-5 sm:space-y-6 sm:p-6">
-              <div class="section-heading"><div><p>{{ t('Settings') }}</p><h3>{{ t('Application Settings') }}</h3></div></div>
-              <div>
-                <h4 class="font-bold mb-2">{{ t('Language') }}</h4>
-                <div class="grid gap-2 sm:grid-cols-2">
-                  <button class="btn-secondary flex-1" :class="{ 'nav-item-active': locale === 'pt-PT' }" @click="setLocale('pt-PT')">{{ t('Portuguese') }}</button>
-                  <button class="btn-secondary flex-1" :class="{ 'nav-item-active': locale === 'en' }" @click="setLocale('en')">{{ t('English') }}</button>
-                </div>
-              </div>
-              <div>
-                <h4 class="font-bold mb-2">{{ t('Theme') }}</h4>
-                <div class="grid gap-2 sm:grid-cols-2">
-                  <button class="btn-secondary flex-1" :class="{ 'nav-item-active': theme === 'light' }" @click="setTheme('light')">{{ t('Light') }}</button>
-                  <button class="btn-secondary flex-1" :class="{ 'nav-item-active': theme === 'dark' }" @click="setTheme('dark')">{{ t('Dark') }}</button>
-                </div>
-              </div>
-              <div>
-                <h4 class="font-bold mb-2">{{ t('Accessibility') }}</h4>
-                <p class="text-sm text-slate-600 dark:text-slate-300">{{ t('Clear mode is the default. Dark mode, language and session preferences are persisted locally.') }}</p>
-              </div>
-              <div class="grid gap-4 md:grid-cols-2">
-                <div class="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
-                  <h4 class="font-bold">{{ t('Application information') }}</h4>
-                  <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">DriveTrace Core</p>
-                  <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">{{ t('Active profile') }}: {{ user?.username }} · {{ user ? getRoleLabel(user.roleKey) : '' }}</p>
-                </div>
-                <div class="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
-                  <h4 class="font-bold">{{ t('API URL') }}</h4>
-                  <p class="mt-2 break-all text-sm font-semibold text-slate-600 dark:text-slate-300">{{ apiBaseUrl }}</p>
-                </div>
-              </div>
-              <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-900 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-100">
-                <p>{{ t('Demo/local authentication') }}</p>
-                <p class="mt-1 font-medium">{{ t('The API is not protected by JWT yet. Demo role headers are enforced by backend permission guards in this V1.') }}</p>
-              </div>
-              <button class="btn-secondary" @click="navigateTo(homeViewForRole(user?.roleKey))">{{ t('Back to dashboard') }}</button>
-            </div>
-
-            <!-- CRUD VIEWS -->
-            <div v-if="activeCrudConfigs.length" class="space-y-5 lg:space-y-6">
-              <section v-if="activeView === 'units'" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                <div class="metric-card"><span>{{ t('Traceable units') }}</span><strong>{{ units.length }}</strong></div>
-                <div class="metric-card"><span>{{ t('Active / held') }}</span><strong>{{ activeUnits.length }}</strong></div>
-                <div class="metric-card"><span>{{ t('Deviations') }}</span><strong>{{ blockedUnits.length }}</strong></div>
-              </section>
-
-              <section v-if="activeView === 'units'" class="industrial-panel">
+              <!-- SETTINGS VIEW -->
+              <div
+                v-if="activeView === 'settings'"
+                class="card space-y-5 p-5 sm:space-y-6 sm:p-6"
+              >
                 <div class="section-heading">
-                  <div>
-                    <p>{{ t('ProductUnit route') }}</p>
-                    <h3>{{ t('Trace and transfer product unit') }}</h3>
-                    <p class="section-description">{{ t('ProductUnit remains the traceability root; supports transport the unit and racks remain post-line logistics.') }}</p>
+                  <div><p>{{ t('Settings') }}</p><h3>{{ t('Application Settings') }}</h3></div>
+                </div>
+                <div>
+                  <h4 class="font-bold mb-2">
+                    {{ t('Language') }}
+                  </h4>
+                  <div class="grid gap-2 sm:grid-cols-2">
+                    <button
+                      class="btn-secondary flex-1"
+                      :class="{ 'nav-item-active': locale === 'pt-PT' }"
+                      @click="setLocale('pt-PT')"
+                    >
+                      {{ t('Portuguese') }}
+                    </button>
+                    <button
+                      class="btn-secondary flex-1"
+                      :class="{ 'nav-item-active': locale === 'en' }"
+                      @click="setLocale('en')"
+                    >
+                      {{ t('English') }}
+                    </button>
                   </div>
                 </div>
-                <div class="mt-5 grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-                  <div class="grid gap-3">
-                    <label class="form-label">{{ t('Product unit') }}
-                      <select v-model="transferForm.productUnitId" class="form-input" @change="transferForm.productUnitId && loadUnitTrace(Number(transferForm.productUnitId))">
-                        <option value="">{{ t('Select option') }}</option>
-                        <option v-for="unit in units" :key="unit.id" :value="unit.id">{{ unit.unitCode }} · {{ translateStatus(String(unit.status)) }}</option>
-                      </select>
-                    </label>
-                    <label class="form-label">{{ t('Target section') }}
-                      <select v-model="transferForm.toSectionId" class="form-input">
-                        <option value="">{{ t('Select option') }}</option>
-                        <option v-for="section in transferTargetSections" :key="section.id" :value="section.id">{{ section.sectionCode }} · {{ translateSectionName(section.name) }} · {{ lineLabel(section.lineId) }}</option>
-                      </select>
-                    </label>
-                    <label class="form-label">{{ t('Target support') }}
-                      <select v-model="transferForm.toSupportId" class="form-input">
-                        <option value="">{{ t('Keep current support') }}</option>
-                        <option v-for="support in supports" :key="support.id" :value="support.id">{{ support.supportCode }} · {{ translateStatus(String(support.status)) }}</option>
-                      </select>
-                    </label>
-                    <label class="form-label">{{ t('Reason') }}<input v-model="transferForm.reason" class="form-input" /></label>
-                    <label class="form-label">{{ t('Notes') }}<textarea v-model="transferForm.notes" class="form-input min-h-20"></textarea></label>
-                    <label class="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
-                      <input v-model="transferForm.moveCurrentSupport" type="checkbox" class="h-4 w-4 rounded border-slate-300" />
-                      {{ t('Move current support with unit') }}
-                    </label>
-                    <div class="flex flex-wrap gap-2">
-                      <button class="btn-secondary" type="button" :disabled="!selectedTransferUnit" @click="selectedTransferUnit && prepareTransfer(selectedTransferUnit)">{{ t('Load trace') }}</button>
-                      <button class="btn-primary" type="button" :disabled="!can('ProductUnits.Transfer')" @click="submitUnitTransfer">{{ t('Register transfer') }}</button>
-                    </div>
-                    <p v-if="transferStatus" class="rounded-lg border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">{{ transferStatus }}</p>
+                <div>
+                  <h4 class="font-bold mb-2">
+                    {{ t('Theme') }}
+                  </h4>
+                  <div class="grid gap-2 sm:grid-cols-2">
+                    <button
+                      class="btn-secondary flex-1"
+                      :class="{ 'nav-item-active': theme === 'light' }"
+                      @click="setTheme('light')"
+                    >
+                      {{ t('Light') }}
+                    </button>
+                    <button
+                      class="btn-secondary flex-1"
+                      :class="{ 'nav-item-active': theme === 'dark' }"
+                      @click="setTheme('dark')"
+                    >
+                      {{ t('Dark') }}
+                    </button>
                   </div>
-                  <div class="table-shell">
+                </div>
+                <div>
+                  <h4 class="font-bold mb-2">
+                    {{ t('Accessibility') }}
+                  </h4>
+                  <p class="text-sm text-slate-600 dark:text-slate-300">
+                    {{ t('Clear mode is the default. Dark mode, language and session preferences are persisted locally.') }}
+                  </p>
+                </div>
+                <div class="grid gap-4 md:grid-cols-2">
+                  <div class="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+                    <h4 class="font-bold">
+                      {{ t('Application information') }}
+                    </h4>
+                    <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                      DriveTrace Core
+                    </p>
+                    <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                      {{ t('Active profile') }}: {{ user?.username }} · {{ user ? getRoleLabel(user.roleKey) : '' }}
+                    </p>
+                  </div>
+                  <div class="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+                    <h4 class="font-bold">
+                      {{ t('API URL') }}
+                    </h4>
+                    <p class="mt-2 break-all text-sm font-semibold text-slate-600 dark:text-slate-300">
+                      {{ apiBaseUrl }}
+                    </p>
+                  </div>
+                </div>
+                <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-900 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-100">
+                  <p>{{ t('Demo/local authentication') }}</p>
+                  <p class="mt-1 font-medium">
+                    {{ t('The API is not protected by JWT yet. Demo role headers are enforced by backend permission guards in this V1.') }}
+                  </p>
+                </div>
+                <button
+                  class="btn-secondary"
+                  @click="navigateTo(homeViewForRole(user?.roleKey))"
+                >
+                  {{ t('Back to dashboard') }}
+                </button>
+              </div>
+
+              <!-- CRUD VIEWS -->
+              <div
+                v-if="activeCrudConfigs.length"
+                class="space-y-5 lg:space-y-6"
+              >
+                <section
+                  v-if="activeView === 'units'"
+                  class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
+                >
+                  <div class="metric-card">
+                    <span>{{ t('Traceable units') }}</span><strong>{{ units.length }}</strong>
+                  </div>
+                  <div class="metric-card">
+                    <span>{{ t('Active / held') }}</span><strong>{{ activeUnits.length }}</strong>
+                  </div>
+                  <div class="metric-card">
+                    <span>{{ t('Deviations') }}</span><strong>{{ blockedUnits.length }}</strong>
+                  </div>
+                </section>
+
+                <section
+                  v-if="activeView === 'units'"
+                  class="industrial-panel"
+                >
+                  <div class="section-heading">
+                    <div>
+                      <p>{{ t('ProductUnit route') }}</p>
+                      <h3>{{ t('Trace and transfer product unit') }}</h3>
+                      <p class="section-description">
+                        {{ t('ProductUnit remains the traceability root; supports transport the unit and racks remain post-line logistics.') }}
+                      </p>
+                    </div>
+                  </div>
+                  <div class="mt-5 grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+                    <div class="grid gap-3">
+                      <label class="form-label">{{ t('Product unit') }}
+                        <select
+                          v-model="transferForm.productUnitId"
+                          class="form-input"
+                          @change="transferForm.productUnitId && loadUnitTrace(Number(transferForm.productUnitId))"
+                        >
+                          <option value="">{{ t('Select option') }}</option>
+                          <option
+                            v-for="unit in units"
+                            :key="unit.id"
+                            :value="unit.id"
+                          >{{ unit.unitCode }} · {{ translateStatus(String(unit.status)) }}</option>
+                        </select>
+                      </label>
+                      <label class="form-label">{{ t('Target section') }}
+                        <select
+                          v-model="transferForm.toSectionId"
+                          class="form-input"
+                        >
+                          <option value="">{{ t('Select option') }}</option>
+                          <option
+                            v-for="section in transferTargetSections"
+                            :key="section.id"
+                            :value="section.id"
+                          >{{ section.sectionCode }} · {{ translateSectionName(section.name) }} · {{ lineLabel(section.lineId) }}</option>
+                        </select>
+                      </label>
+                      <label class="form-label">{{ t('Target support') }}
+                        <select
+                          v-model="transferForm.toSupportId"
+                          class="form-input"
+                        >
+                          <option value="">{{ t('Keep current support') }}</option>
+                          <option
+                            v-for="support in supports"
+                            :key="support.id"
+                            :value="support.id"
+                          >{{ support.supportCode }} · {{ translateStatus(String(support.status)) }}</option>
+                        </select>
+                      </label>
+                      <label class="form-label">{{ t('Reason') }}<input
+                        v-model="transferForm.reason"
+                        class="form-input"
+                      ></label>
+                      <label class="form-label">{{ t('Notes') }}<textarea
+                        v-model="transferForm.notes"
+                        class="form-input min-h-20"
+                      /></label>
+                      <label class="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                        <input
+                          v-model="transferForm.moveCurrentSupport"
+                          type="checkbox"
+                          class="h-4 w-4 rounded border-slate-300"
+                        >
+                        {{ t('Move current support with unit') }}
+                      </label>
+                      <div class="flex flex-wrap gap-2">
+                        <button
+                          class="btn-secondary"
+                          type="button"
+                          :disabled="!selectedTransferUnit"
+                          @click="selectedTransferUnit && prepareTransfer(selectedTransferUnit)"
+                        >
+                          {{ t('Load trace') }}
+                        </button>
+                        <button
+                          class="btn-primary"
+                          type="button"
+                          :disabled="!can('ProductUnits.Transfer')"
+                          @click="submitUnitTransfer"
+                        >
+                          {{ t('Register transfer') }}
+                        </button>
+                      </div>
+                      <p
+                        v-if="transferStatus"
+                        class="rounded-lg border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                      >
+                        {{ transferStatus }}
+                      </p>
+                    </div>
+                    <div class="table-shell">
+                      <table class="data-table">
+                        <thead><tr><th>{{ t('Unit') }}</th><th>{{ t('Line') }}</th><th>{{ t('Section') }}</th><th>{{ t('Route state') }}</th><th /></tr></thead>
+                        <tbody>
+                          <tr
+                            v-for="unit in units"
+                            :key="unit.id"
+                          >
+                            <td class="font-bold">
+                              {{ unit.unitCode }}
+                            </td>
+                            <td>{{ lineLabel(sectionsById.get(Number(unit.currentSectionId))?.lineId) }}</td>
+                            <td>{{ sectionName(unit.currentSectionId) }}</td>
+                            <td><span :class="statusClass(unit.status)">{{ translateStatus(String(unit.status)) }}</span></td>
+                            <td>
+                              <button
+                                class="btn-secondary btn-compact"
+                                type="button"
+                                @click="prepareTransfer(unit)"
+                              >
+                                {{ t('Trace') }}
+                              </button>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </section>
+
+                <section
+                  v-if="activeView === 'units' && selectedUnitTrace"
+                  class="industrial-panel"
+                >
+                  <div class="section-heading">
+                    <div>
+                      <p>{{ t('Product unit trace') }}</p>
+                      <h3>{{ selectedUnitTrace.unit?.unitCode || t('Selected unit') }}</h3>
+                      <p class="section-description">
+                        {{ referenceLabel(selectedUnitTrace.unit?.currentProductionLine) }} · {{ referenceLabel(selectedUnitTrace.unit?.currentSection) }} · {{ t(selectedUnitTrace.unit?.routeState || 'No data available') }}
+                      </p>
+                    </div>
+                  </div>
+                  <div class="table-shell compact-table-shell mt-4">
                     <table class="data-table">
-                      <thead><tr><th>{{ t('Unit') }}</th><th>{{ t('Line') }}</th><th>{{ t('Section') }}</th><th>{{ t('Route state') }}</th><th></th></tr></thead>
+                      <thead><tr><th>{{ t('Timestamp') }}</th><th>{{ t('Event') }}</th><th>{{ t('Line') }}</th><th>{{ t('Section') }}</th><th>{{ t('Support') }}</th><th>{{ t('Notes') }}</th></tr></thead>
                       <tbody>
-                        <tr v-for="unit in units" :key="unit.id">
-                          <td class="font-bold">{{ unit.unitCode }}</td>
-                          <td>{{ lineLabel(sectionsById.get(Number(unit.currentSectionId))?.lineId) }}</td>
-                          <td>{{ sectionName(unit.currentSectionId) }}</td>
-                          <td><span :class="statusClass(unit.status)">{{ translateStatus(String(unit.status)) }}</span></td>
-                          <td><button class="btn-secondary btn-compact" type="button" @click="prepareTransfer(unit)">{{ t('Trace') }}</button></td>
+                        <tr
+                          v-for="item in selectedTraceTimeline"
+                          :key="`${item.eventType}-${item.occurredAt}-${item.sectionCode || ''}`"
+                        >
+                          <td>{{ formatDate(item.occurredAt) }}</td>
+                          <td>
+                            <span
+                              class="event-chip"
+                              :class="statusClass(item.eventType)"
+                            >{{ displayOperationalEvent(item.eventType) }}</span>
+                          </td>
+                          <td>{{ item.lineCode || '-' }}</td>
+                          <td>{{ item.sectionCode || '-' }}</td>
+                          <td>{{ item.supportCode || '-' }}</td>
+                          <td>{{ item.label || item.result || '-' }}</td>
+                        </tr>
+                        <tr v-if="!selectedTraceTimeline.length">
+                          <td
+                            colspan="6"
+                            class="text-center"
+                          >
+                            {{ traceLoading ? t('Loading DriveTrace Core data...') : t('No records found') }}
+                          </td>
                         </tr>
                       </tbody>
                     </table>
                   </div>
-                </div>
-              </section>
+                </section>
 
-              <section v-if="activeView === 'units' && selectedUnitTrace" class="industrial-panel">
-                <div class="section-heading">
-                  <div>
-                    <p>{{ t('Product unit trace') }}</p>
-                    <h3>{{ selectedUnitTrace.unit?.unitCode || t('Selected unit') }}</h3>
-                    <p class="section-description">{{ referenceLabel(selectedUnitTrace.unit?.currentProductionLine) }} · {{ referenceLabel(selectedUnitTrace.unit?.currentSection) }} · {{ t(selectedUnitTrace.unit?.routeState || 'No data available') }}</p>
+                <section
+                  v-if="activeView === 'supports'"
+                  class="card overflow-hidden p-5 sm:p-6"
+                >
+                  <div class="section-heading">
+                    <div><p>{{ t('Physical tracking') }}</p><h3>{{ t('Support is the intra-line anchor') }}</h3></div>
                   </div>
-                </div>
-                <div class="table-shell compact-table-shell mt-4">
-                  <table class="data-table">
-                    <thead><tr><th>{{ t('Timestamp') }}</th><th>{{ t('Event') }}</th><th>{{ t('Line') }}</th><th>{{ t('Section') }}</th><th>{{ t('Support') }}</th><th>{{ t('Notes') }}</th></tr></thead>
-                    <tbody>
-                      <tr v-for="item in selectedTraceTimeline" :key="`${item.eventType}-${item.occurredAt}-${item.sectionCode || ''}`">
-                        <td>{{ formatDate(item.occurredAt) }}</td>
-                        <td><span class="event-chip" :class="statusClass(item.eventType)">{{ displayOperationalEvent(item.eventType) }}</span></td>
-                        <td>{{ item.lineCode || '-' }}</td>
-                        <td>{{ item.sectionCode || '-' }}</td>
-                        <td>{{ item.supportCode || '-' }}</td>
-                        <td>{{ item.label || item.result || '-' }}</td>
-                      </tr>
-                      <tr v-if="!selectedTraceTimeline.length"><td colspan="6" class="text-center">{{ traceLoading ? t('Loading DriveTrace Core data...') : t('No records found') }}</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-              </section>
+                  <img
+                    :src="lineDoorUrl"
+                    alt="Support-based line"
+                    class="mt-4 max-h-[16rem] w-full max-w-full rounded-lg border border-slate-200 bg-slate-50 object-contain p-2 dark:border-slate-700 dark:bg-slate-900/30"
+                  >
+                </section>
 
-              <section v-if="activeView === 'supports'" class="card overflow-hidden p-5 sm:p-6">
-                <div class="section-heading"><div><p>{{ t('Physical tracking') }}</p><h3>{{ t('Support is the intra-line anchor') }}</h3></div></div>
-                <img :src="lineDoorUrl" alt="Support-based line" class="mt-4 max-h-[16rem] w-full max-w-full rounded-lg border border-slate-200 bg-slate-50 object-contain p-2 dark:border-slate-700 dark:bg-slate-900/30" />
-              </section>
+                <section
+                  v-if="activeView === 'quality'"
+                  class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
+                >
+                  <div class="metric-card">
+                    <span>{{ t('Results') }}</span><strong>{{ quality.length }}</strong>
+                  </div>
+                  <div class="metric-card">
+                    <span>{{ t('PASS') }}</span><strong>{{ quality.filter((item) => item.result === 'PASS').length }}</strong>
+                  </div>
+                  <div class="metric-card">
+                    <span>{{ t('FAIL') }}</span><strong>{{ quality.filter((item) => item.result === 'FAIL').length }}</strong>
+                  </div>
+                </section>
 
-              <section v-if="activeView === 'quality'" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                <div class="metric-card"><span>{{ t('Results') }}</span><strong>{{ quality.length }}</strong></div>
-                <div class="metric-card"><span>{{ t('PASS') }}</span><strong>{{ quality.filter((item) => item.result === 'PASS').length }}</strong></div>
-                <div class="metric-card"><span>{{ t('FAIL') }}</span><strong>{{ quality.filter((item) => item.result === 'FAIL').length }}</strong></div>
-              </section>
-
-              <section v-if="activeView === 'quality'" class="industrial-panel">
-                <div class="section-heading">
-                  <div>
-                    <p>Qualidade</p>
-                    <h3>Painel de decisão de qualidade</h3>
-                    <p class="section-description">Resultados, não conformidades, retrabalho e sucata ficam agregados para o técnico de qualidade.</p>
-                  </div>
-                </div>
-                <div class="mt-5 grid gap-3 sm:grid-cols-3">
-                  <article v-for="card in roleContextCards" :key="card.key" class="decision-card" :class="card.tone">
-                    <span>{{ card.label }}</span>
-                    <strong>{{ card.value }}</strong>
-                    <p>{{ card.detail }}</p>
-                  </article>
-                </div>
-                <div class="mt-5 grid gap-5 xl:grid-cols-2">
-                  <div>
-                    <h4 class="text-sm font-black text-slate-950 dark:text-white">Últimos resultados registados</h4>
-                    <div class="table-shell">
-                      <table class="data-table">
-                        <thead><tr><th>{{ t('Unit') }}</th><th>{{ t('Result') }}</th><th>{{ t('Recorded at') }}</th><th>{{ t('Notes') }}</th></tr></thead>
-                        <tbody>
-                          <tr v-for="record in recentQualityRecords" :key="record.id">
-                            <td class="font-bold">{{ unitCode(record.productUnitId) }}</td>
-                            <td><span :class="statusClass(record.result)">{{ translateQualityResult(record.result) }}</span></td>
-                            <td>{{ formatDate(record.recordedAt) }}</td>
-                            <td class="max-w-[18rem] truncate" :title="record.notes || '-'">{{ record.notes || '-' }}</td>
-                          </tr>
-                          <tr v-if="!recentQualityRecords.length"><td colspan="4" class="text-center">{{ t('No records found') }}</td></tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                  <div>
-                    <h4 class="text-sm font-black text-slate-950 dark:text-white">Não conformidades abertas</h4>
-                    <div class="table-shell">
-                      <table class="data-table">
-                        <thead><tr><th>{{ t('Unit') }}</th><th>{{ t('Severity') }}</th><th>{{ t('Status') }}</th><th>{{ t('Description') }}</th></tr></thead>
-                        <tbody>
-                          <tr v-for="item in openNonconformities" :key="item.id">
-                            <td class="font-bold">{{ unitCode(item.productUnitId) }}</td>
-                            <td><span :class="statusClass(item.severity)">{{ displayStatus(item.severity) }}</span></td>
-                            <td><span :class="statusClass(item.status)">{{ displayStatus(item.status) }}</span></td>
-                            <td class="max-w-[18rem] truncate" :title="item.description || '-'">{{ item.description || '-' }}</td>
-                          </tr>
-                          <tr v-if="!openNonconformities.length"><td colspan="4" class="text-center">{{ t('No records found') }}</td></tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              <section v-if="activeView === 'racks'" class="space-y-5 lg:space-y-6">
-                <div class="ops-hero">
-                  <div class="grid gap-6 xl:grid-cols-[1fr_0.9fr] xl:items-center">
-                    <div class="min-w-0">
-                      <p class="text-sm font-bold uppercase tracking-normal text-drivolution-700">{{ t('Post-line logistics') }}</p>
-                      <h3 class="mt-2 text-3xl font-black leading-tight tracking-normal text-slate-950 dark:text-white sm:text-4xl">{{ t('Racks / Post-line Logistics') }}</h3>
-                      <p class="mt-3 max-w-3xl text-sm leading-7 text-slate-600 dark:text-slate-300 sm:text-base">
-                        {{ t('Racks only aggregate supports after the controlled line. The support remains the traceability reference for intra-line WIP.') }}
-                      </p>
-                      <div class="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                        <article v-for="metric in rackKpis" :key="metric.key" class="kpi-card" :class="metric.tone">
-                          <span>{{ t(metric.label) }}</span>
-                          <strong>{{ metric.value }}</strong>
-                          <p>{{ t(metric.detail) }}</p>
-                        </article>
-                      </div>
-                    </div>
-                    <div class="ops-hero-visual">
-                      <img :src="lineCarUrl" alt="Automotive production line" class="max-h-[14rem] w-full rounded-lg bg-white object-contain p-2 dark:bg-slate-900" />
-                      <p class="mt-3 text-xs font-bold uppercase tracking-normal text-slate-500 dark:text-slate-400">{{ t('Rack as post-line logistics') }}</p>
-                    </div>
-                  </div>
-                </div>
-                <div class="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
-                  <details class="industrial-panel compact-help">
-                    <summary class="section-heading"><div><p>{{ t('Operational meaning') }}</p><h3>{{ t('What this page controls') }}</h3></div></summary>
-                    <ul class="technical-list">
-                      <li>{{ t('Racks aggregate supports after the controlled line.') }}</li>
-                      <li>{{ t('Primary traceability remains attached to support and product unit.') }}</li>
-                      <li>{{ t('Rack-support association is logistical, temporal and auditable.') }}</li>
-                    </ul>
-                  </details>
-                  <section class="industrial-panel">
-                    <div class="section-heading"><div><p>{{ t('Operational decision') }}</p><h3>{{ t('Post-line capacity reading') }}</h3></div></div>
-                    <div class="decision-grid mt-4">
-                      <article class="decision-card" :class="rackUtilization > 75 ? 'tone-warning' : 'tone-success'">
-                        <span>{{ t('Capacity') }}</span>
-                        <strong>{{ rackUtilization }}%</strong>
-                        <p>{{ rackUtilization > 75 ? t('Rack occupation is high; validate outbound logistics.') : t('Post-line rack capacity remains available.') }}</p>
-                      </article>
-                      <article class="decision-card tone-info">
-                        <span>{{ t('Active assignments') }}</span>
-                        <strong>{{ activeRackAssignments.length }}</strong>
-                        <p>{{ t('Use the assignment table to audit rack entry and exit timestamps.') }}</p>
-                      </article>
-                    </div>
-                  </section>
-                </div>
-                <section class="industrial-panel">
+                <section
+                  v-if="activeView === 'quality'"
+                  class="industrial-panel"
+                >
                   <div class="section-heading">
                     <div>
-                      <p>Logística</p>
-                      <h3>Atribuições rack-suporte</h3>
-                      <p class="section-description">A logística gere capacidade pós-linha sem substituir a rastreabilidade por suporte e unidade de produto.</p>
+                      <p>Qualidade</p>
+                      <h3>Painel de decisão de qualidade</h3>
+                      <p class="section-description">
+                        Resultados, não conformidades, retrabalho e sucata ficam agregados para o técnico de qualidade.
+                      </p>
                     </div>
                   </div>
                   <div class="mt-5 grid gap-3 sm:grid-cols-3">
-                    <article v-for="card in roleContextCards" :key="card.key" class="decision-card" :class="card.tone">
+                    <article
+                      v-for="card in roleContextCards"
+                      :key="card.key"
+                      class="decision-card"
+                      :class="card.tone"
+                    >
                       <span>{{ card.label }}</span>
                       <strong>{{ card.value }}</strong>
                       <p>{{ card.detail }}</p>
                     </article>
                   </div>
-                  <div class="table-shell mt-5">
-                    <table class="data-table">
-                      <thead><tr><th>{{ t('Rack') }}</th><th>{{ t('Support') }}</th><th>{{ t('Status') }}</th><th>{{ t('Date/time in') }}</th><th>{{ t('Date/time out') }}</th></tr></thead>
-                      <tbody>
-                        <tr v-for="assignment in recentRackAssignments" :key="assignment.id">
-                          <td class="font-bold">{{ rackCode(assignment.rackId) }}</td>
-                          <td>{{ supportCode(assignment.supportId) }}</td>
-                          <td><span :class="statusClass(assignment.dateTimeOut ? 'Completed' : 'Active')">{{ assignment.dateTimeOut ? t('Completed') : t('Active') }}</span></td>
-                          <td>{{ formatDate(assignment.dateTimeIn) }}</td>
-                          <td>{{ formatDate(assignment.dateTimeOut) }}</td>
-                        </tr>
-                        <tr v-if="!recentRackAssignments.length"><td colspan="5" class="text-center">{{ t('No records found') }}</td></tr>
-                      </tbody>
-                    </table>
+                  <div class="mt-5 grid gap-5 xl:grid-cols-2">
+                    <div>
+                      <h4 class="text-sm font-black text-slate-950 dark:text-white">
+                        Últimos resultados registados
+                      </h4>
+                      <div class="table-shell">
+                        <table class="data-table">
+                          <thead><tr><th>{{ t('Unit') }}</th><th>{{ t('Result') }}</th><th>{{ t('Recorded at') }}</th><th>{{ t('Notes') }}</th></tr></thead>
+                          <tbody>
+                            <tr
+                              v-for="record in recentQualityRecords"
+                              :key="record.id"
+                            >
+                              <td class="font-bold">
+                                {{ unitCode(record.productUnitId) }}
+                              </td>
+                              <td><span :class="statusClass(record.result)">{{ translateQualityResult(record.result) }}</span></td>
+                              <td>{{ formatDate(record.recordedAt) }}</td>
+                              <td
+                                class="max-w-[18rem] truncate"
+                                :title="record.notes || '-'"
+                              >
+                                {{ record.notes || '-' }}
+                              </td>
+                            </tr>
+                            <tr v-if="!recentQualityRecords.length">
+                              <td
+                                colspan="4"
+                                class="text-center"
+                              >
+                                {{ t('No records found') }}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                    <div>
+                      <h4 class="text-sm font-black text-slate-950 dark:text-white">
+                        Não conformidades abertas
+                      </h4>
+                      <div class="table-shell">
+                        <table class="data-table">
+                          <thead><tr><th>{{ t('Unit') }}</th><th>{{ t('Severity') }}</th><th>{{ t('Status') }}</th><th>{{ t('Description') }}</th></tr></thead>
+                          <tbody>
+                            <tr
+                              v-for="item in openNonconformities"
+                              :key="item.id"
+                            >
+                              <td class="font-bold">
+                                {{ unitCode(item.productUnitId) }}
+                              </td>
+                              <td><span :class="statusClass(item.severity)">{{ displayStatus(item.severity) }}</span></td>
+                              <td><span :class="statusClass(item.status)">{{ displayStatus(item.status) }}</span></td>
+                              <td
+                                class="max-w-[18rem] truncate"
+                                :title="item.description || '-'"
+                              >
+                                {{ item.description || '-' }}
+                              </td>
+                            </tr>
+                            <tr v-if="!openNonconformities.length">
+                              <td
+                                colspan="4"
+                                class="text-center"
+                              >
+                                {{ t('No records found') }}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
                   </div>
                 </section>
-              </section>
 
-              <section v-if="activeView === 'parameters' && canManageUsers" class="card p-5 sm:p-6">
-                <div class="section-heading"><div><p>{{ t('Admin') }}</p><h3>{{ t('System Parameters') }}</h3></div></div>
-                <div class="mt-5 flex flex-wrap gap-2">
-                  <button
-                    v-for="config in parameterConfigs"
-                    :key="config.key"
-                    type="button"
-                    class="mobile-tab"
-                    :class="parameterTab === config.key ? 'mobile-tab-active' : ''"
-                    @click="parameterTab = config.key"
-                  >
-                    {{ t(config.title) }}
-                  </button>
-                </div>
-              </section>
-
-              <CrudPanel
-                v-for="config in activeCrudConfigs"
-                :key="config.key"
-                :config="crudPanelConfig(config)"
-                :form="crudForms[config.key] || {}"
-                :form-open="Boolean(crudOpen[config.key])"
-                :editing="crudEditingId[config.key] !== null && crudEditingId[config.key] !== undefined"
-                :message="crudMessages[config.key]"
-                :status-class="statusClass"
-                @add="startCrudAdd(config)"
-                @edit="startCrudEdit(config, $event)"
-                @cancel="cancelCrud(config)"
-                @save="saveCrud(config)"
-                @delete="removeCrud(config, $event)"
-                @update-field="(key, value) => updateCrudField(config, key, value)"
-              />
-            </div>
-
-            <!-- OVERVIEW (DASHBOARD) VIEW -->
-            <div v-if="activeView === 'overview'" class="space-y-5 lg:space-y-6">
-              <section class="ops-hero">
-                <div class="grid gap-6 xl:grid-cols-[1.1fr_0.9fr] xl:items-center">
-                  <div class="min-w-0">
-                    <p class="text-xs font-bold uppercase tracking-normal text-drivolution-700">{{ t('Automotive WIP traceability') }}</p>
-                    <h3 class="mt-2 max-w-3xl text-2xl font-black leading-tight tracking-normal sm:text-3xl">{{ t('Line state command overview') }}</h3>
-                    <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-300">
-                      {{ t('Line state command overview description') }}
-                    </p>
-                    <div class="mt-4 flex flex-wrap gap-2">
-                      <span class="domain-pill">{{ t('ProductUnit-centred traceability') }}</span>
-                      <span class="domain-pill">{{ t('Support as intra-line anchor') }}</span>
-                      <span class="domain-pill">{{ t('Rack as post-line logistics') }}</span>
-                      <span class="domain-pill">{{ t('Material lot genealogy') }}</span>
-                    </div>
-                  </div>
-                  <div class="ops-hero-visual">
-                    <img :src="lineDoorUrl" alt="Door production line" class="max-h-[14rem] w-full max-w-xl justify-self-center rounded-lg bg-white object-contain p-2 dark:bg-slate-900" />
-                    <div class="mt-3 grid gap-2 sm:grid-cols-3">
-                      <span class="system-pill"><span>{{ t('Highest WIP') }}</span><strong>{{ topWipSection ? translateSectionName(topWipSection.section) : '-' }}</strong></span>
-                      <span class="system-pill"><span>{{ t('PASS rate') }}</span><strong>{{ passRate === null ? '-' : `${passRate}%` }}</strong></span>
-                      <span class="system-pill"><span>{{ t('Loaded supports') }}</span><strong>{{ loadedSupports.length }}</strong></span>
-                    </div>
-                  </div>
-                </div>
-              </section>
-              <section v-if="roleContextCards.length" class="kpi-grid">
-                <article v-for="card in roleContextCards" :key="card.key" class="kpi-card" :class="card.tone">
-                  <span>{{ card.label }}</span>
-                  <strong>{{ card.value }}</strong>
-                  <p>{{ card.detail }}</p>
-                </article>
-              </section>
-              <section class="kpi-grid">
-                <article v-for="metric in overviewKpis" :key="metric.key" class="kpi-card" :class="metric.tone">
-                  <span>{{ t(metric.label) }}</span>
-                  <strong>{{ metric.value }}</strong>
-                  <p>{{ t(metric.detail) }}</p>
-                </article>
-              </section>
-              <section v-if="flowSummary.lineSummaries.length" class="industrial-panel">
-                <div class="section-heading">
-                  <div>
-                    <p>{{ t('Flow validation') }}</p>
-                    <h3>{{ t('Multi-line flow') }}</h3>
-                    <p class="section-description">{{ t('Current ProductUnit WIP grouped by production line and section.') }}</p>
-                  </div>
-                </div>
-                <div class="mt-4 grid gap-3 sm:grid-cols-3">
-                  <article v-for="metric in flowKpis" :key="metric.key" class="kpi-card" :class="metric.tone">
-                    <span>{{ t(metric.label) }}</span>
-                    <strong>{{ metric.value }}</strong>
-                    <p>{{ t(metric.detail) }}</p>
-                  </article>
-                </div>
-                <div class="flow-filter-row">
-                  <select v-model="flowLineFilter" class="compact-select" :aria-label="t('Production line')">
-                    <option v-for="option in flowLineFilterOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-                  </select>
-                  <button class="mobile-tab" :class="flowTransferFilter === 'all' ? 'mobile-tab-active' : ''" type="button" @click="flowTransferFilter = 'all'">{{ t('All movements') }}</button>
-                  <button class="mobile-tab" :class="flowTransferFilter === 'transfers' ? 'mobile-tab-active' : ''" type="button" @click="flowTransferFilter = 'transfers'">{{ t('Only transfers') }}</button>
-                  <button class="mobile-tab" :class="flowTransferFilter === 'attention' ? 'mobile-tab-active' : ''" type="button" @click="flowTransferFilter = 'attention'">{{ t('Units in attention') }}</button>
-                </div>
-                <div class="compact-card-list mt-4 grid gap-3 xl:grid-cols-2">
-                  <div v-for="line in visibleFlowLineSummaries" :key="line.productionLineId" class="line-step flex-col items-stretch">
-                    <div class="flex items-center justify-between gap-3">
+                <section
+                  v-if="activeView === 'racks'"
+                  class="space-y-5 lg:space-y-6"
+                >
+                  <div class="ops-hero">
+                    <div class="grid gap-6 xl:grid-cols-[1fr_0.9fr] xl:items-center">
                       <div class="min-w-0">
-                        <p class="font-bold text-slate-950 dark:text-slate-50">{{ line.lineCode }} · {{ line.name }}</p>
-                        <p class="text-xs uppercase tracking-normal text-slate-500 dark:text-slate-400">{{ line.activeSupports }} {{ t('supports') }} · {{ line.blockedUnits }} {{ t('attention') }}</p>
-                      </div>
-                      <span class="text-sm font-black text-slate-950 dark:text-slate-50">{{ line.wipUnits }}</span>
-                    </div>
-                    <div class="mt-3 grid gap-2">
-                      <div v-for="section in line.sections" :key="section.sectionId" class="flex items-center gap-3">
-                        <span class="min-w-0 flex-1 truncate text-xs font-semibold text-slate-600 dark:text-slate-300">{{ section.sectionCode }} · {{ translateSectionName(section.name) }}</span>
-                        <div class="h-2 w-24 rounded-full bg-slate-200 dark:bg-slate-700">
-                          <div class="h-2 rounded-full bg-drivolution-500" :style="{ width: `${Math.min(100, section.wipUnits * 34)}%` }"></div>
+                        <p class="text-sm font-bold uppercase tracking-normal text-drivolution-700">
+                          {{ t('Post-line logistics') }}
+                        </p>
+                        <h3 class="mt-2 text-3xl font-black leading-tight tracking-normal text-slate-950 dark:text-white sm:text-4xl">
+                          {{ t('Racks / Post-line Logistics') }}
+                        </h3>
+                        <p class="mt-3 max-w-3xl text-sm leading-7 text-slate-600 dark:text-slate-300 sm:text-base">
+                          {{ t('Racks only aggregate supports after the controlled line. The support remains the traceability reference for intra-line WIP.') }}
+                        </p>
+                        <div class="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                          <article
+                            v-for="metric in rackKpis"
+                            :key="metric.key"
+                            class="kpi-card"
+                            :class="metric.tone"
+                          >
+                            <span>{{ t(metric.label) }}</span>
+                            <strong>{{ metric.value }}</strong>
+                            <p>{{ t(metric.detail) }}</p>
+                          </article>
                         </div>
-                        <strong class="w-6 text-right text-xs">{{ section.wipUnits }}</strong>
+                      </div>
+                      <div class="ops-hero-visual">
+                        <img
+                          :src="lineCarUrl"
+                          alt="Automotive production line"
+                          class="max-h-[14rem] w-full rounded-lg bg-white object-contain p-2 dark:bg-slate-900"
+                        >
+                        <p class="mt-3 text-xs font-bold uppercase tracking-normal text-slate-500 dark:text-slate-400">
+                          {{ t('Rack as post-line logistics') }}
+                        </p>
                       </div>
                     </div>
                   </div>
-                </div>
-                <div class="mt-4 rounded-lg border border-slate-200 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-950/35">
-                  <div class="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p class="text-xs font-black uppercase tracking-normal text-drivolution-700 dark:text-drivolution-300">{{ t('Latest transfers between lines') }}</p>
-                      <h4 class="text-base font-black text-slate-950 dark:text-white">{{ t('ProductUnit movement audit') }}</h4>
-                    </div>
-                    <span class="text-xs font-bold text-slate-500 dark:text-slate-400">{{ filteredFlowTransfers.length }} {{ t('records') }}</span>
-                  </div>
-                  <div class="flow-list">
-                    <article v-for="movement in filteredFlowTransfers" :key="movement.id" class="flow-transfer-row">
-                      <p class="flow-transfer-main" :title="movementTitle(movement)">
-                        {{ movement.unit?.code || '-' }} · {{ movementText(movement.fromProductionLine) }} / {{ movementText(movement.fromSection) }} -> {{ movementText(movement.toProductionLine) }} / {{ movementText(movement.toSection) }}
-                      </p>
-                      <div class="flow-transfer-meta">
-                        <span :class="statusClass(movement.eventType)">{{ movementBadge(movement) }}</span>
-                        <span>{{ formatShortTime(movement.occurredAt) }}</span>
-                        <span class="max-w-[12rem] truncate" :title="movement.reason || t('No reason recorded')">{{ movement.reason || t('No reason recorded') }}</span>
+                  <div class="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
+                    <details class="industrial-panel compact-help">
+                      <summary class="section-heading">
+                        <div><p>{{ t('Operational meaning') }}</p><h3>{{ t('What this page controls') }}</h3></div>
+                      </summary>
+                      <ul class="technical-list">
+                        <li>{{ t('Racks aggregate supports after the controlled line.') }}</li>
+                        <li>{{ t('Primary traceability remains attached to support and product unit.') }}</li>
+                        <li>{{ t('Rack-support association is logistical, temporal and auditable.') }}</li>
+                      </ul>
+                    </details>
+                    <section class="industrial-panel">
+                      <div class="section-heading">
+                        <div><p>{{ t('Operational decision') }}</p><h3>{{ t('Post-line capacity reading') }}</h3></div>
                       </div>
-                    </article>
-                    <p v-if="!filteredFlowTransfers.length" class="empty-state"><strong>{{ t('No transfer movements found') }}</strong></p>
+                      <div class="decision-grid mt-4">
+                        <article
+                          class="decision-card"
+                          :class="rackUtilization > 75 ? 'tone-warning' : 'tone-success'"
+                        >
+                          <span>{{ t('Capacity') }}</span>
+                          <strong>{{ rackUtilization }}%</strong>
+                          <p>{{ rackUtilization > 75 ? t('Rack occupation is high; validate outbound logistics.') : t('Post-line rack capacity remains available.') }}</p>
+                        </article>
+                        <article class="decision-card tone-info">
+                          <span>{{ t('Active assignments') }}</span>
+                          <strong>{{ activeRackAssignments.length }}</strong>
+                          <p>{{ t('Use the assignment table to audit rack entry and exit timestamps.') }}</p>
+                        </article>
+                      </div>
+                    </section>
                   </div>
-                </div>
-              </section>
-              <section class="decision-grid">
-                <article class="decision-card" :class="blockedUnits.length ? 'tone-warning' : 'tone-success'">
-                  <span>{{ t('Immediate attention') }}</span>
-                  <strong>{{ blockedUnits.length ? `${blockedUnits.length} ${t('units requiring attention')}` : t('No blocked units right now.') }}</strong>
-                  <p>{{ blockedUnits.length ? t('Prioritize containment before releasing more WIP.') : t('No immediate containment action is required from current data.') }}</p>
-                </article>
-                <article class="decision-card tone-info">
-                  <span>{{ t('Flow WIP') }}</span>
-                  <strong>{{ topWipSection ? `${translateSectionName(topWipSection.section)} · ${topWipSection.productUnits}` : t('No data available') }}</strong>
-                  <p>{{ t('Validate capacity and exit rhythm at the highest WIP section.') }}</p>
-                </article>
-                <article class="decision-card" :class="fiwareCoherenceOk ? 'tone-success' : 'tone-warning'">
-                  <span>{{ t('Context coherence') }}</span>
-                  <strong>{{ fiwareCoherenceOk ? t('Context coherence confirmed') : t('Context review recommended') }}</strong>
-                  <p>{{ t('Compare relational snapshot and Orion-LD hot context before demonstrations.') }}</p>
-                </article>
-              </section>
-              <section class="grid gap-5 2xl:grid-cols-[1.1fr_0.9fr]">
-                <div class="industrial-panel">
+                  <section class="industrial-panel">
+                    <div class="section-heading">
+                      <div>
+                        <p>Logística</p>
+                        <h3>Atribuições rack-suporte</h3>
+                        <p class="section-description">
+                          A logística gere capacidade pós-linha sem substituir a rastreabilidade por suporte e unidade de produto.
+                        </p>
+                      </div>
+                    </div>
+                    <div class="mt-5 grid gap-3 sm:grid-cols-3">
+                      <article
+                        v-for="card in roleContextCards"
+                        :key="card.key"
+                        class="decision-card"
+                        :class="card.tone"
+                      >
+                        <span>{{ card.label }}</span>
+                        <strong>{{ card.value }}</strong>
+                        <p>{{ card.detail }}</p>
+                      </article>
+                    </div>
+                    <div class="table-shell mt-5">
+                      <table class="data-table">
+                        <thead><tr><th>{{ t('Rack') }}</th><th>{{ t('Support') }}</th><th>{{ t('Status') }}</th><th>{{ t('Date/time in') }}</th><th>{{ t('Date/time out') }}</th></tr></thead>
+                        <tbody>
+                          <tr
+                            v-for="assignment in recentRackAssignments"
+                            :key="assignment.id"
+                          >
+                            <td class="font-bold">
+                              {{ rackCode(assignment.rackId) }}
+                            </td>
+                            <td>{{ supportCode(assignment.supportId) }}</td>
+                            <td><span :class="statusClass(assignment.dateTimeOut ? 'Completed' : 'Active')">{{ assignment.dateTimeOut ? t('Completed') : t('Active') }}</span></td>
+                            <td>{{ formatDate(assignment.dateTimeIn) }}</td>
+                            <td>{{ formatDate(assignment.dateTimeOut) }}</td>
+                          </tr>
+                          <tr v-if="!recentRackAssignments.length">
+                            <td
+                              colspan="5"
+                              class="text-center"
+                            >
+                              {{ t('No records found') }}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                </section>
+
+                <section
+                  v-if="activeView === 'parameters' && canManageUsers"
+                  class="card p-5 sm:p-6"
+                >
                   <div class="section-heading">
-                    <div>
-                      <p>{{ t('Line state') }}</p>
-                      <h3>{{ t('Current WIP by section') }}</h3>
-                    </div>
+                    <div><p>{{ t('Admin') }}</p><h3>{{ t('System Parameters') }}</h3></div>
                   </div>
-                  <div class="line-state-list mt-4">
-                    <div v-for="section in summary.wipBySection" :key="section.sectionCode" class="line-step line-state-row">
-                      <div class="min-w-0">
-                        <p class="font-bold text-slate-950 dark:text-slate-50">{{ translateSectionName(section.section) }}</p>
-                        <p class="text-xs uppercase tracking-normal text-slate-500 dark:text-slate-400">{{ section.sectionCode }} · {{ translateSectionName(section.sectionType) }}</p>
-                      </div>
-                      <div class="flex w-full items-center gap-3 sm:min-w-40">
-                        <div class="h-1.5 flex-1 rounded-full bg-slate-200 dark:bg-slate-700">
-                          <div class="h-1.5 rounded-full bg-drivolution-500" :style="{ width: `${Math.min(100, section.productUnits * 28)}%` }"></div>
-                        </div>
-                        <span class="text-sm font-black text-slate-950 dark:text-slate-50">{{ section.productUnits }}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div class="industrial-panel">
-                  <div class="section-heading">
-                    <div>
-                      <p>{{ t('Quality') }}</p>
-                      <h3>{{ t('Open alerts and deviations') }}</h3>
-                    </div>
-                  </div>
-                  <div class="compact-card-list mt-5 space-y-3">
-                    <div v-for="alert in summary.qualityAlerts" :key="`${alert.unitCode}-${alert.createdAt}`" class="alert-card">
-                      <div class="flex items-center justify-between gap-3">
-                        <strong>{{ alert.unitCode }}</strong>
-                        <span :class="statusClass(alert.status)">{{ displayStatus(alert.status) }}</span>
-                      </div>
-                      <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">{{ displayDemoText(alert.description) }}</p>
-                        <p class="mt-2 text-xs font-semibold uppercase tracking-normal text-slate-400 dark:text-slate-500">{{ displayStatus(alert.severity) }}</p>
-                    </div>
-                    <p v-if="!summary.qualityAlerts.length" class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800 dark:border-emerald-700/70 dark:bg-emerald-900/30 dark:text-emerald-100">{{ t('No blocked units right now.') }}</p>
-                  </div>
-                </div>
-              </section>
-              <section class="industrial-panel">
-                <div class="section-heading">
-                  <div>
-                    <p>{{ t('Recent events') }}</p>
-                    <h3>{{ t('Operational event log') }}</h3>
-                  </div>
-                </div>
-                <div class="table-shell compact-table-shell">
-                  <table class="data-table">
-                    <thead><tr><th>{{ t('Event') }}</th><th>{{ t('Target') }}</th><th>{{ t('Location') }}</th><th>{{ t('Timestamp') }}</th></tr></thead>
-                    <tbody>
-                      <tr v-for="event in recentOperationalEvents.slice(0, 8)" :key="event.eventCode">
-                        <td><span class="event-chip" :class="statusClass(event.eventType)">{{ displayOperationalEvent(event.eventType) }}</span></td>
-                        <td>{{ operationalEventTarget(event) }}</td>
-                        <td>{{ operationalEventLocation(event) }}</td>
-                        <td>{{ formatDate(event.occurredAt) }}</td>
-                      </tr>
-                      <tr v-if="!recentOperationalEvents.length"><td colspan="4" class="text-center">{{ t('No records found') }}</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            </div>
-
-            <!-- OPERATOR WORKBENCH VIEW -->
-            <div v-if="activeView === 'operator'" class="space-y-5 lg:space-y-6">
-              <section class="ops-hero">
-                <div class="section-heading">
-                  <div>
-                    <p>{{ t('Operator workbench') }}</p>
-                    <h3>{{ t('Shift execution queues') }}</h3>
-                    <p class="section-description">{{ t('Actionable ProductUnit queues from the current production flow.') }}</p>
-                  </div>
-                  <button class="btn-primary" type="button" @click="loadData(false)">{{ t('Refresh') }}</button>
-                </div>
-                <div v-if="roleContextCards.length" class="mt-5 grid gap-3 sm:grid-cols-3">
-                  <article v-for="card in roleContextCards" :key="card.key" class="kpi-card" :class="card.tone">
-                    <span>{{ card.label }}</span>
-                    <strong>{{ card.value }}</strong>
-                    <p>{{ card.detail }}</p>
-                  </article>
-                </div>
-                <div class="kpi-grid mt-5">
-                  <article class="kpi-card tone-info"><span>{{ t('Transfer ready') }}</span><strong>{{ operatorWorkbench.queues.transferReady }}</strong><p>{{ t('Units at transfer-capable sections') }}</p></article>
-                  <article class="kpi-card" :class="operatorWorkbench.queues.blocked ? 'tone-warning' : 'tone-success'"><span>{{ t('Blocked') }}</span><strong>{{ operatorWorkbench.queues.blocked }}</strong><p>{{ t('Units requiring attention') }}</p></article>
-                  <article class="kpi-card tone-muted"><span>{{ t('Rework') }}</span><strong>{{ operatorWorkbench.queues.rework }}</strong><p>{{ t('Units currently in rework') }}</p></article>
-                  <article class="kpi-card" :class="operatorWorkbench.queues.noSupport ? 'tone-warning' : 'tone-success'"><span>{{ t('No support') }}</span><strong>{{ operatorWorkbench.queues.noSupport }}</strong><p>{{ t('Units without active transport support') }}</p></article>
-                </div>
-              </section>
-
-              <section class="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-                <div class="industrial-panel">
-                  <div class="section-heading"><div><p>{{ t('Execution') }}</p><h3>{{ t('Active ProductUnit queue') }}</h3></div></div>
-                  <div class="table-shell mt-4">
-                    <table class="data-table">
-                      <thead><tr><th>{{ t('Unit') }}</th><th>{{ t('Line') }}</th><th>{{ t('Section') }}</th><th>{{ t('Status') }}</th><th>{{ t('Route state') }}</th><th></th></tr></thead>
-                      <tbody>
-                        <tr v-for="unit in operatorWorkbench.units" :key="unit.id">
-                          <td class="font-bold">{{ unit.unitCode }}</td>
-                          <td>{{ referenceLabel(unit.currentProductionLine) }}</td>
-                          <td>{{ referenceLabel(unit.currentSection) }}</td>
-                          <td><span :class="statusClass(unit.requiresAttention ? 'Blocked' : unit.status)">{{ displayStatus(unit.status) }}</span></td>
-                          <td>{{ t(unit.routeState) }}</td>
-                          <td>
-                            <button class="btn-secondary btn-compact" type="button" @click="prepareTransfer(unitsById.get(unit.id) || { id: unit.id, unitCode: unit.unitCode, unitType: 'Subproduto', status: unit.status, qualityStatus: unit.qualityStatus, manufacturingOrderId: 0 })">{{ unit.canTransfer ? t('Transfer') : t('Trace') }}</button>
-                          </td>
-                        </tr>
-                        <tr v-if="!operatorWorkbench.units.length"><td colspan="6" class="text-center">{{ t('No operational records are currently available for this table.') }}</td></tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-                <div class="industrial-panel">
-                  <div class="section-heading"><div><p>{{ t('Transfer targets') }}</p><h3>{{ t('Available target sections') }}</h3></div></div>
-                  <div class="compact-card-list mt-4 grid gap-3">
-                    <article v-for="target in operatorWorkbench.transferTargets" :key="target.sectionId" class="decision-card tone-info">
-                      <span>{{ referenceLabel(target.productionLine) }}</span>
-                      <strong>{{ target.sectionCode }}</strong>
-                      <p>{{ translateSectionName(target.name) }} · {{ target.currentWip }} {{ t('units') }}</p>
-                    </article>
-                    <p v-if="!operatorWorkbench.transferTargets.length" class="empty-state"><strong>{{ t('No records found') }}</strong></p>
-                  </div>
-                </div>
-              </section>
-
-              <section class="industrial-panel">
-                <div class="section-heading"><div><p>{{ t('Recent transfers') }}</p><h3>{{ t('ProductUnit movement audit') }}</h3></div></div>
-                <div class="table-shell compact-table-shell mt-4">
-                  <table class="data-table">
-                    <thead><tr><th>{{ t('Unit') }}</th><th>{{ t('From') }}</th><th>{{ t('To') }}</th><th>{{ t('Event') }}</th><th>{{ t('Timestamp') }}</th></tr></thead>
-                    <tbody>
-                      <tr v-for="movement in operatorWorkbench.recentTransfers" :key="movement.id">
-                        <td>{{ movement.unit?.code || '-' }}</td>
-                        <td>{{ referenceLabel(movement.fromSection) }}</td>
-                        <td>{{ referenceLabel(movement.toSection) }}</td>
-                        <td>{{ displayOperationalEvent(movement.eventType) }}</td>
-                        <td>{{ formatDate(movement.occurredAt) }}</td>
-                      </tr>
-                      <tr v-if="!operatorWorkbench.recentTransfers.length"><td colspan="5" class="text-center">{{ t('No records found') }}</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            </div>
-
-            <!-- CUSTOMER ORDERS VIEW -->
-            <div v-if="activeView === 'customerOrders'" class="space-y-5 lg:space-y-6">
-              <section class="kpi-grid">
-                <article class="kpi-card tone-info"><span>{{ t('Encomendas ativas') }}</span><strong>{{ customerOrderSummary.active }}</strong><p>{{ t('A decorrer ou em preparação') }}</p></article>
-                <article class="kpi-card tone-info"><span>{{ t('Em produção') }}</span><strong>{{ customerOrderSummary.production }}</strong><p>{{ t('Em fabrico neste momento') }}</p></article>
-                <article class="kpi-card tone-success"><span>{{ t('Prontas') }}</span><strong>{{ customerOrderSummary.ready }}</strong><p>{{ t('Preparadas para levantamento') }}</p></article>
-                <article class="kpi-card tone-muted"><span>{{ t('Concluídas') }}</span><strong>{{ customerOrderSummary.completed }}</strong><p>{{ t('Entregues ou finalizadas') }}</p></article>
-              </section>
-
-              <section class="industrial-panel customer-toolbar">
-                <div class="customer-toolbar-main">
-                  <label class="customer-search-field">
-                    <span>{{ t('Pesquisar') }}</span>
-                    <input v-model="customerOrderSearch" class="form-input" :placeholder="t('Pesquisar por nome ou código de rastreio')" />
-                  </label>
-                  <div class="mobile-tabs">
-                    <button v-for="filter in customerOrderFilters" :key="filter.key" class="mobile-tab" :class="customerOrderFilter === filter.key ? 'mobile-tab-active' : ''" type="button" @click="customerOrderFilter = filter.key">
-                      {{ filter.label }} <span class="ml-1 opacity-70">{{ filter.count }}</span>
+                  <div class="mt-5 flex flex-wrap gap-2">
+                    <button
+                      v-for="config in parameterConfigs"
+                      :key="config.key"
+                      type="button"
+                      class="mobile-tab"
+                      :class="parameterTab === config.key ? 'mobile-tab-active' : ''"
+                      @click="parameterTab = config.key"
+                    >
+                      {{ t(config.title) }}
                     </button>
                   </div>
-                </div>
-                <div class="flex flex-wrap gap-3">
-                  <button class="btn-primary" type="button" @click="navigateTo('customerNewOrder')">{{ t('Nova encomenda') }}</button>
-                  <button class="btn-secondary" type="button" @click="loadData(false)">{{ t('Atualizar') }}</button>
-                </div>
-              </section>
+                </section>
 
-              <section v-if="!customerOrders.length" class="customer-empty-state">
-                <strong>{{ t('Ainda não existem encomendas.') }}</strong>
-                <p>{{ t('Crie uma nova encomenda para começar.') }}</p>
-                <button class="btn-primary" type="button" @click="navigateTo('customerNewOrder')">{{ t('Nova encomenda') }}</button>
-              </section>
+                <CrudPanel
+                  v-for="config in activeCrudConfigs"
+                  :key="config.key"
+                  :config="crudPanelConfig(config)"
+                  :form="crudForms[config.key] || {}"
+                  :form-open="Boolean(crudOpen[config.key])"
+                  :editing="crudEditingId[config.key] !== null && crudEditingId[config.key] !== undefined"
+                  :message="crudMessages[config.key]"
+                  :status-class="statusClass"
+                  @add="startCrudAdd(config)"
+                  @edit="startCrudEdit(config, $event)"
+                  @cancel="cancelCrud(config)"
+                  @save="saveCrud(config)"
+                  @delete="removeCrud(config, $event)"
+                  @update-field="(key, value) => updateCrudField(config, key, value)"
+                />
+              </div>
 
-              <section v-else-if="!filteredCustomerOrders.length" class="customer-empty-state">
-                <strong>{{ t('Nenhuma encomenda encontrada com estes filtros.') }}</strong>
-                <p>{{ t('Ajuste a pesquisa ou escolha outro filtro.') }}</p>
-              </section>
-
-              <section v-else class="grid gap-4 xl:grid-cols-2">
-                <article v-for="order in filteredCustomerOrders" :key="order.publicTrackingCode" class="customer-order-card" :class="customerOrderTone(order)">
-                  <div class="flex flex-wrap items-start justify-between gap-3">
-                    <p class="customer-card-code">
-                      <span>{{ t('Código de rastreio') }}:</span>
-                      <strong>{{ order.publicTrackingCode || '-' }}</strong>
-                    </p>
-                    <span class="customer-state-chip">{{ customerOrderState(order) }}</span>
-                  </div>
-                  <h4 class="customer-order-name">{{ customerOrderName(order) }}</h4>
-                  <p class="mt-1 text-sm font-bold text-slate-800 dark:text-slate-100">{{ order.order?.product || '-' }}<span v-if="order.order?.variant"> · {{ order.order.variant }}</span></p>
-                  <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">{{ t('Data prevista') }}: {{ formatDate(order.order?.scheduledUntil) }}</p>
-                  <div class="mt-4">
-                    <div class="flex items-center justify-between gap-3 text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">
-                      <span>{{ customerOrderState(order) }}</span>
-                      <span>{{ customerProgressPercent(order) }}%</span>
+              <!-- OVERVIEW (DASHBOARD) VIEW -->
+              <div
+                v-if="activeView === 'overview'"
+                class="space-y-5 lg:space-y-6"
+              >
+                <section class="ops-hero">
+                  <div class="grid gap-6 xl:grid-cols-[1.1fr_0.9fr] xl:items-center">
+                    <div class="min-w-0">
+                      <p class="text-xs font-bold uppercase tracking-normal text-drivolution-700">
+                        {{ t('Automotive WIP traceability') }}
+                      </p>
+                      <h3 class="mt-2 max-w-3xl text-2xl font-black leading-tight tracking-normal sm:text-3xl">
+                        {{ t('Line state command overview') }}
+                      </h3>
+                      <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-300">
+                        {{ t('Line state command overview description') }}
+                      </p>
+                      <div class="mt-4 flex flex-wrap gap-2">
+                        <span class="domain-pill">{{ t('ProductUnit-centred traceability') }}</span>
+                        <span class="domain-pill">{{ t('Support as intra-line anchor') }}</span>
+                        <span class="domain-pill">{{ t('Rack as post-line logistics') }}</span>
+                        <span class="domain-pill">{{ t('Material lot genealogy') }}</span>
+                      </div>
                     </div>
-                    <div class="mt-2 h-2 rounded-full bg-slate-200 dark:bg-slate-700">
-                      <div class="h-2 rounded-full bg-drivolution-500" :style="{ width: `${customerProgressPercent(order)}%` }"></div>
-                    </div>
-                  </div>
-                  <p class="mt-3 text-sm font-semibold text-slate-600 dark:text-slate-300">{{ customerNextStep(order) }}</p>
-                  <button class="btn-secondary mt-4" type="button" @click="openCustomerOrderDetail(order.publicTrackingCode)">{{ t('Ver detalhe') }}</button>
-                </article>
-              </section>
-
-              <section v-if="customerLookup" class="customer-detail-panel">
-                <div class="flex flex-wrap items-start justify-between gap-4">
-                  <div>
-                    <p class="text-xs font-black uppercase tracking-normal text-drivolution-700 dark:text-drivolution-300">{{ t('Detalhe da encomenda') }}</p>
-                    <h3 class="mt-1 text-xl font-black text-slate-950 dark:text-white">{{ customerOrderName(customerLookup) }}</h3>
-                    <p class="mt-1 text-sm font-bold text-slate-700 dark:text-slate-200">{{ customerLookup.order?.product || '-' }}<span v-if="customerLookup.order?.variant"> · {{ customerLookup.order.variant }}</span></p>
-                    <p class="mt-1 text-sm font-semibold text-slate-600 dark:text-slate-300">{{ t('Código de rastreio') }}: {{ customerLookup.publicTrackingCode }}</p>
-                  </div>
-                  <span class="customer-state-chip">{{ customerOrderState(customerLookup) }}</span>
-                </div>
-                <div class="customer-detail-progress">
-                  <article class="customer-status-card">
-                    <span>{{ t('Estado da encomenda') }}</span>
-                    <strong>{{ customerOrderState(customerLookup) }}</strong>
-                    <p>{{ customerNextStep(customerLookup) }}</p>
-                    <div class="mt-4 h-2 rounded-full bg-slate-200 dark:bg-slate-700">
-                      <div class="h-2 rounded-full bg-drivolution-500" :style="{ width: `${customerProgressPercent(customerLookup)}%` }"></div>
-                    </div>
-                  </article>
-                  <div class="client-order-stages">
-                    <div
-                      v-for="step in customerProgressSteps(customerLookup)"
-                      :key="step.key"
-                      class="client-order-stage"
-                      :class="`client-order-stage--${step.state}`"
-                      :data-stage-state="step.state"
-                    >
-                      <span class="client-order-stage__dot"></span>
-                      <span class="client-order-stage__label">{{ step.label }}</span>
+                    <div class="ops-hero-visual">
+                      <img
+                        :src="lineDoorUrl"
+                        alt="Door production line"
+                        class="max-h-[14rem] w-full max-w-xl justify-self-center rounded-lg bg-white object-contain p-2 dark:bg-slate-900"
+                      >
+                      <div class="mt-3 grid gap-2 sm:grid-cols-3">
+                        <span class="system-pill"><span>{{ t('Highest WIP') }}</span><strong>{{ topWipSection ? translateSectionName(topWipSection.section) : '-' }}</strong></span>
+                        <span class="system-pill"><span>{{ t('PASS rate') }}</span><strong>{{ passRate === null ? '-' : `${passRate}%` }}</strong></span>
+                        <span class="system-pill"><span>{{ t('Loaded supports') }}</span><strong>{{ loadedSupports.length }}</strong></span>
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div class="mt-5 grid gap-4 md:grid-cols-3">
-                  <article class="customer-info-tile"><span>{{ t('Estado atual') }}</span><strong>{{ customerOrderState(customerLookup) }}</strong></article>
-                  <article class="customer-info-tile"><span>{{ t('Data prevista') }}</span><strong>{{ formatDate(customerLookup.order?.scheduledUntil) }}</strong></article>
-                  <article class="customer-info-tile"><span>{{ t('Atualização mais recente') }}</span><strong>{{ customerLatestUpdate(customerLookup) }}</strong></article>
-                </div>
-                <div class="mt-5">
-                  <p class="text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">{{ t('Histórico resumido') }}</p>
-                  <ol class="customer-history-list mt-3">
-                    <li v-for="milestone in (customerLookup.milestones || []).slice(-4)" :key="`${milestone.occurredAt}-${milestone.eventType}`">
-                      <span>{{ formatDate(milestone.occurredAt) }}</span>
-                      <strong>{{ customerHistoryLabel(milestone) }}</strong>
-                    </li>
-                    <li v-if="!customerLookup.milestones?.length">
-                      <span>{{ t('Pedido recebido') }}</span>
-                      <strong>{{ t('A encomenda foi registada.') }}</strong>
-                    </li>
-                  </ol>
-                </div>
-              </section>
-            </div>
-
-            <!-- NEW CUSTOMER ORDER VIEW -->
-            <div v-if="activeView === 'customerNewOrder'" class="space-y-5 lg:space-y-6">
-              <section v-if="customerCreatedOrder" class="customer-confirmation">
-                <span>{{ t('Encomenda criada com sucesso') }}</span>
-                <h3>{{ customerOrderName(customerCreatedOrder) }}</h3>
-                <strong>{{ t('Código de rastreio') }}: {{ customerCreatedOrder.publicTrackingCode }}</strong>
-                <p>{{ t('A encomenda será registada como pedido recebido.') }}</p>
-                <div class="mt-5 flex flex-wrap justify-center gap-3">
-                  <button class="btn-primary" type="button" @click="openCustomerOrderDetail(customerCreatedOrder.publicTrackingCode); activeView = 'customerOrders'">{{ t('Ver encomenda') }}</button>
-                  <button class="btn-secondary" type="button" @click="resetCustomerOrderForm">{{ t('Criar nova encomenda') }}</button>
-                  <button class="btn-secondary" type="button" @click="navigateTo('customerOrders')">{{ t('As minhas encomendas') }}</button>
-                </div>
-              </section>
-              <section v-else class="industrial-panel customer-order-single-card">
-                <form class="customer-order-form" @submit.prevent="submitCustomerOrder">
-                  <label class="form-label">{{ t('Nome da encomenda') }}
-                    <input v-model="customerOrderForm.name" class="form-input" :placeholder="t('Ex.: Porta esquerda lote junho')" />
-                  </label>
-                  <div class="grid gap-4 md:grid-cols-2">
-                    <label class="form-label">{{ t('Produto') }}
-                      <select v-model="customerOrderForm.productId" class="form-input">
-                        <option value="">{{ t('Selecione produto') }}</option>
-                        <option v-for="product in customerProductOptions" :key="product.id" :value="product.id">{{ translateMaterialName(product.name) }}</option>
-                      </select>
-                    </label>
-                    <label class="form-label">{{ t('Variante') }}
-                      <select v-model="customerOrderForm.variantId" class="form-input">
-                        <option value="">{{ t('Selecione variante') }}</option>
-                        <option v-for="variant in customerVariantOptions" :key="variant.id" :value="variant.id">{{ variant.name }}</option>
-                      </select>
-                    </label>
-                    <label class="form-label">{{ t('Quantidade') }}<input v-model.number="customerOrderForm.quantity" min="1" max="99" type="number" class="form-input" /></label>
-                  </div>
-                  <label class="form-label">{{ t('Observações para a encomenda') }}<textarea v-model="customerOrderForm.observations" class="form-input min-h-28"></textarea></label>
-                  <div class="customer-order-summary-table">
-                    <div>
-                      <span>{{ t('Resumo da encomenda') }}</span>
-                      <strong>{{ customerOrderDisplayName }}</strong>
-                    </div>
-                    <table>
-                      <tbody>
-                        <tr><th>{{ t('Nome') }}</th><td>{{ customerOrderDisplayName }}</td></tr>
-                        <tr><th>{{ t('Produto') }}</th><td>{{ selectedCustomerProduct ? translateMaterialName(selectedCustomerProduct.name) : t('Por escolher') }}</td></tr>
-                        <tr><th>{{ t('Variante') }}</th><td>{{ selectedCustomerVariant?.name || t('Por escolher') }}</td></tr>
-                        <tr><th>{{ t('Quantidade') }}</th><td>{{ customerOrderForm.quantity || 0 }}</td></tr>
-                        <tr><th>{{ t('Estado inicial') }}</th><td>{{ t('Pedido recebido') }}</td></tr>
-                      </tbody>
-                    </table>
-                  </div>
-                  <p v-if="customerOrderStatus" class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-100">{{ customerOrderStatus }}</p>
-                  <div class="customer-order-submit-row">
-                    <p>{{ t('A encomenda será registada como pedido recebido.') }}</p>
-                    <button class="btn-primary" type="submit">{{ t('Submeter encomenda') }}</button>
-                  </div>
-                </form>
-              </section>
-            </div>
-
-            <!-- CUSTOMER LOOKUP VIEW -->
-            <div v-if="activeView === 'customer'" class="space-y-5 lg:space-y-6">
-              <section class="ops-hero">
-                <div class="section-heading">
-                  <div>
-                    <p>{{ t('Customer tracking') }}</p>
-                    <h3>{{ t('Customer order lookup') }}</h3>
-                    <p class="section-description">{{ t('Public tracking view for manufacturing order progress and unit milestones.') }}</p>
-                  </div>
-                </div>
-                <form class="mt-5 flex flex-col gap-3 sm:flex-row" @submit.prevent="lookupCustomerOrder">
-                  <label class="form-label flex-1">{{ t('Public tracking code') }}<input v-model="customerLookupCode" class="form-input" /></label>
-                  <button class="btn-primary self-end" type="submit">{{ t('Search') }}</button>
-                </form>
-                <div v-if="roleContextCards.length" class="mt-5 grid gap-3 sm:grid-cols-3">
-                  <article v-for="card in roleContextCards" :key="card.key" class="kpi-card" :class="card.tone">
+                </section>
+                <section
+                  v-if="roleContextCards.length"
+                  class="kpi-grid"
+                >
+                  <article
+                    v-for="card in roleContextCards"
+                    :key="card.key"
+                    class="kpi-card"
+                    :class="card.tone"
+                  >
                     <span>{{ card.label }}</span>
                     <strong>{{ card.value }}</strong>
                     <p>{{ card.detail }}</p>
                   </article>
-                </div>
-                <p v-if="customerLookupStatus" class="mt-4 rounded-lg border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">{{ customerLookupStatus }}</p>
-              </section>
-
-              <template v-if="customerLookup">
+                </section>
                 <section class="kpi-grid">
-                  <article class="kpi-card tone-info"><span>{{ t('Código público de rastreio') }}</span><strong>{{ customerLookup.publicTrackingCode || '-' }}</strong><p>{{ customerLookup.customer?.name || '-' }}</p></article>
-                  <article class="kpi-card tone-muted"><span>{{ t('Status') }}</span><strong>{{ translateStatus(customerLookup.order?.status || '-') }}</strong><p>{{ customerLookup.publicTrackingCode }}</p></article>
-                  <article class="kpi-card tone-info"><span>{{ t('Units') }}</span><strong>{{ customerLookup.summary?.units ?? 0 }}</strong><p>{{ customerLookup.summary?.inFlow ?? 0 }} {{ t('in flow') }}</p></article>
-                  <article class="kpi-card" :class="customerLookup.summary?.attention ? 'tone-warning' : 'tone-success'"><span>{{ t('Attention') }}</span><strong>{{ customerLookup.summary?.attention ?? 0 }}</strong><p>{{ t('Customer-visible quality and route state') }}</p></article>
-                </section>
-
-                <section class="industrial-panel">
-                  <div class="section-heading"><div><p>{{ t('Unit progress') }}</p><h3>{{ t('ProductUnit customer status') }}</h3></div></div>
-                  <div class="table-shell mt-4">
-                    <table class="data-table">
-                      <thead><tr><th>{{ t('Stage') }}</th><th>{{ t('Status') }}</th><th>{{ t('Quality') }}</th><th>{{ t('Last movement') }}</th></tr></thead>
-                      <tbody>
-                        <tr v-for="(unit, index) in customerLookup.units || []" :key="`${customerLookup.publicTrackingCode}-${index}`">
-                          <td>{{ unit.currentStage || '-' }}</td>
-                          <td><span :class="statusClass(unit.status)">{{ displayStatus(unit.customerState || unit.status) }}</span></td>
-                          <td>{{ unit.qualityStatus || '-' }}</td>
-                          <td>{{ formatDate(unit.lastMovementAt) }}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-
-                <section class="industrial-panel">
-                  <div class="section-heading"><div><p>{{ t('Milestones') }}</p><h3>{{ t('Customer movement timeline') }}</h3></div></div>
-                  <div class="table-shell mt-4">
-                    <table class="data-table">
-                      <thead><tr><th>{{ t('Timestamp') }}</th><th>{{ t('Último marco') }}</th><th>{{ t('Stage') }}</th></tr></thead>
-                      <tbody>
-                        <tr v-for="milestone in customerLookup.milestones || []" :key="`${milestone.occurredAt}-${milestone.eventType}`">
-                          <td>{{ formatDate(milestone.occurredAt) }}</td>
-                          <td>{{ milestone.eventType }}</td>
-                          <td>{{ milestone.stage || '-' }}</td>
-                        </tr>
-                        <tr v-if="!customerLookup.milestones?.length"><td colspan="3" class="text-center">{{ t('No records found') }}</td></tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-              </template>
-            </div>
-
-            <!-- ORDERS VIEW -->
-            <div v-if="false && activeView === 'orders'" class="card p-6">
-              <div class="section-heading"><div><p>{{ t('Planning') }}</p><h3>{{ t('Manufacturing orders') }}</h3></div></div>
-              <div class="mt-5 overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700">
-                <table class="data-table">
-                  <thead><tr><th>{{ t('Order') }}</th><th>{{ t('Status') }}</th><th>{{ t('Planned qty') }}</th><th>{{ t('Scheduled until') }}</th><th>{{ t('Notes') }}</th></tr></thead>
-                  <tbody>
-                    <tr v-for="order in orders" :key="order.id">
-                      <td class="font-bold">{{ order.orderNumber }}</td>
-                      <td><span :class="statusClass(order.status)">{{ translateStatus(order.status) }}</span></td>
-                      <td>{{ order.plannedQty }}</td>
-                      <td>{{ formatDate(order.scheduledUntil) }}</td>
-                      <td>{{ order.observations }}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <!-- UNITS VIEW -->
-            <div v-if="false && activeView === 'units'" class="space-y-6">
-              <section class="grid gap-4 md:grid-cols-3">
-                <div class="metric-card"><span>{{ t('Traceable units') }}</span><strong>{{ units.length }}</strong></div>
-                <div class="metric-card"><span>{{ t('Active / held') }}</span><strong>{{ activeUnits.length }}</strong></div>
-                <div class="metric-card"><span>{{ t('Deviations') }}</span><strong>{{ blockedUnits.length }}</strong></div>
-              </section>
-              <section class="card p-6">
-                <div class="section-heading"><div><p>{{ t('Unitary traceability') }}</p><h3>{{ t('Product units and subproducts') }}</h3></div></div>
-                <div class="mt-5 overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700">
-                  <table class="data-table">
-                    <thead><tr><th>{{ t('Unit') }}</th><th>{{ t('Type') }}</th><th>{{ t('Status') }}</th><th>{{ t('Quality') }}</th><th>{{ t('Current support') }}</th><th>{{ t('Current section') }}</th></tr></thead>
-                    <tbody>
-                      <tr v-for="unit in units" :key="unit.id">
-                        <td class="font-bold">{{ unit.unitCode }}</td>
-                        <td>{{ translateUnitType(unit.unitType) }}</td>
-                        <td><span :class="statusClass(unit.status)">{{ displayStatus(unit.status) }}</span></td>
-                        <td><span :class="statusClass(unit.qualityStatus)">{{ translateQualityResult(unit.qualityStatus) }}</span></td>
-                        <td>{{ supportCode(unit.currentSupportId) }}</td>
-                        <td>{{ sectionName(unit.currentSectionId) }}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            </div>
-
-            <!-- SUPPORTS VIEW -->
-            <div v-if="false && activeView === 'supports'" class="space-y-6">
-              <section class="card overflow-hidden p-6">
-                <div class="section-heading"><div><p>{{ t('Physical tracking') }}</p><h3>{{ t('Support is the intra-line anchor') }}</h3></div></div>
-                <img :src="lineDoorUrl" alt="Support-based line" class="mt-5 rounded-lg border border-slate-200 dark:border-slate-700" />
-              </section>
-              <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                <div v-for="support in supports" :key="support.id" class="card p-5">
-                  <div class="flex items-start justify-between gap-4">
-                    <div><p class="text-sm font-bold uppercase tracking-normal text-slate-500 dark:text-slate-400">{{ t('Support') }}</p><h3 class="mt-1 text-xl font-black">{{ support.supportCode }}</h3></div>
-                    <span :class="statusClass(support.status)">{{ translateStatus(support.status) }}</span>
-                  </div>
-                  <p class="mt-4 text-sm text-slate-600 dark:text-slate-300">{{ t('Current section') }}</p>
-                  <p class="text-base font-bold text-slate-950 dark:text-slate-50">{{ sectionName(support.currentSectionId) }}</p>
-                </div>
-              </section>
-            </div>
-
-            <!-- MATERIALS VIEW -->
-            <div v-if="false && activeView === 'materials'" class="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-              <section class="card p-6">
-                <div class="section-heading"><div><p>{{ t('Items and lots') }}</p><h3>{{ t('Raw materials') }}</h3></div></div>
-                <div class="mt-5 space-y-3">
-                  <div v-for="material in materials" :key="material.id" class="rounded-2xl border border-slate-200 p-4 dark:border-slate-700">
-                    <p class="font-black text-slate-950 dark:text-slate-50">{{ translateMaterialName(material.name) }}</p>
-                    <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">{{ material.info }}</p>
-                  </div>
-                </div>
-              </section>
-              <section class="card p-6">
-                <div class="section-heading"><div><p>{{ t('Genealogy') }}</p><h3>{{ t('Material lots') }}</h3></div></div>
-                <div class="mt-5 overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700">
-                  <table class="data-table">
-                    <thead><tr><th>{{ t('Lot') }}</th><th>{{ t('Material') }}</th><th>{{ t('Quantity') }}</th><th>{{ t('Section') }}</th></tr></thead>
-                    <tbody>
-                      <tr v-for="lot in lots" :key="lot.id">
-                        <td class="font-bold">{{ lot.lotNumber }}</td>
-                        <td>{{ materialName(lot.rawMaterialId) }}</td>
-                        <td>{{ lot.lotQuantity }} {{ translateUnitOfMeasure(lot.lotUnit) }}</td>
-                        <td>{{ sectionName(lot.sectionId) }}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            </div>
-
-            <!-- QUALITY VIEW -->
-            <div v-if="false && activeView === 'quality'" class="space-y-6">
-              <section class="grid gap-4 md:grid-cols-3">
-                <div class="metric-card"><span>{{ t('Results') }}</span><strong>{{ quality.length }}</strong></div>
-                <div class="metric-card"><span>{{ t('PASS') }}</span><strong>{{ quality.filter((item) => item.result === 'PASS').length }}</strong></div>
-                <div class="metric-card"><span>{{ t('FAIL') }}</span><strong>{{ quality.filter((item) => item.result === 'FAIL').length }}</strong></div>
-              </section>
-              <section class="card p-6">
-                <div class="section-heading"><div><p>{{ t('Quality evidence') }}</p><h3>{{ t('Results, nonconformities, rework and scrap') }}</h3></div></div>
-                <div class="mt-5 overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700">
-                  <table class="data-table">
-                    <thead><tr><th>{{ t('Unit') }}</th><th>{{ t('Result') }}</th><th>{{ t('Recorded at') }}</th><th>{{ t('Notes') }}</th></tr></thead>
-                    <tbody>
-                      <tr v-for="record in quality" :key="record.id">
-                        <td class="font-bold">{{ unitCode(record.productUnitId) }}</td>
-                        <td><span :class="statusClass(record.result)">{{ translateQualityResult(record.result) }}</span></td>
-                        <td>{{ formatDate(record.recordedAt) }}</td>
-                        <td>{{ record.notes }}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            </div>
-
-            <!-- RACKS VIEW -->
-            <div v-if="false && activeView === 'racks'" class="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-              <section class="card p-6">
-                <div class="section-heading"><div><p>{{ t('Post-line logistics') }}</p><h3>{{ t('Racks are not the WIP anchor') }}</h3></div></div>
-                <p class="mt-4 text-slate-600 dark:text-slate-300">{{ t('Racks only aggregate supports after the controlled line. The support remains the traceability reference for intra-line WIP.') }}</p>
-                <div class="mt-5 grid gap-4">
-                  <div v-for="rack in racks" :key="rack.id" class="rounded-2xl border border-slate-200 p-4 dark:border-slate-700">
-                    <div class="flex items-center justify-between"><strong>{{ rack.rackCode }}</strong><span :class="statusClass(rack.status)">{{ translateStatus(rack.status) }}</span></div>
-                    <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">{{ sectionName(rack.sectionId) }}</p>
-                  </div>
-                </div>
-              </section>
-              <section class="card overflow-hidden p-6">
-                <div class="section-heading"><div><p>{{ t('Extended view') }}</p><h3>{{ t('Subproduct to final assembly concept') }}</h3></div></div>
-                <img :src="lineCarUrl" alt="Automotive production line" class="mt-5 rounded-lg border border-slate-200 dark:border-slate-700" />
-              </section>
-            </div>
-
-            <!-- EVENTS VIEW -->
-            <div v-if="activeView === 'events'" class="grid gap-5 xl:grid-cols-2">
-              <section class="xl:col-span-2 kpi-grid">
-                <article v-for="metric in eventKpis" :key="metric.key" class="kpi-card" :class="metric.tone">
-                  <span>{{ t(metric.label) }}</span>
-                  <strong>{{ metric.value }}</strong>
-                  <p>{{ t(metric.detail) }}</p>
-                </article>
-              </section>
-              <section class="card p-5 sm:p-6">
-                <div class="section-heading"><div><p>{{ t('Simulation') }}</p><h3>{{ t('Execute event playback') }}</h3></div></div>
-                <p class="mt-3 text-slate-600 dark:text-slate-300">{{ t('Advances supports across the nominal door production line and updates the audit trail.') }}</p>
-                <button class="btn-primary mt-5" :disabled="!can('Simulation.Manage')" @click="executePlayback">{{ t('Execute playback scenario') }}</button>
-              </section>
-              <section class="card p-5 sm:p-6">
-                <div class="section-heading"><div><p>{{ t('Controlled event') }}</p><h3>{{ t('Inject manual factory event') }}</h3></div></div>
-                <div class="mt-5 grid gap-4">
-                  <label class="form-label">{{ t('Event type') }}<input v-model="manualEvent.eventType" class="form-input" /></label>
-                  <label class="form-label">{{ t('Support code') }}<input v-model="manualEvent.supportCode" class="form-input" /></label>
-                  <label class="form-label">{{ t('Section / Rack code') }}<input v-model="manualEvent.sectionCode" class="form-input" /></label>
-                  <label class="form-label">{{ t('Unit code') }}<input v-model="manualEvent.productUnitCode" class="form-input" /></label>
-                  <label class="form-label">{{ t('Result') }}
-                    <select v-model="manualEvent.result" class="form-input">
-                      <option value="PASS">{{ t('PASS') }}</option>
-                      <option value="FAIL">{{ t('FAIL') }}</option>
-                    </select>
-                  </label>
-                  <label class="form-label">{{ t('Notes') }}<textarea v-model="manualEvent.notes" class="form-input min-h-24"></textarea></label>
-                </div>
-                <button class="btn-primary mt-5" :disabled="!can('ProductUnits.Transfer') && !can('Quality.Record') && !can('Racks.Manage')" @click="injectManualEvent">{{ t('Inject manual event') }}</button>
-              </section>
-              <p v-if="eventStatus" class="2xl:col-span-2 rounded-lg border border-slate-200 bg-white p-4 font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">{{ eventStatus }}</p>
-              <section class="2xl:col-span-2 card p-5 sm:p-6">
-                <div class="section-heading"><div><p>{{ t('Operational events') }}</p><h3>{{ t('Recent event stream') }}</h3></div></div>
-                <div class="table-shell compact-table-shell">
-                  <table class="data-table">
-                    <thead><tr><th>{{ t('Event') }}</th><th>{{ t('Target') }}</th><th>{{ t('Location') }}</th><th>{{ t('Source') }}</th><th>{{ t('Detail') }}</th><th>{{ t('Timestamp') }}</th></tr></thead>
-                    <tbody>
-                      <tr v-for="event in recentOperationalEvents" :key="event.eventCode">
-                        <td><span class="event-chip" :class="statusClass(event.eventType)">{{ displayOperationalEvent(event.eventType) }}</span></td>
-                        <td>{{ operationalEventTarget(event) }}</td>
-                        <td>{{ operationalEventLocation(event) }}</td>
-                        <td>{{ t(event.source) }}</td>
-                        <td class="max-w-[22rem] truncate" :title="operationalEventDetail(event)">{{ operationalEventDetail(event) }}</td>
-                        <td>{{ formatDate(event.occurredAt) }}</td>
-                      </tr>
-                      <tr v-if="!recentOperationalEvents.length"><td colspan="6" class="text-center">{{ t('No records found') }}</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-              <section class="2xl:col-span-2 card p-5 sm:p-6">
-                <div class="section-heading"><div><p>{{ t('Audit trail') }}</p><h3>{{ t('Support localization history') }}</h3></div></div>
-                <p class="mt-3 text-sm text-slate-600 dark:text-slate-300">{{ t('Support localization history is generated by movements and is read-only in this interface.') }}</p>
-                <div class="table-shell">
-                  <table class="data-table">
-                    <thead><tr><th>{{ t('Support') }}</th><th>{{ t('Section') }}</th><th>{{ t('Event') }}</th><th>{{ t('Timestamp') }}</th></tr></thead>
-                    <tbody>
-                      <tr v-for="history in supportHistory" :key="history.id">
-                        <td>{{ supportCode(history.supportId) }}</td>
-                        <td>{{ sectionName(history.sectionId) }}</td>
-                        <td>{{ displayOperationalEvent(history.eventType) }}</td>
-                        <td>{{ formatDate(history.dateTime) }}</td>
-                      </tr>
-                      <tr v-if="!supportHistory.length"><td colspan="4" class="text-center">{{ t('No records found') }}</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            </div>
-
-            <!-- GRAFANA ANALYTICS VIEW -->
-            <div v-if="activeView === 'analytics'">
-              <GrafanaAnalyticsView
-                :theme="theme"
-                :current-locale="locale"
-                :api-status="apiStatus"
-                :api-base-url="apiBaseUrl"
-                :operational-data="analyticsOperationalData"
-                @refresh="loadData(false)"
-              />
-            </div>
-
-            <!-- USERS VIEW -->
-            <div v-if="activeView === 'users' && canManageUsers" class="space-y-5 lg:space-y-6">
-              <section class="ops-hero">
-                <div class="section-heading">
-                  <div class="min-w-0">
-                    <p>{{ t('Admin') }}</p>
-                    <h3>{{ t('User Management') }}</h3>
-                    <p class="section-description">{{ t('Local user management keeps demo access explicit without changing backend authentication.') }}</p>
-                  </div>
-                </div>
-                <div class="kpi-grid mt-5">
-                  <article v-for="metric in userStatusCards" :key="metric.key" class="kpi-card" :class="metric.tone">
+                  <article
+                    v-for="metric in overviewKpis"
+                    :key="metric.key"
+                    class="kpi-card"
+                    :class="metric.tone"
+                  >
                     <span>{{ t(metric.label) }}</span>
                     <strong>{{ metric.value }}</strong>
                     <p>{{ t(metric.detail) }}</p>
                   </article>
-                </div>
-              </section>
-              <section class="industrial-panel">
-                <div class="section-heading"><div><p>{{ t('Access control') }}</p><h3>{{ editingUsername ? t('Editing user') : t('Create or update user') }}</h3></div></div>
-                <form @submit.prevent="registerUser(false)" class="mt-5 grid gap-4 lg:grid-cols-2">
-                  <label class="form-label">{{ t('Name / full name') }}<input v-model="registerForm.name" class="form-input" /></label>
-                  <label class="form-label">{{ t('Username') }}<input v-model="registerForm.username" class="form-input disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:disabled:bg-slate-800" :disabled="editingUsername !== null" /></label>
-                  <label class="form-label">{{ t('Email') }}<input v-model="registerForm.email" type="email" class="form-input" /></label>
-                  <label class="form-label">{{ t('Role') }}
-                    <select v-model="registerForm.roleKey" class="form-input disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:disabled:bg-slate-800" :disabled="editingUsername === defaultUser.username">
-                      <option value="admin">{{ t('Administrator') }}</option>
-                      <option value="supervisor">{{ t('Supervisor') }}</option>
-                      <option value="operator">{{ t('Operator') }}</option>
-                      <option value="quality">{{ t('Quality technician') }}</option>
-                      <option value="logistics">{{ t('Logistics') }}</option>
-                      <option value="client">{{ t('Client') }}</option>
+                </section>
+                <section
+                  v-if="flowSummary.lineSummaries.length"
+                  class="industrial-panel"
+                >
+                  <div class="section-heading">
+                    <div>
+                      <p>{{ t('Flow validation') }}</p>
+                      <h3>{{ t('Multi-line flow') }}</h3>
+                      <p class="section-description">
+                        {{ t('Current ProductUnit WIP grouped by production line and section.') }}
+                      </p>
+                    </div>
+                  </div>
+                  <div class="mt-4 grid gap-3 sm:grid-cols-3">
+                    <article
+                      v-for="metric in flowKpis"
+                      :key="metric.key"
+                      class="kpi-card"
+                      :class="metric.tone"
+                    >
+                      <span>{{ t(metric.label) }}</span>
+                      <strong>{{ metric.value }}</strong>
+                      <p>{{ t(metric.detail) }}</p>
+                    </article>
+                  </div>
+                  <div class="flow-filter-row">
+                    <select
+                      v-model="flowLineFilter"
+                      class="compact-select"
+                      :aria-label="t('Production line')"
+                    >
+                      <option
+                        v-for="option in flowLineFilterOptions"
+                        :key="option.value"
+                        :value="option.value"
+                      >
+                        {{ option.label }}
+                      </option>
                     </select>
-                  </label>
-                  <label class="form-label">{{ t('Password') }}<input v-model="registerForm.password" type="password" class="form-input" /></label>
-                  <label class="form-label">{{ t('Confirm password') }}<input v-model="registerForm.confirmPassword" type="password" class="form-input" /></label>
-                  <p v-if="editingUsername" class="lg:col-span-2 text-sm text-slate-500 dark:text-slate-400">{{ t('Leave password empty to keep current password') }}</p>
-                  <div class="lg:col-span-2 flex flex-wrap items-center gap-3">
-                    <button class="btn-primary" type="submit">{{ editingUsername ? t('Update user') : t('Create user') }}</button>
-                    <button v-if="editingUsername" class="btn-secondary" type="button" @click="resetUserForm()">{{ t('Cancel') }}</button>
-                    <span v-if="registerError" class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-100">{{ registerError }}</span>
-                    <span v-if="registerSuccess" class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-100">{{ registerSuccess }}</span>
+                    <button
+                      class="mobile-tab"
+                      :class="flowTransferFilter === 'all' ? 'mobile-tab-active' : ''"
+                      type="button"
+                      @click="flowTransferFilter = 'all'"
+                    >
+                      {{ t('All movements') }}
+                    </button>
+                    <button
+                      class="mobile-tab"
+                      :class="flowTransferFilter === 'transfers' ? 'mobile-tab-active' : ''"
+                      type="button"
+                      @click="flowTransferFilter = 'transfers'"
+                    >
+                      {{ t('Only transfers') }}
+                    </button>
+                    <button
+                      class="mobile-tab"
+                      :class="flowTransferFilter === 'attention' ? 'mobile-tab-active' : ''"
+                      type="button"
+                      @click="flowTransferFilter = 'attention'"
+                    >
+                      {{ t('Units in attention') }}
+                    </button>
                   </div>
-                </form>
-              </section>
-              <section class="industrial-panel">
-                <div class="section-heading"><div><p>{{ t('Users') }}</p><h3>{{ t('Existing users') }}</h3></div></div>
-                <div class="table-shell">
-                  <table class="data-table">
-                    <thead><tr><th>{{ t('Username') }}</th><th>{{ t('Name') }}</th><th>{{ t('Email') }}</th><th>{{ t('Role') }}</th><th>{{ t('Status') }}</th><th>{{ t('Last update') }}</th><th></th></tr></thead>
-                    <tbody>
-                      <tr v-for="profile in users" :key="profile.username">
-                        <td class="font-bold">{{ profile.username }}</td>
-                        <td>{{ profile.name }}</td>
-                        <td>{{ profile.email }}</td>
-                        <td>{{ getRoleLabel(profile.roleKey) }}</td>
-                        <td><span :class="statusClass(profile.active ? 'Active' : 'Blocked')">{{ profile.active ? t('Active') : t('Blocked') }}</span></td>
-                        <td>{{ formatDate(profile.lastLogin) }}</td>
-                        <td>
-                          <div class="flex flex-wrap gap-2">
-                            <button class="btn-secondary btn-compact" @click="startEditUser(profile)">{{ t('Edit') }}</button>
-                            <button v-if="profile.username !== 'admin'" class="btn-secondary btn-compact" @click="toggleUserActive(profile)">{{ profile.active ? t('Block') : t('Unblock') }}</button>
-                            <button v-if="profile.username !== 'admin'" class="btn-danger btn-compact" @click="removeUser(profile.username)">{{ t('Delete') }}</button>
+                  <div class="compact-card-list mt-4 grid gap-3 xl:grid-cols-2">
+                    <div
+                      v-for="line in visibleFlowLineSummaries"
+                      :key="line.productionLineId"
+                      class="line-step flex-col items-stretch"
+                    >
+                      <div class="flex items-center justify-between gap-3">
+                        <div class="min-w-0">
+                          <p class="font-bold text-slate-950 dark:text-slate-50">
+                            {{ line.lineCode }} · {{ line.name }}
+                          </p>
+                          <p class="text-xs uppercase tracking-normal text-slate-500 dark:text-slate-400">
+                            {{ line.activeSupports }} {{ t('supports') }} · {{ line.blockedUnits }} {{ t('attention') }}
+                          </p>
+                        </div>
+                        <span class="text-sm font-black text-slate-950 dark:text-slate-50">{{ line.wipUnits }}</span>
+                      </div>
+                      <div class="mt-3 grid gap-2">
+                        <div
+                          v-for="section in line.sections"
+                          :key="section.sectionId"
+                          class="flex items-center gap-3"
+                        >
+                          <span class="min-w-0 flex-1 truncate text-xs font-semibold text-slate-600 dark:text-slate-300">{{ section.sectionCode }} · {{ translateSectionName(section.name) }}</span>
+                          <div class="h-2 w-24 rounded-full bg-slate-200 dark:bg-slate-700">
+                            <div
+                              class="h-2 rounded-full bg-drivolution-500"
+                              :style="{ width: `${Math.min(100, section.wipUnits * 34)}%` }"
+                            />
                           </div>
-                        </td>
-                      </tr>
-                      <tr v-if="!users.length">
-                        <td colspan="7">
-                          <div class="empty-state"><strong>{{ t('No users found') }}</strong><p>{{ t('Create an operator profile to start local dashboard access.') }}</p></div>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            </div>
-
-            <!-- FIWARE VIEW -->
-            <div v-if="activeView === 'fiware'" class="space-y-5 lg:space-y-6">
-              <section class="ops-hero">
-                <div class="section-heading">
-                  <div class="min-w-0">
-                    <p>{{ t('Context broker boundary') }}</p>
-                    <h3>{{ t('Current NGSI-LD-style context') }}</h3>
-                    <p class="section-description">{{ t('The relational backend remains the business source of truth. Orion-LD is used for current/hot context of supports, product units and racks.') }}</p>
+                          <strong class="w-6 text-right text-xs">{{ section.wipUnits }}</strong>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div class="flex w-full flex-wrap gap-2 sm:w-auto">
-                    <button class="btn-secondary w-full sm:w-auto" :disabled="fiwareLoading" @click="refreshFiwareContext()">{{ t('Refresh context') }}</button>
-                    <button class="btn-primary w-full sm:w-auto" :disabled="fiwareLoading || !can('Fiware.Manage')" @click="publishFiware">{{ t('Publish current context to Orion-LD') }}</button>
+                  <div class="mt-4 rounded-lg border border-slate-200 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-950/35">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p class="text-xs font-black uppercase tracking-normal text-drivolution-700 dark:text-drivolution-300">
+                          {{ t('Latest transfers between lines') }}
+                        </p>
+                        <h4 class="text-base font-black text-slate-950 dark:text-white">
+                          {{ t('ProductUnit movement audit') }}
+                        </h4>
+                      </div>
+                      <span class="text-xs font-bold text-slate-500 dark:text-slate-400">{{ filteredFlowTransfers.length }} {{ t('records') }}</span>
+                    </div>
+                    <div class="flow-list">
+                      <article
+                        v-for="movement in filteredFlowTransfers"
+                        :key="movement.id"
+                        class="flow-transfer-row"
+                      >
+                        <p
+                          class="flow-transfer-main"
+                          :title="movementTitle(movement)"
+                        >
+                          {{ movement.unit?.code || '-' }} · {{ movementText(movement.fromProductionLine) }} / {{ movementText(movement.fromSection) }} -> {{ movementText(movement.toProductionLine) }} / {{ movementText(movement.toSection) }}
+                        </p>
+                        <div class="flow-transfer-meta">
+                          <span :class="statusClass(movement.eventType)">{{ movementBadge(movement) }}</span>
+                          <span>{{ formatShortTime(movement.occurredAt) }}</span>
+                          <span
+                            class="max-w-[12rem] truncate"
+                            :title="movement.reason || t('No reason recorded')"
+                          >{{ movement.reason || t('No reason recorded') }}</span>
+                        </div>
+                      </article>
+                      <p
+                        v-if="!filteredFlowTransfers.length"
+                        class="empty-state"
+                      >
+                        <strong>{{ t('No transfer movements found') }}</strong>
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <div class="kpi-grid mt-5">
-                  <article v-for="card in fiwareStatusCards" :key="card.key" class="kpi-card" :class="card.tone">
-                    <span>{{ t(card.label) }}</span>
-                    <strong>{{ card.value }}</strong>
-                    <p>{{ t(card.detail) }}</p>
+                </section>
+                <section class="decision-grid">
+                  <article
+                    class="decision-card"
+                    :class="blockedUnits.length ? 'tone-warning' : 'tone-success'"
+                  >
+                    <span>{{ t('Immediate attention') }}</span>
+                    <strong>{{ blockedUnits.length ? `${blockedUnits.length} ${t('units requiring attention')}` : t('No blocked units right now.') }}</strong>
+                    <p>{{ blockedUnits.length ? t('Prioritize containment before releasing more WIP.') : t('No immediate containment action is required from current data.') }}</p>
                   </article>
-                </div>
-                <p v-if="fiwareActionStatus" class="mt-4 rounded-lg border border-slate-200 bg-white p-4 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">{{ fiwareActionStatus }}</p>
-                <div class="mt-4 decision-card" :class="fiwareCoherenceOk ? 'tone-success' : 'tone-warning'">
-                  <span>{{ t('Context coherence') }}</span>
-                  <strong>{{ fiwareCoherenceOk ? t('Context coherence confirmed') : t('Context review recommended') }}</strong>
-                  <p>{{ fiwareSummaryMessage() }}</p>
-                </div>
-                <p v-if="fiwareContext.errors.length" class="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700 dark:border-red-700/70 dark:bg-red-900/30 dark:text-red-100">{{ fiwareContext.errors.join(' | ') }}</p>
-              </section>
+                  <article class="decision-card tone-info">
+                    <span>{{ t('Flow WIP') }}</span>
+                    <strong>{{ topWipSection ? `${translateSectionName(topWipSection.section)} · ${topWipSection.productUnits}` : t('No data available') }}</strong>
+                    <p>{{ t('Validate capacity and exit rhythm at the highest WIP section.') }}</p>
+                  </article>
+                  <article
+                    class="decision-card"
+                    :class="fiwareCoherenceOk ? 'tone-success' : 'tone-warning'"
+                  >
+                    <span>{{ t('Context coherence') }}</span>
+                    <strong>{{ fiwareCoherenceOk ? t('Context coherence confirmed') : t('Context review recommended') }}</strong>
+                    <p>{{ t('Compare relational snapshot and Orion-LD hot context before demonstrations.') }}</p>
+                  </article>
+                </section>
+                <section class="grid gap-5 2xl:grid-cols-[1.1fr_0.9fr]">
+                  <div class="industrial-panel">
+                    <div class="section-heading">
+                      <div>
+                        <p>{{ t('Line state') }}</p>
+                        <h3>{{ t('Current WIP by section') }}</h3>
+                      </div>
+                    </div>
+                    <div class="line-state-list mt-4">
+                      <div
+                        v-for="section in summary.wipBySection"
+                        :key="section.sectionCode"
+                        class="line-step line-state-row"
+                      >
+                        <div class="min-w-0">
+                          <p class="font-bold text-slate-950 dark:text-slate-50">
+                            {{ translateSectionName(section.section) }}
+                          </p>
+                          <p class="text-xs uppercase tracking-normal text-slate-500 dark:text-slate-400">
+                            {{ section.sectionCode }} · {{ translateSectionName(section.sectionType) }}
+                          </p>
+                        </div>
+                        <div class="flex w-full items-center gap-3 sm:min-w-40">
+                          <div class="h-1.5 flex-1 rounded-full bg-slate-200 dark:bg-slate-700">
+                            <div
+                              class="h-1.5 rounded-full bg-drivolution-500"
+                              :style="{ width: `${Math.min(100, section.productUnits * 28)}%` }"
+                            />
+                          </div>
+                          <span class="text-sm font-black text-slate-950 dark:text-slate-50">{{ section.productUnits }}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="industrial-panel">
+                    <div class="section-heading">
+                      <div>
+                        <p>{{ t('Quality') }}</p>
+                        <h3>{{ t('Open alerts and deviations') }}</h3>
+                      </div>
+                    </div>
+                    <div class="compact-card-list mt-5 space-y-3">
+                      <div
+                        v-for="alert in summary.qualityAlerts"
+                        :key="`${alert.unitCode}-${alert.createdAt}`"
+                        class="alert-card"
+                      >
+                        <div class="flex items-center justify-between gap-3">
+                          <strong>{{ alert.unitCode }}</strong>
+                          <span :class="statusClass(alert.status)">{{ displayStatus(alert.status) }}</span>
+                        </div>
+                        <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                          {{ displayDemoText(alert.description) }}
+                        </p>
+                        <p class="mt-2 text-xs font-semibold uppercase tracking-normal text-slate-400 dark:text-slate-500">
+                          {{ displayStatus(alert.severity) }}
+                        </p>
+                      </div>
+                      <p
+                        v-if="!summary.qualityAlerts.length"
+                        class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800 dark:border-emerald-700/70 dark:bg-emerald-900/30 dark:text-emerald-100"
+                      >
+                        {{ t('No blocked units right now.') }}
+                      </p>
+                    </div>
+                  </div>
+                </section>
+                <section class="industrial-panel">
+                  <div class="section-heading">
+                    <div>
+                      <p>{{ t('Recent events') }}</p>
+                      <h3>{{ t('Operational event log') }}</h3>
+                    </div>
+                  </div>
+                  <div class="table-shell compact-table-shell">
+                    <table class="data-table">
+                      <thead><tr><th>{{ t('Event') }}</th><th>{{ t('Target') }}</th><th>{{ t('Location') }}</th><th>{{ t('Timestamp') }}</th></tr></thead>
+                      <tbody>
+                        <tr
+                          v-for="event in recentOperationalEvents.slice(0, 8)"
+                          :key="event.eventCode"
+                        >
+                          <td>
+                            <span
+                              class="event-chip"
+                              :class="statusClass(event.eventType)"
+                            >{{ displayOperationalEvent(event.eventType) }}</span>
+                          </td>
+                          <td>{{ operationalEventTarget(event) }}</td>
+                          <td>{{ operationalEventLocation(event) }}</td>
+                          <td>{{ formatDate(event.occurredAt) }}</td>
+                        </tr>
+                        <tr v-if="!recentOperationalEvents.length">
+                          <td
+                            colspan="4"
+                            class="text-center"
+                          >
+                            {{ t('No records found') }}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              </div>
 
-              <section class="industrial-panel">
-                <div class="section-heading"><div><p>{{ t('FIWARE entities') }}</p><h3>{{ t('Published context entities') }}</h3></div></div>
-                <div class="table-shell">
+              <!-- OPERATOR WORKBENCH VIEW -->
+              <div
+                v-if="activeView === 'operator'"
+                class="space-y-5 lg:space-y-6"
+              >
+                <section class="ops-hero">
+                  <div class="section-heading">
+                    <div>
+                      <p>{{ t('Operator workbench') }}</p>
+                      <h3>{{ t('Shift execution queues') }}</h3>
+                      <p class="section-description">
+                        {{ t('Actionable ProductUnit queues from the current production flow.') }}
+                      </p>
+                    </div>
+                    <button
+                      class="btn-primary"
+                      type="button"
+                      @click="loadData(false)"
+                    >
+                      {{ t('Refresh') }}
+                    </button>
+                  </div>
+                  <div
+                    v-if="roleContextCards.length"
+                    class="mt-5 grid gap-3 sm:grid-cols-3"
+                  >
+                    <article
+                      v-for="card in roleContextCards"
+                      :key="card.key"
+                      class="kpi-card"
+                      :class="card.tone"
+                    >
+                      <span>{{ card.label }}</span>
+                      <strong>{{ card.value }}</strong>
+                      <p>{{ card.detail }}</p>
+                    </article>
+                  </div>
+                  <div class="kpi-grid mt-5">
+                    <article class="kpi-card tone-info">
+                      <span>{{ t('Transfer ready') }}</span><strong>{{ operatorWorkbench.queues.transferReady }}</strong><p>{{ t('Units at transfer-capable sections') }}</p>
+                    </article>
+                    <article
+                      class="kpi-card"
+                      :class="operatorWorkbench.queues.blocked ? 'tone-warning' : 'tone-success'"
+                    >
+                      <span>{{ t('Blocked') }}</span><strong>{{ operatorWorkbench.queues.blocked }}</strong><p>{{ t('Units requiring attention') }}</p>
+                    </article>
+                    <article class="kpi-card tone-muted">
+                      <span>{{ t('Rework') }}</span><strong>{{ operatorWorkbench.queues.rework }}</strong><p>{{ t('Units currently in rework') }}</p>
+                    </article>
+                    <article
+                      class="kpi-card"
+                      :class="operatorWorkbench.queues.noSupport ? 'tone-warning' : 'tone-success'"
+                    >
+                      <span>{{ t('No support') }}</span><strong>{{ operatorWorkbench.queues.noSupport }}</strong><p>{{ t('Units without active transport support') }}</p>
+                    </article>
+                  </div>
+                </section>
+
+                <section class="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+                  <div class="industrial-panel">
+                    <div class="section-heading">
+                      <div><p>{{ t('Execution') }}</p><h3>{{ t('Active ProductUnit queue') }}</h3></div>
+                    </div>
+                    <div class="table-shell mt-4">
+                      <table class="data-table">
+                        <thead><tr><th>{{ t('Unit') }}</th><th>{{ t('Line') }}</th><th>{{ t('Section') }}</th><th>{{ t('Status') }}</th><th>{{ t('Route state') }}</th><th /></tr></thead>
+                        <tbody>
+                          <tr
+                            v-for="unit in operatorWorkbench.units"
+                            :key="unit.id"
+                          >
+                            <td class="font-bold">
+                              {{ unit.unitCode }}
+                            </td>
+                            <td>{{ referenceLabel(unit.currentProductionLine) }}</td>
+                            <td>{{ referenceLabel(unit.currentSection) }}</td>
+                            <td><span :class="statusClass(unit.requiresAttention ? 'Blocked' : unit.status)">{{ displayStatus(unit.status) }}</span></td>
+                            <td>{{ t(unit.routeState) }}</td>
+                            <td>
+                              <button
+                                class="btn-secondary btn-compact"
+                                type="button"
+                                @click="prepareTransfer(unitsById.get(unit.id) || { id: unit.id, unitCode: unit.unitCode, unitType: 'Subproduto', status: unit.status, qualityStatus: unit.qualityStatus, manufacturingOrderId: 0 })"
+                              >
+                                {{ unit.canTransfer ? t('Transfer') : t('Trace') }}
+                              </button>
+                            </td>
+                          </tr>
+                          <tr v-if="!operatorWorkbench.units.length">
+                            <td
+                              colspan="6"
+                              class="text-center"
+                            >
+                              {{ t('No operational records are currently available for this table.') }}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  <div class="industrial-panel">
+                    <div class="section-heading">
+                      <div><p>{{ t('Transfer targets') }}</p><h3>{{ t('Available target sections') }}</h3></div>
+                    </div>
+                    <div class="compact-card-list mt-4 grid gap-3">
+                      <article
+                        v-for="target in operatorWorkbench.transferTargets"
+                        :key="target.sectionId"
+                        class="decision-card tone-info"
+                      >
+                        <span>{{ referenceLabel(target.productionLine) }}</span>
+                        <strong>{{ target.sectionCode }}</strong>
+                        <p>{{ translateSectionName(target.name) }} · {{ target.currentWip }} {{ t('units') }}</p>
+                      </article>
+                      <p
+                        v-if="!operatorWorkbench.transferTargets.length"
+                        class="empty-state"
+                      >
+                        <strong>{{ t('No records found') }}</strong>
+                      </p>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="industrial-panel">
+                  <div class="section-heading">
+                    <div><p>{{ t('Recent transfers') }}</p><h3>{{ t('ProductUnit movement audit') }}</h3></div>
+                  </div>
+                  <div class="table-shell compact-table-shell mt-4">
+                    <table class="data-table">
+                      <thead><tr><th>{{ t('Unit') }}</th><th>{{ t('From') }}</th><th>{{ t('To') }}</th><th>{{ t('Event') }}</th><th>{{ t('Timestamp') }}</th></tr></thead>
+                      <tbody>
+                        <tr
+                          v-for="movement in operatorWorkbench.recentTransfers"
+                          :key="movement.id"
+                        >
+                          <td>{{ movement.unit?.code || '-' }}</td>
+                          <td>{{ referenceLabel(movement.fromSection) }}</td>
+                          <td>{{ referenceLabel(movement.toSection) }}</td>
+                          <td>{{ displayOperationalEvent(movement.eventType) }}</td>
+                          <td>{{ formatDate(movement.occurredAt) }}</td>
+                        </tr>
+                        <tr v-if="!operatorWorkbench.recentTransfers.length">
+                          <td
+                            colspan="5"
+                            class="text-center"
+                          >
+                            {{ t('No records found') }}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              </div>
+
+              <!-- CUSTOMER ORDERS VIEW -->
+              <div
+                v-if="activeView === 'customerOrders'"
+                class="space-y-5 lg:space-y-6"
+              >
+                <section class="kpi-grid">
+                  <article class="kpi-card tone-info">
+                    <span>{{ t('Encomendas ativas') }}</span><strong>{{ customerOrderSummary.active }}</strong><p>{{ t('A decorrer ou em preparação') }}</p>
+                  </article>
+                  <article class="kpi-card tone-info">
+                    <span>{{ t('Em produção') }}</span><strong>{{ customerOrderSummary.production }}</strong><p>{{ t('Em fabrico neste momento') }}</p>
+                  </article>
+                  <article class="kpi-card tone-success">
+                    <span>{{ t('Prontas') }}</span><strong>{{ customerOrderSummary.ready }}</strong><p>{{ t('Preparadas para levantamento') }}</p>
+                  </article>
+                  <article class="kpi-card tone-muted">
+                    <span>{{ t('Concluídas') }}</span><strong>{{ customerOrderSummary.completed }}</strong><p>{{ t('Entregues ou finalizadas') }}</p>
+                  </article>
+                </section>
+
+                <section class="industrial-panel customer-toolbar">
+                  <div class="customer-toolbar-main">
+                    <label class="customer-search-field">
+                      <span>{{ t('Pesquisar') }}</span>
+                      <input
+                        v-model="customerOrderSearch"
+                        class="form-input"
+                        :placeholder="t('Pesquisar por nome ou código de rastreio')"
+                      >
+                    </label>
+                    <div class="mobile-tabs">
+                      <button
+                        v-for="filter in customerOrderFilters"
+                        :key="filter.key"
+                        class="mobile-tab"
+                        :class="customerOrderFilter === filter.key ? 'mobile-tab-active' : ''"
+                        type="button"
+                        @click="customerOrderFilter = filter.key"
+                      >
+                        {{ filter.label }} <span class="ml-1 opacity-70">{{ filter.count }}</span>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="flex flex-wrap gap-3">
+                    <button
+                      class="btn-primary"
+                      type="button"
+                      @click="navigateTo('customerNewOrder')"
+                    >
+                      {{ t('Nova encomenda') }}
+                    </button>
+                    <button
+                      class="btn-secondary"
+                      type="button"
+                      @click="loadData(false)"
+                    >
+                      {{ t('Atualizar') }}
+                    </button>
+                  </div>
+                </section>
+
+                <section
+                  v-if="!customerOrders.length"
+                  class="customer-empty-state"
+                >
+                  <strong>{{ t('Ainda não existem encomendas.') }}</strong>
+                  <p>{{ t('Crie uma nova encomenda para começar.') }}</p>
+                  <button
+                    class="btn-primary"
+                    type="button"
+                    @click="navigateTo('customerNewOrder')"
+                  >
+                    {{ t('Nova encomenda') }}
+                  </button>
+                </section>
+
+                <section
+                  v-else-if="!filteredCustomerOrders.length"
+                  class="customer-empty-state"
+                >
+                  <strong>{{ t('Nenhuma encomenda encontrada com estes filtros.') }}</strong>
+                  <p>{{ t('Ajuste a pesquisa ou escolha outro filtro.') }}</p>
+                </section>
+
+                <section
+                  v-else
+                  class="grid gap-4 xl:grid-cols-2"
+                >
+                  <article
+                    v-for="order in filteredCustomerOrders"
+                    :key="order.publicTrackingCode"
+                    class="customer-order-card"
+                    :class="customerOrderTone(order)"
+                  >
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                      <p class="customer-card-code">
+                        <span>{{ t('Código de rastreio') }}:</span>
+                        <strong>{{ order.publicTrackingCode || '-' }}</strong>
+                      </p>
+                      <span class="customer-state-chip">{{ customerOrderState(order) }}</span>
+                    </div>
+                    <h4 class="customer-order-name">
+                      {{ customerOrderName(order) }}
+                    </h4>
+                    <p class="mt-1 text-sm font-bold text-slate-800 dark:text-slate-100">
+                      {{ order.order?.product || '-' }}<span v-if="order.order?.variant"> · {{ order.order.variant }}</span>
+                    </p>
+                    <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                      {{ t('Data prevista') }}: {{ formatDate(order.order?.scheduledUntil) }}
+                    </p>
+                    <div class="mt-4">
+                      <div class="flex items-center justify-between gap-3 text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">
+                        <span>{{ customerOrderState(order) }}</span>
+                        <span>{{ customerProgressPercent(order) }}%</span>
+                      </div>
+                      <div class="mt-2 h-2 rounded-full bg-slate-200 dark:bg-slate-700">
+                        <div
+                          class="h-2 rounded-full bg-drivolution-500"
+                          :style="{ width: `${customerProgressPercent(order)}%` }"
+                        />
+                      </div>
+                    </div>
+                    <p class="mt-3 text-sm font-semibold text-slate-600 dark:text-slate-300">
+                      {{ customerNextStep(order) }}
+                    </p>
+                    <button
+                      class="btn-secondary mt-4"
+                      type="button"
+                      @click="openCustomerOrderDetail(order.publicTrackingCode)"
+                    >
+                      {{ t('Ver detalhe') }}
+                    </button>
+                  </article>
+                </section>
+
+                <section
+                  v-if="customerLookup"
+                  class="customer-detail-panel"
+                >
+                  <div class="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                      <p class="text-xs font-black uppercase tracking-normal text-drivolution-700 dark:text-drivolution-300">
+                        {{ t('Detalhe da encomenda') }}
+                      </p>
+                      <h3 class="mt-1 text-xl font-black text-slate-950 dark:text-white">
+                        {{ customerOrderName(customerLookup) }}
+                      </h3>
+                      <p class="mt-1 text-sm font-bold text-slate-700 dark:text-slate-200">
+                        {{ customerLookup.order?.product || '-' }}<span v-if="customerLookup.order?.variant"> · {{ customerLookup.order.variant }}</span>
+                      </p>
+                      <p class="mt-1 text-sm font-semibold text-slate-600 dark:text-slate-300">
+                        {{ t('Código de rastreio') }}: {{ customerLookup.publicTrackingCode }}
+                      </p>
+                    </div>
+                    <span class="customer-state-chip">{{ customerOrderState(customerLookup) }}</span>
+                  </div>
+                  <div class="customer-detail-progress">
+                    <article class="customer-status-card">
+                      <span>{{ t('Estado da encomenda') }}</span>
+                      <strong>{{ customerOrderState(customerLookup) }}</strong>
+                      <p>{{ customerNextStep(customerLookup) }}</p>
+                      <div class="mt-4 h-2 rounded-full bg-slate-200 dark:bg-slate-700">
+                        <div
+                          class="h-2 rounded-full bg-drivolution-500"
+                          :style="{ width: `${customerProgressPercent(customerLookup)}%` }"
+                        />
+                      </div>
+                    </article>
+                    <div class="customer-progress-steps">
+                      <div
+                        v-for="step in customerProgressSteps(customerLookup)"
+                        :key="step.key"
+                        class="customer-progress-step"
+                        :class="`customer-progress-step-${step.state}`"
+                      >
+                        <span />
+                        <p>{{ step.label }}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="mt-5 grid gap-4 md:grid-cols-3">
+                    <article class="customer-info-tile">
+                      <span>{{ t('Estado atual') }}</span><strong>{{ customerOrderState(customerLookup) }}</strong>
+                    </article>
+                    <article class="customer-info-tile">
+                      <span>{{ t('Data prevista') }}</span><strong>{{ formatDate(customerLookup.order?.scheduledUntil) }}</strong>
+                    </article>
+                    <article class="customer-info-tile">
+                      <span>{{ t('Atualização mais recente') }}</span><strong>{{ customerLatestUpdate(customerLookup) }}</strong>
+                    </article>
+                  </div>
+                  <div class="mt-5">
+                    <p class="text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">
+                      {{ t('Histórico resumido') }}
+                    </p>
+                    <ol class="customer-history-list mt-3">
+                      <li
+                        v-for="milestone in (customerLookup.milestones || []).slice(-4)"
+                        :key="`${milestone.occurredAt}-${milestone.eventType}`"
+                      >
+                        <span>{{ formatDate(milestone.occurredAt) }}</span>
+                        <strong>{{ customerHistoryLabel(milestone) }}</strong>
+                      </li>
+                      <li v-if="!customerLookup.milestones?.length">
+                        <span>{{ t('Pedido recebido') }}</span>
+                        <strong>{{ t('A encomenda foi registada.') }}</strong>
+                      </li>
+                    </ol>
+                  </div>
+                </section>
+              </div>
+
+              <!-- NEW CUSTOMER ORDER VIEW -->
+              <div
+                v-if="activeView === 'customerNewOrder'"
+                class="space-y-5 lg:space-y-6"
+              >
+                <section
+                  v-if="customerCreatedOrder"
+                  class="customer-confirmation"
+                >
+                  <span>{{ t('Encomenda criada com sucesso') }}</span>
+                  <h3>{{ customerOrderName(customerCreatedOrder) }}</h3>
+                  <strong>{{ t('Código de rastreio') }}: {{ customerCreatedOrder.publicTrackingCode }}</strong>
+                  <p>{{ t('A encomenda será registada como pedido recebido.') }}</p>
+                  <div class="mt-5 flex flex-wrap justify-center gap-3">
+                    <button
+                      class="btn-primary"
+                      type="button"
+                      @click="openCustomerOrderDetail(customerCreatedOrder.publicTrackingCode); activeView = 'customerOrders'"
+                    >
+                      {{ t('Ver encomenda') }}
+                    </button>
+                    <button
+                      class="btn-secondary"
+                      type="button"
+                      @click="resetCustomerOrderForm"
+                    >
+                      {{ t('Criar nova encomenda') }}
+                    </button>
+                    <button
+                      class="btn-secondary"
+                      type="button"
+                      @click="navigateTo('customerOrders')"
+                    >
+                      {{ t('As minhas encomendas') }}
+                    </button>
+                  </div>
+                </section>
+                <section
+                  v-else
+                  class="industrial-panel customer-order-single-card"
+                >
+                  <form
+                    class="customer-order-form"
+                    @submit.prevent="submitCustomerOrder"
+                  >
+                    <label class="form-label">{{ t('Nome da encomenda') }}
+                      <input
+                        v-model="customerOrderForm.name"
+                        class="form-input"
+                        :placeholder="t('Ex.: Porta esquerda lote junho')"
+                      >
+                    </label>
+                    <div class="grid gap-4 md:grid-cols-2">
+                      <label class="form-label">{{ t('Produto') }}
+                        <select
+                          v-model="customerOrderForm.productId"
+                          class="form-input"
+                        >
+                          <option value="">{{ t('Selecione produto') }}</option>
+                          <option
+                            v-for="product in customerProductOptions"
+                            :key="product.id"
+                            :value="product.id"
+                          >{{ translateMaterialName(product.name) }}</option>
+                        </select>
+                      </label>
+                      <label class="form-label">{{ t('Variante') }}
+                        <select
+                          v-model="customerOrderForm.variantId"
+                          class="form-input"
+                        >
+                          <option value="">{{ t('Selecione variante') }}</option>
+                          <option
+                            v-for="variant in customerVariantOptions"
+                            :key="variant.id"
+                            :value="variant.id"
+                          >{{ variant.name }}</option>
+                        </select>
+                      </label>
+                      <label class="form-label">{{ t('Quantidade') }}<input
+                        v-model.number="customerOrderForm.quantity"
+                        min="1"
+                        max="99"
+                        type="number"
+                        class="form-input"
+                      ></label>
+                    </div>
+                    <label class="form-label">{{ t('Observações para a encomenda') }}<textarea
+                      v-model="customerOrderForm.observations"
+                      class="form-input min-h-28"
+                    /></label>
+                    <div class="customer-order-summary-table">
+                      <div>
+                        <span>{{ t('Resumo da encomenda') }}</span>
+                        <strong>{{ customerOrderDisplayName }}</strong>
+                      </div>
+                      <table>
+                        <tbody>
+                          <tr><th>{{ t('Nome') }}</th><td>{{ customerOrderDisplayName }}</td></tr>
+                          <tr><th>{{ t('Produto') }}</th><td>{{ selectedCustomerProduct ? translateMaterialName(selectedCustomerProduct.name) : t('Por escolher') }}</td></tr>
+                          <tr><th>{{ t('Variante') }}</th><td>{{ selectedCustomerVariant?.name || t('Por escolher') }}</td></tr>
+                          <tr><th>{{ t('Quantidade') }}</th><td>{{ customerOrderForm.quantity || 0 }}</td></tr>
+                          <tr><th>{{ t('Estado inicial') }}</th><td>{{ t('Pedido recebido') }}</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <p
+                      v-if="customerOrderStatus"
+                      class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-100"
+                    >
+                      {{ customerOrderStatus }}
+                    </p>
+                    <div class="customer-order-submit-row">
+                      <p>{{ t('A encomenda será registada como pedido recebido.') }}</p>
+                      <button
+                        class="btn-primary"
+                        type="submit"
+                      >
+                        {{ t('Submeter encomenda') }}
+                      </button>
+                    </div>
+                  </form>
+                </section>
+              </div>
+
+              <!-- CUSTOMER LOOKUP VIEW -->
+              <div
+                v-if="activeView === 'customer'"
+                class="space-y-5 lg:space-y-6"
+              >
+                <section class="ops-hero">
+                  <div class="section-heading">
+                    <div>
+                      <p>{{ t('Customer tracking') }}</p>
+                      <h3>{{ t('Customer order lookup') }}</h3>
+                      <p class="section-description">
+                        {{ t('Public tracking view for manufacturing order progress and unit milestones.') }}
+                      </p>
+                    </div>
+                  </div>
+                  <form
+                    class="mt-5 flex flex-col gap-3 sm:flex-row"
+                    @submit.prevent="lookupCustomerOrder"
+                  >
+                    <label class="form-label flex-1">{{ t('Public tracking code') }}<input
+                      v-model="customerLookupCode"
+                      class="form-input"
+                    ></label>
+                    <button
+                      class="btn-primary self-end"
+                      type="submit"
+                    >
+                      {{ t('Search') }}
+                    </button>
+                  </form>
+                  <div
+                    v-if="roleContextCards.length"
+                    class="mt-5 grid gap-3 sm:grid-cols-3"
+                  >
+                    <article
+                      v-for="card in roleContextCards"
+                      :key="card.key"
+                      class="kpi-card"
+                      :class="card.tone"
+                    >
+                      <span>{{ card.label }}</span>
+                      <strong>{{ card.value }}</strong>
+                      <p>{{ card.detail }}</p>
+                    </article>
+                  </div>
+                  <p
+                    v-if="customerLookupStatus"
+                    class="mt-4 rounded-lg border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                  >
+                    {{ customerLookupStatus }}
+                  </p>
+                </section>
+
+                <template v-if="customerLookup">
+                  <section class="kpi-grid">
+                    <article class="kpi-card tone-info">
+                      <span>{{ t('Código público de rastreio') }}</span><strong>{{ customerLookup.publicTrackingCode || '-' }}</strong><p>{{ customerLookup.customer?.name || '-' }}</p>
+                    </article>
+                    <article class="kpi-card tone-muted">
+                      <span>{{ t('Status') }}</span><strong>{{ translateStatus(customerLookup.order?.status || '-') }}</strong><p>{{ customerLookup.publicTrackingCode }}</p>
+                    </article>
+                    <article class="kpi-card tone-info">
+                      <span>{{ t('Units') }}</span><strong>{{ customerLookup.summary?.units ?? 0 }}</strong><p>{{ customerLookup.summary?.inFlow ?? 0 }} {{ t('in flow') }}</p>
+                    </article>
+                    <article
+                      class="kpi-card"
+                      :class="customerLookup.summary?.attention ? 'tone-warning' : 'tone-success'"
+                    >
+                      <span>{{ t('Attention') }}</span><strong>{{ customerLookup.summary?.attention ?? 0 }}</strong><p>{{ t('Customer-visible quality and route state') }}</p>
+                    </article>
+                  </section>
+
+                  <section class="industrial-panel">
+                    <div class="section-heading">
+                      <div><p>{{ t('Unit progress') }}</p><h3>{{ t('ProductUnit customer status') }}</h3></div>
+                    </div>
+                    <div class="table-shell mt-4">
+                      <table class="data-table">
+                        <thead><tr><th>{{ t('Stage') }}</th><th>{{ t('Status') }}</th><th>{{ t('Quality') }}</th><th>{{ t('Last movement') }}</th></tr></thead>
+                        <tbody>
+                          <tr
+                            v-for="(unit, index) in customerLookup.units || []"
+                            :key="`${customerLookup.publicTrackingCode}-${index}`"
+                          >
+                            <td>{{ unit.currentStage || '-' }}</td>
+                            <td><span :class="statusClass(unit.status)">{{ displayStatus(unit.customerState || unit.status) }}</span></td>
+                            <td>{{ unit.qualityStatus || '-' }}</td>
+                            <td>{{ formatDate(unit.lastMovementAt) }}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+
+                  <section class="industrial-panel">
+                    <div class="section-heading">
+                      <div><p>{{ t('Milestones') }}</p><h3>{{ t('Customer movement timeline') }}</h3></div>
+                    </div>
+                    <div class="table-shell mt-4">
+                      <table class="data-table">
+                        <thead><tr><th>{{ t('Timestamp') }}</th><th>{{ t('Último marco') }}</th><th>{{ t('Stage') }}</th></tr></thead>
+                        <tbody>
+                          <tr
+                            v-for="milestone in customerLookup.milestones || []"
+                            :key="`${milestone.occurredAt}-${milestone.eventType}`"
+                          >
+                            <td>{{ formatDate(milestone.occurredAt) }}</td>
+                            <td>{{ milestone.eventType }}</td>
+                            <td>{{ milestone.stage || '-' }}</td>
+                          </tr>
+                          <tr v-if="!customerLookup.milestones?.length">
+                            <td
+                              colspan="3"
+                              class="text-center"
+                            >
+                              {{ t('No records found') }}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                </template>
+              </div>
+
+              <!-- ORDERS VIEW -->
+              <div
+                v-if="false && activeView === 'orders'"
+                class="card p-6"
+              >
+                <div class="section-heading">
+                  <div><p>{{ t('Planning') }}</p><h3>{{ t('Manufacturing orders') }}</h3></div>
+                </div>
+                <div class="mt-5 overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700">
                   <table class="data-table">
-                    <thead><tr><th>{{ t('Type') }}</th><th>{{ t('ID') }}</th><th>{{ t('Main attributes') }}</th></tr></thead>
+                    <thead><tr><th>{{ t('Order') }}</th><th>{{ t('Status') }}</th><th>{{ t('Planned qty') }}</th><th>{{ t('Scheduled until') }}</th><th>{{ t('Notes') }}</th></tr></thead>
                     <tbody>
-                      <tr v-for="entity in fiwareContext.entities" :key="entity.id">
-                        <td><span class="badge-blue">{{ fiwareEntityTypeLabel(entity.type) }}</span></td>
-                        <td class="font-mono text-xs">{{ entity.id }}</td>
-                        <td>{{ fiwareAttributesPreview(entity.attributes) }}</td>
-                      </tr>
-                      <tr v-if="!fiwareContext.entities.length">
-                        <td colspan="3">
-                          <div class="empty-state"><strong>{{ t('No FIWARE entities available.') }}</strong><p>{{ t('Publish current context or refresh Orion-LD to validate hot context.') }}</p></div>
+                      <tr
+                        v-for="order in orders"
+                        :key="order.id"
+                      >
+                        <td class="font-bold">
+                          {{ order.orderNumber }}
                         </td>
+                        <td><span :class="statusClass(order.status)">{{ translateStatus(order.status) }}</span></td>
+                        <td>{{ order.plannedQty }}</td>
+                        <td>{{ formatDate(order.scheduledUntil) }}</td>
+                        <td>{{ order.observations }}</td>
                       </tr>
                     </tbody>
                   </table>
                 </div>
-              </section>
+              </div>
 
-              <section v-if="fiwareLastPublish" class="industrial-panel">
-                <div class="section-heading"><div><p>{{ t('Publish summary') }}</p><h3>{{ t('Last publish result') }}</h3></div></div>
-                <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  <div class="kpi-card tone-muted">
-                    <p class="text-xs font-bold uppercase tracking-normal text-slate-500 dark:text-slate-400">{{ t('Attempted') }}</p>
-                    <p class="mt-2 text-sm font-black">{{ fiwareLastPublish.attemptedCount }}</p>
+              <!-- UNITS VIEW -->
+              <div
+                v-if="false && activeView === 'units'"
+                class="space-y-6"
+              >
+                <section class="grid gap-4 md:grid-cols-3">
+                  <div class="metric-card">
+                    <span>{{ t('Traceable units') }}</span><strong>{{ units.length }}</strong>
                   </div>
-                  <div class="kpi-card tone-success">
-                    <p class="text-xs font-bold uppercase tracking-normal text-slate-500 dark:text-slate-400">{{ t('Published') }}</p>
-                    <p class="mt-2 text-sm font-black">{{ fiwareLastPublish.publishedCount }}</p>
+                  <div class="metric-card">
+                    <span>{{ t('Active / held') }}</span><strong>{{ activeUnits.length }}</strong>
                   </div>
-                  <div class="kpi-card" :class="fiwareLastPublish.failedCount ? 'tone-danger' : 'tone-success'">
-                    <p class="text-xs font-bold uppercase tracking-normal text-slate-500 dark:text-slate-400">{{ t('Failed') }}</p>
-                    <p class="mt-2 text-sm font-black">{{ fiwareLastPublish.failedCount }}</p>
+                  <div class="metric-card">
+                    <span>{{ t('Deviations') }}</span><strong>{{ blockedUnits.length }}</strong>
                   </div>
-                  <div class="kpi-card tone-info">
-                    <p class="text-xs font-bold uppercase tracking-normal text-slate-500 dark:text-slate-400">{{ t('Stale removed') }}</p>
-                    <p class="mt-2 text-sm font-black">{{ fiwareLastPublish.staleDeletedCount }}</p>
+                </section>
+                <section class="card p-6">
+                  <div class="section-heading">
+                    <div><p>{{ t('Unitary traceability') }}</p><h3>{{ t('Product units and subproducts') }}</h3></div>
                   </div>
-                </div>
-                <p v-if="fiwareLastPublish.staleEntityIds.length" class="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"><span class="font-black">{{ t('Stale entity IDs') }}:</span> {{ fiwareLastPublish.staleEntityIds.join(' | ') }}</p>
-                <p v-if="fiwareLastPublish.errors.length" class="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700 dark:border-red-700/70 dark:bg-red-900/30 dark:text-red-100"><span class="font-black">{{ t('Synchronization errors') }}:</span> {{ fiwareLastPublish.errors.join(' | ') }}</p>
-              </section>
-            </div>
+                  <div class="mt-5 overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700">
+                    <table class="data-table">
+                      <thead><tr><th>{{ t('Unit') }}</th><th>{{ t('Type') }}</th><th>{{ t('Status') }}</th><th>{{ t('Quality') }}</th><th>{{ t('Current support') }}</th><th>{{ t('Current section') }}</th></tr></thead>
+                      <tbody>
+                        <tr
+                          v-for="unit in units"
+                          :key="unit.id"
+                        >
+                          <td class="font-bold">
+                            {{ unit.unitCode }}
+                          </td>
+                          <td>{{ translateUnitType(unit.unitType) }}</td>
+                          <td><span :class="statusClass(unit.status)">{{ displayStatus(unit.status) }}</span></td>
+                          <td><span :class="statusClass(unit.qualityStatus)">{{ translateQualityResult(unit.qualityStatus) }}</span></td>
+                          <td>{{ supportCode(unit.currentSupportId) }}</td>
+                          <td>{{ sectionName(unit.currentSectionId) }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              </div>
+
+              <!-- SUPPORTS VIEW -->
+              <div
+                v-if="false && activeView === 'supports'"
+                class="space-y-6"
+              >
+                <section class="card overflow-hidden p-6">
+                  <div class="section-heading">
+                    <div><p>{{ t('Physical tracking') }}</p><h3>{{ t('Support is the intra-line anchor') }}</h3></div>
+                  </div>
+                  <img
+                    :src="lineDoorUrl"
+                    alt="Support-based line"
+                    class="mt-5 rounded-lg border border-slate-200 dark:border-slate-700"
+                  >
+                </section>
+                <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  <div
+                    v-for="support in supports"
+                    :key="support.id"
+                    class="card p-5"
+                  >
+                    <div class="flex items-start justify-between gap-4">
+                      <div>
+                        <p class="text-sm font-bold uppercase tracking-normal text-slate-500 dark:text-slate-400">
+                          {{ t('Support') }}
+                        </p><h3 class="mt-1 text-xl font-black">
+                          {{ support.supportCode }}
+                        </h3>
+                      </div>
+                      <span :class="statusClass(support.status)">{{ translateStatus(support.status) }}</span>
+                    </div>
+                    <p class="mt-4 text-sm text-slate-600 dark:text-slate-300">
+                      {{ t('Current section') }}
+                    </p>
+                    <p class="text-base font-bold text-slate-950 dark:text-slate-50">
+                      {{ sectionName(support.currentSectionId) }}
+                    </p>
+                  </div>
+                </section>
+              </div>
+
+              <!-- MATERIALS VIEW -->
+              <div
+                v-if="false && activeView === 'materials'"
+                class="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]"
+              >
+                <section class="card p-6">
+                  <div class="section-heading">
+                    <div><p>{{ t('Items and lots') }}</p><h3>{{ t('Raw materials') }}</h3></div>
+                  </div>
+                  <div class="mt-5 space-y-3">
+                    <div
+                      v-for="material in materials"
+                      :key="material.id"
+                      class="rounded-2xl border border-slate-200 p-4 dark:border-slate-700"
+                    >
+                      <p class="font-black text-slate-950 dark:text-slate-50">
+                        {{ translateMaterialName(material.name) }}
+                      </p>
+                      <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                        {{ material.info }}
+                      </p>
+                    </div>
+                  </div>
+                </section>
+                <section class="card p-6">
+                  <div class="section-heading">
+                    <div><p>{{ t('Genealogy') }}</p><h3>{{ t('Material lots') }}</h3></div>
+                  </div>
+                  <div class="mt-5 overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700">
+                    <table class="data-table">
+                      <thead><tr><th>{{ t('Lot') }}</th><th>{{ t('Material') }}</th><th>{{ t('Quantity') }}</th><th>{{ t('Section') }}</th></tr></thead>
+                      <tbody>
+                        <tr
+                          v-for="lot in lots"
+                          :key="lot.id"
+                        >
+                          <td class="font-bold">
+                            {{ lot.lotNumber }}
+                          </td>
+                          <td>{{ materialName(lot.rawMaterialId) }}</td>
+                          <td>{{ lot.lotQuantity }} {{ translateUnitOfMeasure(lot.lotUnit) }}</td>
+                          <td>{{ sectionName(lot.sectionId) }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              </div>
+
+              <!-- QUALITY VIEW -->
+              <div
+                v-if="false && activeView === 'quality'"
+                class="space-y-6"
+              >
+                <section class="grid gap-4 md:grid-cols-3">
+                  <div class="metric-card">
+                    <span>{{ t('Results') }}</span><strong>{{ quality.length }}</strong>
+                  </div>
+                  <div class="metric-card">
+                    <span>{{ t('PASS') }}</span><strong>{{ quality.filter((item) => item.result === 'PASS').length }}</strong>
+                  </div>
+                  <div class="metric-card">
+                    <span>{{ t('FAIL') }}</span><strong>{{ quality.filter((item) => item.result === 'FAIL').length }}</strong>
+                  </div>
+                </section>
+                <section class="card p-6">
+                  <div class="section-heading">
+                    <div><p>{{ t('Quality evidence') }}</p><h3>{{ t('Results, nonconformities, rework and scrap') }}</h3></div>
+                  </div>
+                  <div class="mt-5 overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700">
+                    <table class="data-table">
+                      <thead><tr><th>{{ t('Unit') }}</th><th>{{ t('Result') }}</th><th>{{ t('Recorded at') }}</th><th>{{ t('Notes') }}</th></tr></thead>
+                      <tbody>
+                        <tr
+                          v-for="record in quality"
+                          :key="record.id"
+                        >
+                          <td class="font-bold">
+                            {{ unitCode(record.productUnitId) }}
+                          </td>
+                          <td><span :class="statusClass(record.result)">{{ translateQualityResult(record.result) }}</span></td>
+                          <td>{{ formatDate(record.recordedAt) }}</td>
+                          <td>{{ record.notes }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              </div>
+
+              <!-- RACKS VIEW -->
+              <div
+                v-if="false && activeView === 'racks'"
+                class="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]"
+              >
+                <section class="card p-6">
+                  <div class="section-heading">
+                    <div><p>{{ t('Post-line logistics') }}</p><h3>{{ t('Racks are not the WIP anchor') }}</h3></div>
+                  </div>
+                  <p class="mt-4 text-slate-600 dark:text-slate-300">
+                    {{ t('Racks only aggregate supports after the controlled line. The support remains the traceability reference for intra-line WIP.') }}
+                  </p>
+                  <div class="mt-5 grid gap-4">
+                    <div
+                      v-for="rack in racks"
+                      :key="rack.id"
+                      class="rounded-2xl border border-slate-200 p-4 dark:border-slate-700"
+                    >
+                      <div class="flex items-center justify-between">
+                        <strong>{{ rack.rackCode }}</strong><span :class="statusClass(rack.status)">{{ translateStatus(rack.status) }}</span>
+                      </div>
+                      <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                        {{ sectionName(rack.sectionId) }}
+                      </p>
+                    </div>
+                  </div>
+                </section>
+                <section class="card overflow-hidden p-6">
+                  <div class="section-heading">
+                    <div><p>{{ t('Extended view') }}</p><h3>{{ t('Subproduct to final assembly concept') }}</h3></div>
+                  </div>
+                  <img
+                    :src="lineCarUrl"
+                    alt="Automotive production line"
+                    class="mt-5 rounded-lg border border-slate-200 dark:border-slate-700"
+                  >
+                </section>
+              </div>
+
+              <!-- EVENTS VIEW -->
+              <div
+                v-if="activeView === 'events'"
+                class="grid gap-5 xl:grid-cols-2"
+              >
+                <section class="xl:col-span-2 kpi-grid">
+                  <article
+                    v-for="metric in eventKpis"
+                    :key="metric.key"
+                    class="kpi-card"
+                    :class="metric.tone"
+                  >
+                    <span>{{ t(metric.label) }}</span>
+                    <strong>{{ metric.value }}</strong>
+                    <p>{{ t(metric.detail) }}</p>
+                  </article>
+                </section>
+                <section class="card p-5 sm:p-6">
+                  <div class="section-heading">
+                    <div><p>{{ t('Simulation') }}</p><h3>{{ t('Execute event playback') }}</h3></div>
+                  </div>
+                  <p class="mt-3 text-slate-600 dark:text-slate-300">
+                    {{ t('Advances supports across the nominal door production line and updates the audit trail.') }}
+                  </p>
+                  <button
+                    class="btn-primary mt-5"
+                    :disabled="!can('Simulation.Manage')"
+                    @click="executePlayback"
+                  >
+                    {{ t('Execute playback scenario') }}
+                  </button>
+                </section>
+                <section class="card p-5 sm:p-6">
+                  <div class="section-heading">
+                    <div><p>{{ t('Controlled event') }}</p><h3>{{ t('Inject manual factory event') }}</h3></div>
+                  </div>
+                  <div class="mt-5 grid gap-4">
+                    <label class="form-label">{{ t('Event type') }}<input
+                      v-model="manualEvent.eventType"
+                      class="form-input"
+                    ></label>
+                    <label class="form-label">{{ t('Support code') }}<input
+                      v-model="manualEvent.supportCode"
+                      class="form-input"
+                    ></label>
+                    <label class="form-label">{{ t('Section / Rack code') }}<input
+                      v-model="manualEvent.sectionCode"
+                      class="form-input"
+                    ></label>
+                    <label class="form-label">{{ t('Unit code') }}<input
+                      v-model="manualEvent.productUnitCode"
+                      class="form-input"
+                    ></label>
+                    <label class="form-label">{{ t('Result') }}
+                      <select
+                        v-model="manualEvent.result"
+                        class="form-input"
+                      >
+                        <option value="PASS">{{ t('PASS') }}</option>
+                        <option value="FAIL">{{ t('FAIL') }}</option>
+                      </select>
+                    </label>
+                    <label class="form-label">{{ t('Notes') }}<textarea
+                      v-model="manualEvent.notes"
+                      class="form-input min-h-24"
+                    /></label>
+                  </div>
+                  <button
+                    class="btn-primary mt-5"
+                    :disabled="!can('ProductUnits.Transfer') && !can('Quality.Record') && !can('Racks.Manage')"
+                    @click="injectManualEvent"
+                  >
+                    {{ t('Inject manual event') }}
+                  </button>
+                </section>
+                <p
+                  v-if="eventStatus"
+                  class="2xl:col-span-2 rounded-lg border border-slate-200 bg-white p-4 font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                >
+                  {{ eventStatus }}
+                </p>
+                <section class="2xl:col-span-2 card p-5 sm:p-6">
+                  <div class="section-heading">
+                    <div><p>{{ t('Operational events') }}</p><h3>{{ t('Recent event stream') }}</h3></div>
+                  </div>
+                  <div class="table-shell compact-table-shell">
+                    <table class="data-table">
+                      <thead><tr><th>{{ t('Event') }}</th><th>{{ t('Target') }}</th><th>{{ t('Location') }}</th><th>{{ t('Source') }}</th><th>{{ t('Detail') }}</th><th>{{ t('Timestamp') }}</th></tr></thead>
+                      <tbody>
+                        <tr
+                          v-for="event in recentOperationalEvents"
+                          :key="event.eventCode"
+                        >
+                          <td>
+                            <span
+                              class="event-chip"
+                              :class="statusClass(event.eventType)"
+                            >{{ displayOperationalEvent(event.eventType) }}</span>
+                          </td>
+                          <td>{{ operationalEventTarget(event) }}</td>
+                          <td>{{ operationalEventLocation(event) }}</td>
+                          <td>{{ t(event.source) }}</td>
+                          <td
+                            class="max-w-[22rem] truncate"
+                            :title="operationalEventDetail(event)"
+                          >
+                            {{ operationalEventDetail(event) }}
+                          </td>
+                          <td>{{ formatDate(event.occurredAt) }}</td>
+                        </tr>
+                        <tr v-if="!recentOperationalEvents.length">
+                          <td
+                            colspan="6"
+                            class="text-center"
+                          >
+                            {{ t('No records found') }}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+                <section class="2xl:col-span-2 card p-5 sm:p-6">
+                  <div class="section-heading">
+                    <div><p>{{ t('Audit trail') }}</p><h3>{{ t('Support localization history') }}</h3></div>
+                  </div>
+                  <p class="mt-3 text-sm text-slate-600 dark:text-slate-300">
+                    {{ t('Support localization history is generated by movements and is read-only in this interface.') }}
+                  </p>
+                  <div class="table-shell">
+                    <table class="data-table">
+                      <thead><tr><th>{{ t('Support') }}</th><th>{{ t('Section') }}</th><th>{{ t('Event') }}</th><th>{{ t('Timestamp') }}</th></tr></thead>
+                      <tbody>
+                        <tr
+                          v-for="history in supportHistory"
+                          :key="history.id"
+                        >
+                          <td>{{ supportCode(history.supportId) }}</td>
+                          <td>{{ sectionName(history.sectionId) }}</td>
+                          <td>{{ displayOperationalEvent(history.eventType) }}</td>
+                          <td>{{ formatDate(history.dateTime) }}</td>
+                        </tr>
+                        <tr v-if="!supportHistory.length">
+                          <td
+                            colspan="4"
+                            class="text-center"
+                          >
+                            {{ t('No records found') }}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              </div>
+
+              <!-- GRAFANA ANALYTICS VIEW -->
+              <div v-if="activeView === 'analytics'">
+                <GrafanaAnalyticsView
+                  :theme="theme"
+                  :current-locale="locale"
+                  :api-status="apiStatus"
+                  :api-base-url="apiBaseUrl"
+                  :operational-data="analyticsOperationalData"
+                  @refresh="loadData(false)"
+                />
+              </div>
+
+              <!-- USERS VIEW -->
+              <div
+                v-if="activeView === 'users' && canManageUsers"
+                class="space-y-5 lg:space-y-6"
+              >
+                <section class="ops-hero">
+                  <div class="section-heading">
+                    <div class="min-w-0">
+                      <p>{{ t('Admin') }}</p>
+                      <h3>{{ t('User Management') }}</h3>
+                      <p class="section-description">
+                        {{ t('Local user management keeps demo access explicit without changing backend authentication.') }}
+                      </p>
+                    </div>
+                  </div>
+                  <div class="kpi-grid mt-5">
+                    <article
+                      v-for="metric in userStatusCards"
+                      :key="metric.key"
+                      class="kpi-card"
+                      :class="metric.tone"
+                    >
+                      <span>{{ t(metric.label) }}</span>
+                      <strong>{{ metric.value }}</strong>
+                      <p>{{ t(metric.detail) }}</p>
+                    </article>
+                  </div>
+                </section>
+                <section class="industrial-panel">
+                  <div class="section-heading">
+                    <div><p>{{ t('Access control') }}</p><h3>{{ editingUsername ? t('Editing user') : t('Create or update user') }}</h3></div>
+                  </div>
+                  <form
+                    class="mt-5 grid gap-4 lg:grid-cols-2"
+                    @submit.prevent="registerUser(false)"
+                  >
+                    <label class="form-label">{{ t('Name / full name') }}<input
+                      v-model="registerForm.name"
+                      class="form-input"
+                    ></label>
+                    <label class="form-label">{{ t('Username') }}<input
+                      v-model="registerForm.username"
+                      class="form-input disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:disabled:bg-slate-800"
+                      :disabled="editingUsername !== null"
+                    ></label>
+                    <label class="form-label">{{ t('Email') }}<input
+                      v-model="registerForm.email"
+                      type="email"
+                      class="form-input"
+                    ></label>
+                    <label class="form-label">{{ t('Role') }}
+                      <select
+                        v-model="registerForm.roleKey"
+                        class="form-input disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:disabled:bg-slate-800"
+                        :disabled="editingUsername === defaultUser.username"
+                      >
+                        <option value="admin">{{ t('Administrator') }}</option>
+                        <option value="supervisor">{{ t('Supervisor') }}</option>
+                        <option value="operator">{{ t('Operator') }}</option>
+                        <option value="quality">{{ t('Quality technician') }}</option>
+                        <option value="logistics">{{ t('Logistics') }}</option>
+                        <option value="client">{{ t('Client') }}</option>
+                      </select>
+                    </label>
+                    <label class="form-label">{{ t('Password') }}<input
+                      v-model="registerForm.password"
+                      type="password"
+                      class="form-input"
+                    ></label>
+                    <label class="form-label">{{ t('Confirm password') }}<input
+                      v-model="registerForm.confirmPassword"
+                      type="password"
+                      class="form-input"
+                    ></label>
+                    <p
+                      v-if="editingUsername"
+                      class="lg:col-span-2 text-sm text-slate-500 dark:text-slate-400"
+                    >
+                      {{ t('Leave password empty to keep current password') }}
+                    </p>
+                    <div class="lg:col-span-2 flex flex-wrap items-center gap-3">
+                      <button
+                        class="btn-primary"
+                        type="submit"
+                      >
+                        {{ editingUsername ? t('Update user') : t('Create user') }}
+                      </button>
+                      <button
+                        v-if="editingUsername"
+                        class="btn-secondary"
+                        type="button"
+                        @click="resetUserForm()"
+                      >
+                        {{ t('Cancel') }}
+                      </button>
+                      <span
+                        v-if="registerError"
+                        class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-100"
+                      >{{ registerError }}</span>
+                      <span
+                        v-if="registerSuccess"
+                        class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-100"
+                      >{{ registerSuccess }}</span>
+                    </div>
+                  </form>
+                </section>
+                <section class="industrial-panel">
+                  <div class="section-heading">
+                    <div><p>{{ t('Users') }}</p><h3>{{ t('Existing users') }}</h3></div>
+                  </div>
+                  <div class="table-shell">
+                    <table class="data-table">
+                      <thead><tr><th>{{ t('Username') }}</th><th>{{ t('Name') }}</th><th>{{ t('Email') }}</th><th>{{ t('Role') }}</th><th>{{ t('Status') }}</th><th>{{ t('Last update') }}</th><th /></tr></thead>
+                      <tbody>
+                        <tr
+                          v-for="profile in users"
+                          :key="profile.username"
+                        >
+                          <td class="font-bold">
+                            {{ profile.username }}
+                          </td>
+                          <td>{{ profile.name }}</td>
+                          <td>{{ profile.email }}</td>
+                          <td>{{ getRoleLabel(profile.roleKey) }}</td>
+                          <td><span :class="statusClass(profile.active ? 'Active' : 'Blocked')">{{ profile.active ? t('Active') : t('Blocked') }}</span></td>
+                          <td>{{ formatDate(profile.lastLogin) }}</td>
+                          <td>
+                            <div class="flex flex-wrap gap-2">
+                              <button
+                                class="btn-secondary btn-compact"
+                                @click="startEditUser(profile)"
+                              >
+                                {{ t('Edit') }}
+                              </button>
+                              <button
+                                v-if="profile.username !== 'admin'"
+                                class="btn-secondary btn-compact"
+                                @click="toggleUserActive(profile)"
+                              >
+                                {{ profile.active ? t('Block') : t('Unblock') }}
+                              </button>
+                              <button
+                                v-if="profile.username !== 'admin'"
+                                class="btn-danger btn-compact"
+                                @click="removeUser(profile.username)"
+                              >
+                                {{ t('Delete') }}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        <tr v-if="!users.length">
+                          <td colspan="7">
+                            <div class="empty-state">
+                              <strong>{{ t('No users found') }}</strong><p>{{ t('Create an operator profile to start local dashboard access.') }}</p>
+                            </div>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              </div>
+
+              <!-- FIWARE VIEW -->
+              <div
+                v-if="activeView === 'fiware'"
+                class="space-y-5 lg:space-y-6"
+              >
+                <section class="ops-hero">
+                  <div class="section-heading">
+                    <div class="min-w-0">
+                      <p>{{ t('Context broker boundary') }}</p>
+                      <h3>{{ t('Current NGSI-LD-style context') }}</h3>
+                      <p class="section-description">
+                        {{ t('The relational backend remains the business source of truth. Orion-LD is used for current/hot context of supports, product units and racks.') }}
+                      </p>
+                    </div>
+                    <div class="flex w-full flex-wrap gap-2 sm:w-auto">
+                      <button
+                        class="btn-secondary w-full sm:w-auto"
+                        :disabled="fiwareLoading"
+                        @click="refreshFiwareContext()"
+                      >
+                        {{ t('Refresh context') }}
+                      </button>
+                      <button
+                        class="btn-primary w-full sm:w-auto"
+                        :disabled="fiwareLoading || !can('Fiware.Manage')"
+                        @click="publishFiware"
+                      >
+                        {{ t('Publish current context to Orion-LD') }}
+                      </button>
+                    </div>
+                  </div>
+                  <div class="kpi-grid mt-5">
+                    <article
+                      v-for="card in fiwareStatusCards"
+                      :key="card.key"
+                      class="kpi-card"
+                      :class="card.tone"
+                    >
+                      <span>{{ t(card.label) }}</span>
+                      <strong>{{ card.value }}</strong>
+                      <p>{{ t(card.detail) }}</p>
+                    </article>
+                  </div>
+                  <p
+                    v-if="fiwareActionStatus"
+                    class="mt-4 rounded-lg border border-slate-200 bg-white p-4 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                  >
+                    {{ fiwareActionStatus }}
+                  </p>
+                  <div
+                    class="mt-4 decision-card"
+                    :class="fiwareCoherenceOk ? 'tone-success' : 'tone-warning'"
+                  >
+                    <span>{{ t('Context coherence') }}</span>
+                    <strong>{{ fiwareCoherenceOk ? t('Context coherence confirmed') : t('Context review recommended') }}</strong>
+                    <p>{{ fiwareSummaryMessage() }}</p>
+                  </div>
+                  <p
+                    v-if="fiwareContext.errors.length"
+                    class="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700 dark:border-red-700/70 dark:bg-red-900/30 dark:text-red-100"
+                  >
+                    {{ fiwareContext.errors.join(' | ') }}
+                  </p>
+                </section>
+
+                <section class="industrial-panel">
+                  <div class="section-heading">
+                    <div><p>{{ t('FIWARE entities') }}</p><h3>{{ t('Published context entities') }}</h3></div>
+                  </div>
+                  <div class="table-shell">
+                    <table class="data-table">
+                      <thead><tr><th>{{ t('Type') }}</th><th>{{ t('ID') }}</th><th>{{ t('Main attributes') }}</th></tr></thead>
+                      <tbody>
+                        <tr
+                          v-for="entity in fiwareContext.entities"
+                          :key="entity.id"
+                        >
+                          <td><span class="badge-blue">{{ fiwareEntityTypeLabel(entity.type) }}</span></td>
+                          <td class="font-mono text-xs">
+                            {{ entity.id }}
+                          </td>
+                          <td>{{ fiwareAttributesPreview(entity.attributes) }}</td>
+                        </tr>
+                        <tr v-if="!fiwareContext.entities.length">
+                          <td colspan="3">
+                            <div class="empty-state">
+                              <strong>{{ t('No FIWARE entities available.') }}</strong><p>{{ t('Publish current context or refresh Orion-LD to validate hot context.') }}</p>
+                            </div>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+
+                <section
+                  v-if="fiwareLastPublish"
+                  class="industrial-panel"
+                >
+                  <div class="section-heading">
+                    <div><p>{{ t('Publish summary') }}</p><h3>{{ t('Last publish result') }}</h3></div>
+                  </div>
+                  <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <div class="kpi-card tone-muted">
+                      <p class="text-xs font-bold uppercase tracking-normal text-slate-500 dark:text-slate-400">
+                        {{ t('Attempted') }}
+                      </p>
+                      <p class="mt-2 text-sm font-black">
+                        {{ fiwareLastPublish.attemptedCount }}
+                      </p>
+                    </div>
+                    <div class="kpi-card tone-success">
+                      <p class="text-xs font-bold uppercase tracking-normal text-slate-500 dark:text-slate-400">
+                        {{ t('Published') }}
+                      </p>
+                      <p class="mt-2 text-sm font-black">
+                        {{ fiwareLastPublish.publishedCount }}
+                      </p>
+                    </div>
+                    <div
+                      class="kpi-card"
+                      :class="fiwareLastPublish.failedCount ? 'tone-danger' : 'tone-success'"
+                    >
+                      <p class="text-xs font-bold uppercase tracking-normal text-slate-500 dark:text-slate-400">
+                        {{ t('Failed') }}
+                      </p>
+                      <p class="mt-2 text-sm font-black">
+                        {{ fiwareLastPublish.failedCount }}
+                      </p>
+                    </div>
+                    <div class="kpi-card tone-info">
+                      <p class="text-xs font-bold uppercase tracking-normal text-slate-500 dark:text-slate-400">
+                        {{ t('Stale removed') }}
+                      </p>
+                      <p class="mt-2 text-sm font-black">
+                        {{ fiwareLastPublish.staleDeletedCount }}
+                      </p>
+                    </div>
+                  </div>
+                  <p
+                    v-if="fiwareLastPublish.staleEntityIds.length"
+                    class="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  >
+                    <span class="font-black">{{ t('Stale entity IDs') }}:</span> {{ fiwareLastPublish.staleEntityIds.join(' | ') }}
+                  </p>
+                  <p
+                    v-if="fiwareLastPublish.errors.length"
+                    class="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700 dark:border-red-700/70 dark:bg-red-900/30 dark:text-red-100"
+                  >
+                    <span class="font-black">{{ t('Synchronization errors') }}:</span> {{ fiwareLastPublish.errors.join(' | ') }}
+                  </p>
+                </section>
+              </div>
             </template>
           </div>
         </section>

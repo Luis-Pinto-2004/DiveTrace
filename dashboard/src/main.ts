@@ -1,5 +1,18 @@
 import { createApp } from 'vue'
-import App from './App.vue'
+import { createPinia } from 'pinia'
+import AppRoot from './AppRoot.vue'
+import router from './router'
+import { usePreferencesStore } from './stores/preferences'
+import './styles/tokens.css'
 import './style.css'
 
-createApp(App).mount('#app')
+const app = createApp(AppRoot)
+const pinia = createPinia()
+
+app.use(pinia)
+app.use(router)
+
+// Aplica o tema persistido antes do primeiro render para evitar flash.
+usePreferencesStore().hydrate()
+
+app.mount('#app')

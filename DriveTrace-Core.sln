@@ -6,6 +6,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "api", "api", "{D82C56D6-B2C
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DriveTraceCore.Api", "api\DriveTraceCore.Api.csproj", "{DFA7A724-9938-3D09-5E70-BEC64F1706C8}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DriveTraceCore.Api.Tests", "api\Tests\DriveTraceCore.Api.Tests.csproj", "{68304F00-FA25-49E8-8D94-A94E5C5953E6}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -16,6 +18,10 @@ Global
 		{DFA7A724-9938-3D09-5E70-BEC64F1706C8}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{DFA7A724-9938-3D09-5E70-BEC64F1706C8}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{DFA7A724-9938-3D09-5E70-BEC64F1706C8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{68304F00-FA25-49E8-8D94-A94E5C5953E6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{68304F00-FA25-49E8-8D94-A94E5C5953E6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{68304F00-FA25-49E8-8D94-A94E5C5953E6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{68304F00-FA25-49E8-8D94-A94E5C5953E6}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

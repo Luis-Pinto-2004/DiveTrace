@@ -89,10 +89,27 @@ const tableShellStyle = computed(() => {
       <div class="min-w-0">
         <p>{{ t('CRUD operations') }}</p>
         <h3>{{ t(config.title) }}</h3>
-        <p v-if="config.description" class="mt-2 max-w-3xl normal-case tracking-normal text-slate-500 dark:text-slate-400">{{ t(config.description) }}</p>
-        <p v-if="config.readOnly" class="mt-2 max-w-3xl normal-case tracking-normal text-amber-700 dark:text-amber-200">Não tem permissão para criar, editar ou eliminar nesta vista.</p>
+        <p
+          v-if="config.description"
+          class="mt-2 max-w-3xl normal-case tracking-normal text-slate-500 dark:text-slate-400"
+        >
+          {{ t(config.description) }}
+        </p>
+        <p
+          v-if="config.readOnly"
+          class="mt-2 max-w-3xl normal-case tracking-normal text-amber-700 dark:text-amber-200"
+        >
+          Não tem permissão para criar, editar ou eliminar nesta vista.
+        </p>
       </div>
-      <button class="btn-primary w-full shrink-0 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto" type="button" :disabled="config.readOnly" @click="emit('add')">{{ t('Add') }}</button>
+      <button
+        class="btn-primary w-full shrink-0 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+        type="button"
+        :disabled="config.readOnly"
+        @click="emit('add')"
+      >
+        {{ t('Add') }}
+      </button>
     </div>
 
     <p
@@ -105,10 +122,24 @@ const tableShellStyle = computed(() => {
       {{ t(message.text) }}
     </p>
 
-    <div v-if="formOpen" class="crud-form-shell">
-      <form class="grid max-h-[90vh] gap-4 overflow-y-auto p-4 lg:grid-cols-2 sm:p-5" @submit.prevent="emit('save')">
-        <label v-for="field in config.fields" :key="field.key" class="form-label" :class="{ 'lg:col-span-2': field.type === 'textarea' }">
-          <span>{{ t(field.label) }}<span v-if="field.required" class="text-red-600"> *</span></span>
+    <div
+      v-if="formOpen"
+      class="crud-form-shell"
+    >
+      <form
+        class="grid max-h-[90vh] gap-4 overflow-y-auto p-4 lg:grid-cols-2 sm:p-5"
+        @submit.prevent="emit('save')"
+      >
+        <label
+          v-for="field in config.fields"
+          :key="field.key"
+          class="form-label"
+          :class="{ 'lg:col-span-2': field.type === 'textarea' }"
+        >
+          <span>{{ t(field.label) }}<span
+            v-if="field.required"
+            class="text-red-600"
+          > *</span></span>
           <select
             v-if="field.type === 'select'"
             class="form-input"
@@ -116,7 +147,11 @@ const tableShellStyle = computed(() => {
             :value="inputValue(field.key)"
             @change="emit('updateField', field.key, ($event.target as HTMLSelectElement).value)"
           >
-            <option v-for="option in field.options?.() || []" :key="String(option.value)" :value="option.value">{{ option.label }}</option>
+            <option
+              v-for="option in field.options?.() || []"
+              :key="String(option.value)"
+              :value="option.value"
+            >{{ option.label }}</option>
           </select>
           <textarea
             v-else-if="field.type === 'textarea'"
@@ -132,33 +167,74 @@ const tableShellStyle = computed(() => {
             :disabled="editing && field.disabledOnEdit"
             :value="inputValue(field.key)"
             @input="emit('updateField', field.key, ($event.target as HTMLInputElement).value)"
-          />
+          >
         </label>
 
         <div class="sticky bottom-0 lg:col-span-2 -mx-4 -mb-4 mt-2 flex flex-wrap items-center gap-3 border-t border-slate-200 bg-white/95 px-4 py-4 backdrop-blur dark:border-slate-700 dark:bg-slate-800/95 sm:-mx-5 sm:-mb-5 sm:px-5">
-          <button class="btn-primary w-full disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto" type="submit" :disabled="config.readOnly">{{ editing ? t('Save') : t('Add') }}</button>
-          <button class="btn-secondary w-full sm:w-auto" type="button" @click="emit('cancel')">{{ t('Cancel') }}</button>
+          <button
+            class="btn-primary w-full disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+            type="submit"
+            :disabled="config.readOnly"
+          >
+            {{ editing ? t('Save') : t('Add') }}
+          </button>
+          <button
+            class="btn-secondary w-full sm:w-auto"
+            type="button"
+            @click="emit('cancel')"
+          >
+            {{ t('Cancel') }}
+          </button>
         </div>
       </form>
     </div>
 
-    <div class="table-shell" :style="tableShellStyle">
+    <div
+      class="table-shell"
+      :style="tableShellStyle"
+    >
       <table class="data-table">
         <thead>
           <tr>
-            <th v-for="column in config.columns" :key="column.key">{{ t(column.label) }}</th>
+            <th
+              v-for="column in config.columns"
+              :key="column.key"
+            >
+              {{ t(column.label) }}
+            </th>
             <th>{{ t('Actions') }}</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="item in config.items()" :key="String(item.id)">
-            <td v-for="column in config.columns" :key="column.key">
-              <span v-if="column.badge" :class="statusClass(String(item[column.key] || ''))" :title="cellValue(column, item)">{{ cellValue(column, item) }}</span>
-              <span v-else class="cell-clamp" :title="cellValue(column, item)">{{ cellValue(column, item) }}</span>
+          <tr
+            v-for="item in config.items()"
+            :key="String(item.id)"
+          >
+            <td
+              v-for="column in config.columns"
+              :key="column.key"
+            >
+              <span
+                v-if="column.badge"
+                :class="statusClass(String(item[column.key] || ''))"
+                :title="cellValue(column, item)"
+              >{{ cellValue(column, item) }}</span>
+              <span
+                v-else
+                class="cell-clamp"
+                :title="cellValue(column, item)"
+              >{{ cellValue(column, item) }}</span>
             </td>
             <td>
               <div class="flex flex-wrap gap-2">
-                <button class="btn-secondary btn-compact disabled:cursor-not-allowed disabled:opacity-50" type="button" :disabled="config.readOnly" @click="emit('edit', item)">{{ t('Edit') }}</button>
+                <button
+                  class="btn-secondary btn-compact disabled:cursor-not-allowed disabled:opacity-50"
+                  type="button"
+                  :disabled="config.readOnly"
+                  @click="emit('edit', item)"
+                >
+                  {{ t('Edit') }}
+                </button>
                 <button
                   v-if="config.allowDelete !== false"
                   class="btn-danger btn-compact disabled:cursor-not-allowed disabled:opacity-50"

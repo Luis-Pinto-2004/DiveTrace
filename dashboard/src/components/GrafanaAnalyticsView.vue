@@ -1,5 +1,8 @@
 <template>
-  <div class="analytics-page" :data-locale="props.currentLocale">
+  <div
+    class="analytics-page"
+    :data-locale="props.currentLocale"
+  >
     <section class="analytics-hero">
       <div class="section-heading">
         <div class="min-w-0">
@@ -10,16 +13,37 @@
           </p>
         </div>
         <div class="flex w-full flex-wrap gap-2 sm:w-auto">
-          <button type="button" class="btn-secondary w-full sm:w-auto" @click="refreshAll" :disabled="checkingConnectivity">
+          <button
+            type="button"
+            class="btn-secondary w-full sm:w-auto"
+            :disabled="checkingConnectivity"
+            @click="refreshAll"
+          >
             {{ checkingConnectivity ? t('Checking Grafana...') : t('Refresh analysis') }}
           </button>
-          <button type="button" class="btn-secondary w-full sm:w-auto" @click="focusTab('fiware')">{{ t('View FIWARE dashboard') }}</button>
-          <a class="btn-primary w-full sm:w-auto" :href="grafanaBaseUrl" target="_blank" rel="noopener noreferrer">{{ t('Open in Grafana') }}</a>
+          <button
+            type="button"
+            class="btn-secondary w-full sm:w-auto"
+            @click="focusTab('fiware')"
+          >
+            {{ t('View FIWARE dashboard') }}
+          </button>
+          <a
+            class="btn-primary w-full sm:w-auto"
+            :href="grafanaBaseUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+          >{{ t('Open in Grafana') }}</a>
         </div>
       </div>
 
       <div class="analytics-status-grid">
-        <article v-for="card in headerCards" :key="card.key" class="analytics-status-card" :class="card.toneClass">
+        <article
+          v-for="card in headerCards"
+          :key="card.key"
+          class="analytics-status-card"
+          :class="card.toneClass"
+        >
           <span>{{ card.label }}</span>
           <strong>{{ card.value }}</strong>
           <p>{{ card.detail }}</p>
@@ -27,7 +51,10 @@
       </div>
     </section>
 
-    <section class="analytics-decision-strip" :class="primaryOperationalDecision.toneClass">
+    <section
+      class="analytics-decision-strip"
+      :class="primaryOperationalDecision.toneClass"
+    >
       <div>
         <span>{{ t('Estado operacional') }}</span>
         <strong>{{ primaryOperationalDecision.state }}</strong>
@@ -44,7 +71,13 @@
         <span>{{ t('Evidência') }}</span>
         <strong>{{ primaryOperationalDecision.evidence }}</strong>
       </div>
-      <button type="button" class="btn-primary" @click="focusTab(primaryOperationalDecision.tab)">{{ t('Abrir detalhe') }}</button>
+      <button
+        type="button"
+        class="btn-primary"
+        @click="focusTab(primaryOperationalDecision.tab)"
+      >
+        {{ t('Abrir detalhe') }}
+      </button>
     </section>
 
     <section class="analytics-section">
@@ -52,11 +85,17 @@
         <div class="min-w-0">
           <p>{{ t('Operational data') }}</p>
           <h3>{{ t('Operational snapshot') }}</h3>
-          <p class="section-description">{{ t('Operational snapshot description') }}</p>
+          <p class="section-description">
+            {{ t('Operational snapshot description') }}
+          </p>
         </div>
       </div>
       <div class="analytics-kpi-grid">
-        <article v-for="metric in operationalMetrics" :key="metric.key" class="analytics-kpi-card">
+        <article
+          v-for="metric in operationalMetrics"
+          :key="metric.key"
+          class="analytics-kpi-card"
+        >
           <span>{{ metric.label }}</span>
           <strong>{{ metric.value }}</strong>
           <p>{{ metric.detail }}</p>
@@ -69,18 +108,31 @@
         <div class="min-w-0">
           <p>{{ t('Operational priorities') }}</p>
           <h3>{{ t('Decision panel') }}</h3>
-          <p class="section-description">{{ t('Decision panel description') }}</p>
+          <p class="section-description">
+            {{ t('Decision panel description') }}
+          </p>
         </div>
       </div>
       <div class="analytics-insight-grid">
-        <article v-for="insight in visibleOperationalInsights" :key="insight.key" class="analytics-insight-card" :class="insight.toneClass">
+        <article
+          v-for="insight in visibleOperationalInsights"
+          :key="insight.key"
+          class="analytics-insight-card"
+          :class="insight.toneClass"
+        >
           <span>{{ insight.domain }}</span>
           <strong>{{ insight.title }}</strong>
           <p>{{ insight.description }}</p>
           <p class="mt-3 rounded-lg border border-slate-200 bg-white/70 p-3 text-xs font-bold uppercase tracking-normal text-slate-600 dark:border-slate-700 dark:bg-slate-950/40 dark:text-slate-300">
             {{ t('Recommended action') }}: <span class="normal-case">{{ insight.action }}</span>
           </p>
-          <button type="button" class="btn-secondary mt-3 w-full" @click="focusTab(insight.tab)">{{ t('View supporting dashboard') }}</button>
+          <button
+            type="button"
+            class="btn-secondary mt-3 w-full"
+            @click="focusTab(insight.tab)"
+          >
+            {{ t('View supporting dashboard') }}
+          </button>
         </article>
       </div>
     </section>
@@ -90,9 +142,15 @@
         <div class="min-w-0">
           <p>{{ t('Available dashboards') }}</p>
           <h3>{{ t('Grafana dashboard catalogue') }}</h3>
-          <p class="section-description">{{ t('Dashboard catalogue description') }}</p>
+          <p class="section-description">
+            {{ t('Dashboard catalogue description') }}
+          </p>
         </div>
-        <button type="button" class="btn-secondary" @click="showAllDashboards = !showAllDashboards">
+        <button
+          type="button"
+          class="btn-secondary"
+          @click="showAllDashboards = !showAllDashboards"
+        >
           {{ showAllDashboards ? t('Mostrar menos') : t('Ver todos') }}
         </button>
       </div>
@@ -105,12 +163,16 @@
         >
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
-              <p class="dashboard-card-domain">{{ t(dashboard.domain) }}</p>
+              <p class="dashboard-card-domain">
+                {{ t(dashboard.domain) }}
+              </p>
               <h4>{{ t(dashboard.title) }}</h4>
             </div>
             <span :class="dashboardStatusClass">{{ dashboardStatusLabel }}</span>
           </div>
-          <p class="mt-3 text-sm text-slate-600 dark:text-slate-300">{{ t(dashboard.objective) }}</p>
+          <p class="mt-3 text-sm text-slate-600 dark:text-slate-300">
+            {{ t(dashboard.objective) }}
+          </p>
           <dl class="dashboard-card-meta">
             <div>
               <dt>{{ t('Analysis type') }}</dt>
@@ -121,15 +183,30 @@
               <dd>{{ datasourceName }}</dd>
             </div>
           </dl>
-          <p class="dashboard-card-note">{{ t(dashboard.decision) }}</p>
+          <p class="dashboard-card-note">
+            {{ t(dashboard.decision) }}
+          </p>
           <ul class="technical-list">
-            <li v-for="question in dashboard.questions" :key="question">{{ t(question) }}</li>
+            <li
+              v-for="question in dashboard.questions"
+              :key="question"
+            >
+              {{ t(question) }}
+            </li>
           </ul>
           <div class="mt-4 grid gap-2 sm:grid-cols-2">
-            <button type="button" class="btn-secondary" @click="focusEmbeddedDashboard(dashboard)">
+            <button
+              type="button"
+              class="btn-secondary"
+              @click="focusEmbeddedDashboard(dashboard)"
+            >
               {{ t('Show in application') }}
             </button>
-            <button type="button" class="btn-primary" @click="openDashboardInGrafana(dashboard)">
+            <button
+              type="button"
+              class="btn-primary"
+              @click="openDashboardInGrafana(dashboard)"
+            >
               {{ t('Open in Grafana') }}
             </button>
           </div>
@@ -142,7 +219,9 @@
         <div class="min-w-0">
           <p>{{ t('Embedded view') }}</p>
           <h3>{{ t(activeDashboard.title) }}</h3>
-          <p class="section-description">{{ t(activeDashboard.objective) }}</p>
+          <p class="section-description">
+            {{ t(activeDashboard.objective) }}
+          </p>
         </div>
       </div>
       <div class="mt-4 flex flex-wrap gap-2">
@@ -156,13 +235,21 @@
         >
           {{ t(tab.label) }}
         </button>
-        <button type="button" class="mobile-tab" :class="showEmbeddedPanels ? 'mobile-tab-active' : ''" @click="showEmbeddedPanels = !showEmbeddedPanels">
+        <button
+          type="button"
+          class="mobile-tab"
+          :class="showEmbeddedPanels ? 'mobile-tab-active' : ''"
+          @click="showEmbeddedPanels = !showEmbeddedPanels"
+        >
           {{ showEmbeddedPanels ? t('Ocultar detalhe') : t('Mostrar detalhe') }}
         </button>
       </div>
     </section>
 
-    <section v-if="showEmbeddedPanels" class="grid min-w-0 gap-5 xl:grid-cols-3">
+    <section
+      v-if="showEmbeddedPanels"
+      class="grid min-w-0 gap-5 xl:grid-cols-3"
+    >
       <GrafanaPanel
         v-for="card in activePanelCards"
         :key="card.key"
@@ -191,16 +278,29 @@
           <h3>{{ t(activeDashboard.title) }}</h3>
         </div>
         <div class="flex w-full flex-wrap gap-2 sm:w-auto">
-          <button type="button" class="btn-secondary w-full sm:w-auto" @click="showFullDashboard = !showFullDashboard">
+          <button
+            type="button"
+            class="btn-secondary w-full sm:w-auto"
+            @click="showFullDashboard = !showFullDashboard"
+          >
             {{ showFullDashboard ? t('Hide full dashboard') : t('Show full dashboard') }}
           </button>
-          <button type="button" class="btn-primary w-full sm:w-auto" @click="openDashboardInGrafana(activeDashboard)">
+          <button
+            type="button"
+            class="btn-primary w-full sm:w-auto"
+            @click="openDashboardInGrafana(activeDashboard)"
+          >
             {{ t('Open in Grafana') }}
           </button>
         </div>
       </div>
-      <p class="section-description mt-3">{{ t('Embedded dashboard view may be blocked by browser or Grafana policy. If that happens, use the Open in Grafana button.') }}</p>
-      <div v-if="showFullDashboard" class="mt-4">
+      <p class="section-description mt-3">
+        {{ t('Embedded dashboard view may be blocked by browser or Grafana policy. If that happens, use the Open in Grafana button.') }}
+      </p>
+      <div
+        v-if="showFullDashboard"
+        class="mt-4"
+      >
         <GrafanaPanel
           :key="`full-${activeDashboard.uid}-${props.currentLocale}-${grafanaTheme}`"
           :title="t(activeDashboard.title)"

@@ -1,0 +1,151 @@
+/*
+ * DriveTrace Core — Design tokens
+ * -------------------------------------------------------------
+ * Camada formal de tokens semânticos consumida pelos componentes
+ * partilhados (StatusBadge, KpiCard, etc.). Mapeia a paleta de
+ * estados de domínio para variáveis CSS com suporte a tema escuro.
+ *
+ * Paleta de domínio (ver docs/NOTAS_TECNICAS.md):
+ *   verde    -> OK / aprovado / concluído / disponível
+ *   azul     -> fluxo normal / informação / transferência
+ *   amarelo  -> pendente / atenção
+ *   laranja  -> retrabalho / recondicionamento / decisão
+ *   vermelho -> crítico / bloqueado / reprovado / sucata
+ *   cinzento -> inativo / sem dados
+ */
+
+:root {
+  /* Cores de marca */
+  --dt-brand-500: #0877d8;
+  --dt-brand-700: #065aa7;
+  --dt-brand-900: #0b2948;
+
+  /* Estados semânticos — superfície / contorno / texto / ponto */
+  --dt-ok-surface: #ecfdf5;
+  --dt-ok-border: #a7f3d0;
+  --dt-ok-text: #047857;
+  --dt-ok-solid: #10b981;
+
+  --dt-info-surface: #eff6ff;
+  --dt-info-border: #bfdbfe;
+  --dt-info-text: #1d4ed8;
+  --dt-info-solid: #3b82f6;
+
+  --dt-warn-surface: #fefce8;
+  --dt-warn-border: #fde68a;
+  --dt-warn-text: #a16207;
+  --dt-warn-solid: #eab308;
+
+  --dt-action-surface: #fff7ed;
+  --dt-action-border: #fed7aa;
+  --dt-action-text: #c2410c;
+  --dt-action-solid: #f97316;
+
+  --dt-critical-surface: #fef2f2;
+  --dt-critical-border: #fecaca;
+  --dt-critical-text: #b91c1c;
+  --dt-critical-solid: #ef4444;
+
+  --dt-neutral-surface: #f1f5f9;
+  --dt-neutral-border: #e2e8f0;
+  --dt-neutral-text: #475569;
+  --dt-neutral-solid: #94a3b8;
+
+  /* Texto forte (títulos) e fundo da aplicação — adaptam ao tema */
+  --dt-text-strong: #0b2948;
+  --dt-app-bg: #f4f8fb;
+  --dt-surface: #ffffff;
+  --dt-surface-2: #f1f5f9;
+  --dt-border: #e2e8f0;
+  --dt-sidebar-bg: #0b2948;
+
+  /* Espaçamento (escala de 4px) */
+  --dt-space-1: 0.25rem;
+  --dt-space-2: 0.5rem;
+  --dt-space-3: 0.75rem;
+  --dt-space-4: 1rem;
+  --dt-space-6: 1.5rem;
+  --dt-space-8: 2rem;
+
+  /* Raio e elevação */
+  --dt-radius: 0.5rem;
+  --dt-radius-lg: 0.75rem;
+  --dt-shadow-card: 0 14px 40px rgba(15, 23, 42, 0.07);
+  --dt-shadow-pop: 0 18px 50px rgba(15, 23, 42, 0.18);
+
+  /* Movimento — discreto e consistente (120–220ms) */
+  --dt-motion-fast: 120ms;
+  --dt-motion-base: 180ms;
+  --dt-motion-slow: 220ms;
+  --dt-ease: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Foco acessível (WCAG 2.1 AA) */
+  --dt-focus-ring: 0 0 0 2px #ffffff, 0 0 0 4px var(--dt-brand-500);
+}
+
+.dark {
+  /* Estados — tons calibrados para escuro, contornos visíveis */
+  --dt-ok-surface: rgba(46, 160, 67, 0.15);
+  --dt-ok-border: rgba(46, 160, 67, 0.40);
+  --dt-ok-text: #56d364;
+  --dt-ok-solid: #3fb950;
+
+  --dt-info-surface: rgba(56, 139, 253, 0.15);
+  --dt-info-border: rgba(56, 139, 253, 0.40);
+  --dt-info-text: #79c0ff;
+  --dt-info-solid: #4493f8;
+
+  --dt-warn-surface: rgba(187, 128, 9, 0.15);
+  --dt-warn-border: rgba(187, 128, 9, 0.40);
+  --dt-warn-text: #e3b341;
+  --dt-warn-solid: #d29922;
+
+  --dt-action-surface: rgba(219, 109, 40, 0.15);
+  --dt-action-border: rgba(219, 109, 40, 0.40);
+  --dt-action-text: #f0883e;
+  --dt-action-solid: #db6d28;
+
+  --dt-critical-surface: rgba(248, 81, 73, 0.15);
+  --dt-critical-border: rgba(248, 81, 73, 0.40);
+  --dt-critical-text: #ff7b72;
+  --dt-critical-solid: #f85149;
+
+  --dt-neutral-surface: rgba(177, 186, 196, 0.10);
+  --dt-neutral-border: rgba(205, 217, 229, 0.22);
+  --dt-neutral-text: #9aa4b0;
+  --dt-neutral-solid: #6e7681;
+
+  /* Base: fundo profundo, cartões nitidamente elevados, contornos visíveis */
+  --dt-text-strong: #e6edf3;
+  --dt-app-bg: #0d1117;
+  --dt-surface: #181e27;
+  --dt-surface-2: #11161e;
+  --dt-border: rgba(205, 217, 229, 0.18);
+  --dt-sidebar-bg: #0b2948;
+
+  --dt-shadow-card: 0 8px 24px rgba(1, 4, 9, 0.55);
+  --dt-shadow-pop: 0 16px 48px rgba(1, 4, 9, 0.7);
+  --dt-focus-ring: 0 0 0 2px #0d1117, 0 0 0 4px var(--dt-info-solid);
+}
+
+/* Respeitar preferência de movimento reduzido */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dt-motion-fast: 0ms;
+    --dt-motion-base: 0ms;
+    --dt-motion-slow: 0ms;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* Indicador de foco visível e consistente em toda a app */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: none;
+  box-shadow: var(--dt-focus-ring);
+  border-radius: var(--dt-radius);
+}

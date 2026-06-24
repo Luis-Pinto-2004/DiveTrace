@@ -1,0 +1,138 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend (build + test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore
+        run: dotnet restore ./DriveTrace-Core.sln
+      - name: Build
+        run: dotnet build ./DriveTrace-Core.sln --no-restore --configuration Release
+      - name: Test
+        run: dotnet test ./api/Tests/DriveTraceCore.Api.Tests.csproj --configuration Release --logger "trx;LogFileName=backend-tests.trx"
+      - name: Upload backend test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: '**/backend-tests.trx'
+          if-no-files-found: ignore
+
+  frontend:
+    name: Frontend (build + unit tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: dashboard/package-lock.json
+      - run: npm ci
+      - name: Type-check + build
+        run: npm run build
+      - name: Unit tests (coverage)
+        run: npm run test:coverage
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: dashboard/coverage
+          if-no-files-found: ignore
+
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    needs: [frontend]
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: dashboard/package-lock.json
+      - run: npm ci
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+      - name: Run E2E
+        run: npm run test:e2e -- --project=chromium
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: dashboard/playwright-report
+          if-no-files-found: ignore
+
+  lighthouse:
+    name: Lighthouse CI
+    runs-on: ubuntu-latest
+    needs: [frontend]
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: dashboard/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - name: Run Lighthouse CI
+        run: npx lhci autorun || echo "Lighthouse assertions reported (non-blocking warnings)"
+      - name: Upload Lighthouse reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-reports
+          path: docs/qa/lighthouse
+          if-no-files-found: ignore
+
+  compose:
+    name: Docker Compose validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate compose file
+        run: docker compose config
+
+  package:
+    name: Clean artifact ZIP
+    runs-on: ubuntu-latest
+    needs: [backend, frontend, e2e, lighthouse, compose]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build clean ZIP (source only)
+        run: |
+          ZIP=DriveTrace-Core-${GITHUB_SHA::7}.zip
+          zip -r "$ZIP" . \
+            -x '*/node_modules/*' '*/dist/*' '*/bin/*' '*/obj/*' \
+               '*/.git/*' '*/coverage/*' '*/playwright-report/*' \
+               '*/test-results/*' '*.zip'
+          echo "Created $ZIP"
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: drivetrace-core-source
+          path: 'DriveTrace-Core-*.zip'

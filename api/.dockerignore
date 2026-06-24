@@ -1,5 +1,6 @@
 bin
 obj
+Tests
 TestResults
 logs
 .env

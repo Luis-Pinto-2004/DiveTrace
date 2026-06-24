@@ -1,0 +1,162 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1366" height="860" viewBox="0 0 1366 860" font-family="Inter, system-ui, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f4f8fb"/>
+      <stop offset="1" stop-color="#eef4f8"/>
+    </linearGradient>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0877d8"/>
+      <stop offset="1" stop-color="#065aa7"/>
+    </linearGradient>
+    <filter id="card" x="-4%" y="-8%" width="108%" height="116%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#0f172a" flood-opacity="0.07"/>
+    </filter>
+  </defs>
+
+  <rect width="1366" height="860" fill="url(#bg)"/>
+
+  <!-- Sidebar -->
+  <rect x="0" y="0" width="248" height="860" fill="#ffffff"/>
+  <rect x="247" y="0" width="1" height="860" fill="#e2e8f0"/>
+  <rect x="16" y="18" width="216" height="56" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+  <rect x="28" y="30" width="32" height="32" rx="8" fill="url(#brand)"/>
+  <text x="70" y="44" font-size="15" font-weight="900" fill="#0b2948">DriveTrace Core</text>
+  <text x="70" y="60" font-size="10" font-weight="700" fill="#64748b" letter-spacing="0.5">DRIVOLUTION · WP3</text>
+
+  <text x="24" y="104" font-size="9" font-weight="900" fill="#94a3b8" letter-spacing="1">OPERAÇÃO</text>
+  <rect x="14" y="112" width="220" height="34" rx="9" fill="#eff6ff"/>
+  <rect x="14" y="112" width="3" height="34" rx="2" fill="#0877d8"/>
+  <text x="30" y="134" font-size="13" font-weight="800" fill="#0b2948">Centro de comando</text>
+  <text x="30" y="170" font-size="13" font-weight="700" fill="#475569">Bancada do operador</text>
+  <text x="30" y="202" font-size="13" font-weight="700" fill="#475569">Ordens de produção</text>
+  <text x="30" y="234" font-size="13" font-weight="700" fill="#475569">Unidades WIP</text>
+
+  <text x="24" y="276" font-size="9" font-weight="900" fill="#94a3b8" letter-spacing="1">QUALIDADE</text>
+  <text x="30" y="302" font-size="13" font-weight="700" fill="#475569">Recondicionamento</text>
+  <text x="24" y="344" font-size="9" font-weight="900" fill="#94a3b8" letter-spacing="1">LOGÍSTICA</text>
+  <text x="30" y="370" font-size="13" font-weight="700" fill="#475569">Racks e suportes</text>
+  <text x="24" y="412" font-size="9" font-weight="900" fill="#94a3b8" letter-spacing="1">ANALÍTICA</text>
+  <text x="30" y="438" font-size="13" font-weight="700" fill="#475569">Mapa de rastreabilidade</text>
+  <text x="30" y="470" font-size="13" font-weight="700" fill="#475569">Simulador de produção</text>
+
+  <rect x="14" y="770" width="220" height="74" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+  <circle cx="38" cy="800" r="14" fill="#dbeafe"/>
+  <text x="38" y="805" font-size="11" font-weight="900" fill="#0877d8" text-anchor="middle">S</text>
+  <text x="62" y="797" font-size="12" font-weight="800" fill="#0b2948">supervisor</text>
+  <text x="62" y="812" font-size="10" fill="#64748b">Supervisor de produção</text>
+
+  <!-- Topbar -->
+  <rect x="248" y="0" width="1118" height="64" fill="#ffffff"/>
+  <rect x="248" y="63" width="1118" height="1" fill="#e2e8f0"/>
+  <text x="280" y="32" font-size="18" font-weight="900" fill="#020617">Centro de comando</text>
+  <text x="280" y="50" font-size="12" font-weight="600" fill="#64748b">Visão global da fábrica e prioridades do turno</text>
+  <rect x="1066" y="16" width="120" height="32" rx="8" fill="#f1f5f9" stroke="#e2e8f0"/>
+  <text x="1126" y="36" font-size="11" font-weight="700" fill="#475569" text-anchor="middle">Tema · Idioma</text>
+  <rect x="1198" y="16" width="140" height="32" rx="8" fill="#ecfdf5" stroke="#a7f3d0"/>
+  <circle cx="1214" cy="32" r="4" fill="#10b981"/>
+  <text x="1226" y="36" font-size="11" font-weight="800" fill="#047857">API operacional</text>
+
+  <!-- KPI strip -->
+  <g filter="url(#card)">
+    <rect x="280" y="88" width="250" height="92" rx="12" fill="#ffffff"/>
+    <rect x="540" y="88" width="250" height="92" rx="12" fill="#ffffff"/>
+    <rect x="800" y="88" width="250" height="92" rx="12" fill="#ffffff"/>
+    <rect x="1060" y="88" width="278" height="92" rx="12" fill="#ffffff"/>
+  </g>
+  <rect x="280" y="104" width="3" height="60" rx="2" fill="#3b82f6"/>
+  <text x="298" y="116" font-size="10" font-weight="800" fill="#64748b" letter-spacing="0.5">UNIDADES EM CURSO</text>
+  <text x="298" y="150" font-size="30" font-weight="900" fill="#020617">128</text>
+  <text x="298" y="170" font-size="10" font-weight="700" fill="#047857">▲ +6% vs. turno anterior</text>
+
+  <rect x="540" y="104" width="3" height="60" rx="2" fill="#eab308"/>
+  <text x="558" y="116" font-size="10" font-weight="800" fill="#64748b" letter-spacing="0.5">QUALIDADE PENDENTE</text>
+  <text x="558" y="150" font-size="30" font-weight="900" fill="#020617">14</text>
+  <text x="558" y="170" font-size="10" font-weight="700" fill="#a16207">7 a aguardar decisão</text>
+
+  <rect x="800" y="104" width="3" height="60" rx="2" fill="#f97316"/>
+  <text x="818" y="116" font-size="10" font-weight="800" fill="#64748b" letter-spacing="0.5">RETRABALHO ATIVO</text>
+  <text x="818" y="150" font-size="30" font-weight="900" fill="#020617">9</text>
+  <text x="818" y="170" font-size="10" font-weight="700" fill="#c2410c">3 em recondicionamento</text>
+
+  <rect x="1060" y="104" width="3" height="60" rx="2" fill="#ef4444"/>
+  <text x="1078" y="116" font-size="10" font-weight="800" fill="#64748b" letter-spacing="0.5">RACKS CRÍTICOS</text>
+  <text x="1078" y="150" font-size="30" font-weight="900" fill="#020617">2</text>
+  <text x="1078" y="170" font-size="10" font-weight="700" fill="#b91c1c">Capacidade &gt; 90%</text>
+
+  <!-- Factory flow map (swimlanes) -->
+  <g filter="url(#card)">
+    <rect x="280" y="200" width="690" height="392" rx="12" fill="#ffffff"/>
+  </g>
+  <text x="300" y="232" font-size="14" font-weight="900" fill="#0b2948">Fluxo da fábrica</text>
+  <text x="300" y="250" font-size="11" fill="#64748b">Swimlanes por linha · cores por estado</text>
+
+  <!-- Lane 1 -->
+  <text x="300" y="288" font-size="11" font-weight="800" fill="#334155">LINHA-01 · Montagem e soldadura</text>
+  <rect x="300" y="296" width="650" height="44" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+  <rect x="312" y="306" width="60" height="24" rx="6" fill="#dbeafe"/><text x="342" y="322" font-size="10" font-weight="800" fill="#1d4ed8" text-anchor="middle">U-1042</text>
+  <rect x="380" y="306" width="60" height="24" rx="6" fill="#dbeafe"/><text x="410" y="322" font-size="10" font-weight="800" fill="#1d4ed8" text-anchor="middle">U-1043</text>
+  <rect x="448" y="306" width="60" height="24" rx="6" fill="#dcfce7"/><text x="478" y="322" font-size="10" font-weight="800" fill="#047857" text-anchor="middle">U-1039</text>
+  <rect x="516" y="306" width="60" height="24" rx="6" fill="#fef9c3"/><text x="546" y="322" font-size="10" font-weight="800" fill="#a16207" text-anchor="middle">U-1051</text>
+
+  <!-- Lane 2 -->
+  <text x="300" y="372" font-size="11" font-weight="800" fill="#334155">LINHA-02 · Pintura A</text>
+  <rect x="300" y="380" width="650" height="44" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+  <rect x="312" y="390" width="60" height="24" rx="6" fill="#ffedd5"/><text x="342" y="406" font-size="10" font-weight="800" fill="#c2410c" text-anchor="middle">U-1011</text>
+  <rect x="380" y="390" width="60" height="24" rx="6" fill="#dbeafe"/><text x="410" y="406" font-size="10" font-weight="800" fill="#1d4ed8" text-anchor="middle">U-1012</text>
+  <rect x="448" y="390" width="60" height="24" rx="6" fill="#fee2e2"/><text x="478" y="406" font-size="10" font-weight="800" fill="#b91c1c" text-anchor="middle">U-1007</text>
+
+  <!-- Lane 3 -->
+  <text x="300" y="456" font-size="11" font-weight="800" fill="#334155">LINHA-03 · Pintura B</text>
+  <rect x="300" y="464" width="650" height="44" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+  <rect x="312" y="474" width="60" height="24" rx="6" fill="#dcfce7"/><text x="342" y="490" font-size="10" font-weight="800" fill="#047857" text-anchor="middle">U-0998</text>
+  <rect x="380" y="474" width="60" height="24" rx="6" fill="#dcfce7"/><text x="410" y="490" font-size="10" font-weight="800" fill="#047857" text-anchor="middle">U-0999</text>
+
+  <!-- Lane 4 -->
+  <text x="300" y="540" font-size="11" font-weight="800" fill="#334155">LINHA-04 · Qualidade, retrabalho e expedição</text>
+  <rect x="300" y="548" width="650" height="36" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+  <rect x="312" y="555" width="60" height="22" rx="6" fill="#ffedd5"/><text x="342" y="570" font-size="10" font-weight="800" fill="#c2410c" text-anchor="middle">U-0980</text>
+  <rect x="380" y="555" width="60" height="22" rx="6" fill="#fef9c3"/><text x="410" y="570" font-size="10" font-weight="800" fill="#a16207" text-anchor="middle">U-0981</text>
+
+  <!-- Right column: pending quality + activity -->
+  <g filter="url(#card)">
+    <rect x="986" y="200" width="352" height="190" rx="12" fill="#ffffff"/>
+    <rect x="986" y="402" width="352" height="190" rx="12" fill="#ffffff"/>
+  </g>
+  <text x="1006" y="230" font-size="13" font-weight="900" fill="#0b2948">Decisões pendentes</text>
+  <rect x="1006" y="244" width="312" height="58" rx="9" fill="#fff7ed" stroke="#fed7aa"/>
+  <text x="1018" y="266" font-size="11" font-weight="800" fill="#0b2948">U-0980 · NC superfície</text>
+  <text x="1018" y="282" font-size="10" fill="#64748b">Aguarda decisão de retrabalho</text>
+  <rect x="1250" y="256" width="56" height="22" rx="11" fill="#ffedd5"/><text x="1278" y="271" font-size="9" font-weight="800" fill="#c2410c" text-anchor="middle">Decidir</text>
+  <rect x="1006" y="312" width="312" height="58" rx="9" fill="#fef2f2" stroke="#fecaca"/>
+  <text x="1018" y="334" font-size="11" font-weight="800" fill="#0b2948">U-1007 · Reprovado</text>
+  <text x="1018" y="350" font-size="10" fill="#64748b">Candidato a sucata</text>
+  <rect x="1250" y="324" width="56" height="22" rx="11" fill="#fee2e2"/><text x="1278" y="339" font-size="9" font-weight="800" fill="#b91c1c" text-anchor="middle">Rever</text>
+
+  <text x="1006" y="432" font-size="13" font-weight="900" fill="#0b2948">Transferências recentes</text>
+  <text x="1006" y="460" font-size="11" font-weight="700" fill="#334155">U-1043 · LINHA-01 → LINHA-02</text>
+  <text x="1006" y="478" font-size="10" fill="#64748b">há 4 min</text>
+  <line x1="1006" y1="492" x2="1318" y2="492" stroke="#e2e8f0"/>
+  <text x="1006" y="514" font-size="11" font-weight="700" fill="#334155">U-0999 · LINHA-03 → LINHA-04</text>
+  <text x="1006" y="532" font-size="10" fill="#64748b">há 11 min</text>
+  <line x1="1006" y1="546" x2="1318" y2="546" stroke="#e2e8f0"/>
+  <text x="1006" y="568" font-size="11" font-weight="700" fill="#334155">U-1039 · concluída em LINHA-01</text>
+  <text x="1006" y="586" font-size="10" fill="#64748b">há 18 min</text>
+
+  <!-- Legend -->
+  <g filter="url(#card)"><rect x="280" y="612" width="1058" height="216" rx="12" fill="#ffffff"/></g>
+  <text x="300" y="644" font-size="14" font-weight="900" fill="#0b2948">Gargalos e alertas determinísticos</text>
+  <rect x="300" y="660" width="500" height="64" rx="9" fill="#fef2f2" stroke="#fecaca"/>
+  <text x="316" y="684" font-size="12" font-weight="800" fill="#b91c1c">LINHA-02 · Pintura A — bottleneck</text>
+  <text x="316" y="704" font-size="10" fill="#64748b">3 unidades em espera · buffer acima de 90%</text>
+  <rect x="300" y="736" width="500" height="64" rx="9" fill="#fff7ed" stroke="#fed7aa"/>
+  <text x="316" y="760" font-size="12" font-weight="800" fill="#c2410c">Rack R-07 — capacidade crítica</text>
+  <text x="316" y="780" font-size="10" fill="#64748b">Recomendado redistribuir suportes</text>
+
+  <!-- Legend chips -->
+  <text x="828" y="664" font-size="11" font-weight="900" fill="#334155" letter-spacing="0.5">LEGENDA</text>
+  <rect x="828" y="678" width="14" height="14" rx="4" fill="#3b82f6"/><text x="850" y="690" font-size="11" fill="#475569">Fluxo / transferência</text>
+  <rect x="828" y="702" width="14" height="14" rx="4" fill="#10b981"/><text x="850" y="714" font-size="11" fill="#475569">Concluído / disponível</text>
+  <rect x="828" y="726" width="14" height="14" rx="4" fill="#eab308"/><text x="850" y="738" font-size="11" fill="#475569">Pendente / atenção</text>
+  <rect x="828" y="750" width="14" height="14" rx="4" fill="#f97316"/><text x="850" y="762" font-size="11" fill="#475569">Retrabalho / decisão</text>
+  <rect x="828" y="774" width="14" height="14" rx="4" fill="#ef4444"/><text x="850" y="786" font-size="11" fill="#475569">Crítico / bloqueado</text>
+</svg>

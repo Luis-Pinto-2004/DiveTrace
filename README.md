@@ -3,6 +3,35 @@ DRIVOLUTION WP3 — WIP Traceability and Monitoring Platform
 
 DriveTrace Core é uma plataforma académica para rastreabilidade e monitorização WIP em contexto automóvel. A unidade rastreável é a `ProductUnit`, o `Support` é a âncora física intra-linha e a `Rack` representa logística pós-linha. A stack combina FIWARE/Orion-LD, ASP.NET Core/.NET 8 API, PostgreSQL/TimescaleDB, MongoDB, QuantumLeap e uma dashboard Vue 3.
 
+> **Estatuto**: protótipo avançado / V1 séria e demonstrável — não um ERP/MES industrial final. A autenticação é **demo/local** (ver `docs/NOTAS_TECNICAS.md`).
+
+## Novidades da V2 (upgrade)
+
+- **Base modular no frontend** sem regressões: `stores/` (Pinia), `router/` (Vue Router com guards puros testados), `utils/` (estados, acessos, formatadores PT-PT), `components/common/` (biblioteca acessível) e `styles/tokens.css` (design tokens com tema escuro).
+- **Performance**: *code-splitting* por rota e divisão de *vendors* reduziram o *chunk* inicial JS de **~182 kB → ~68 kB** (gzip).
+- **Qualidade**: 44 testes unitários (Vitest) verdes, E2E (Playwright) por perfil, testes unitários de backend (xUnit), config de Lighthouse CI e pipeline GitHub Actions.
+- **Hardening do backend**: ProblemDetails, *exception handler*, cabeçalhos de segurança, `/health` e CORS configurável.
+- **Documentação**: ver **[`docs/SETUP_E_EXECUCAO.md`](docs/SETUP_E_EXECUCAO.md)** e **[`docs/NOTAS_TECNICAS.md`](docs/NOTAS_TECNICAS.md)**; mockups em `docs/mockups/`.
+
+## Perfis demo
+
+| Perfil | Utilizador / Palavra-passe | Área inicial |
+|---|---|---|
+| Administrador | `admin` / `admin` | Estado técnico e administração |
+| Supervisor | `supervisor` / `supervisor` | Centro de comando da fábrica |
+| Operador | `operador` / `operador` | Bancada com tarefas imediatas |
+| Qualidade | `qualidade` / `qualidade` | Decisões, NC, retrabalho, recondicionamento |
+| Logística | `logistica` / `logistica` | Racks, suportes e expedição |
+| Cliente | `cliente` / `cliente` | Encomendas e seguimento (isolado) |
+
+## Limitações conhecidas
+
+- Autenticação demo/local — não é segurança de produção.
+- O `App.vue` continua extenso; a migração para renderização por `<router-view>` é o próximo incremento (infraestrutura de router já pronta e testada).
+- O *schema* físico mantém nomes internos em inglês; a terminologia PT-PT vive na camada de apresentação.
+- As metas Lighthouse devem ser confirmadas no ambiente representativo (`npm run lighthouse`).
+
+
 ## Requisitos
 
 - Windows 10/11

@@ -1,28 +1,48 @@
 {
   "name": "drivetrace-core-dashboard",
   "private": true,
-  "version": "1.0.0",
+  "version": "2.0.0",
   "type": "module",
   "description": "DriveTrace Core — DRIVOLUTION WP3 WIP Traceability and Monitoring Platform",
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "lint": "eslint . --ext .ts,.vue",
+    "format": "prettier --write \"src/**/*.{ts,vue,css}\"",
+    "lighthouse": "lhci autorun"
   },
   "dependencies": {
     "@vue-flow/core": "^1.48.2",
     "axios": "^1.7.9",
-    "vue": "^3.5.12"
+    "pinia": "^2.3.1",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0"
   },
   "devDependencies": {
+    "@lhci/cli": "^0.14.0",
+    "@playwright/test": "^1.49.1",
     "@types/node": "^22.9.0",
     "@vitejs/plugin-vue": "^5.1.4",
+    "@vitest/coverage-v8": "^2.1.8",
     "@vue/compiler-sfc": "^3.5.13",
+    "@vue/test-utils": "^2.4.6",
     "autoprefixer": "^10.4.20",
+    "eslint": "^9.15.0",
+    "eslint-plugin-vue": "^9.31.0",
+    "jsdom": "^25.0.1",
     "postcss": "^8.4.47",
+    "prettier": "^3.3.3",
     "tailwindcss": "^3.4.14",
     "typescript": "~5.6.2",
+    "typescript-eslint": "^8.61.1",
     "vite": "^5.4.10",
+    "vitest": "^2.1.8",
     "vue-tsc": "^2.1.8"
   }
 }

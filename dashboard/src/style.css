@@ -49,7 +49,7 @@
   .app-sidebar-profile-actions .btn-secondary { @apply min-w-0 px-2.5 py-1.5 text-[11px] leading-tight; }
   .app-sidebar-profile-actions .btn-secondary:last-child { @apply col-span-2; }
   .app-sidebar-resize-handle { @apply absolute inset-y-0 -right-1 hidden w-2 cursor-col-resize rounded-full bg-transparent transition hover:bg-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-400 dark:hover:bg-sky-700 lg:block; }
-  .card { @apply rounded-lg border border-slate-200/80 bg-white/95 shadow-[0_14px_40px_rgba(15,23,42,0.07)] dark:border-slate-800 dark:bg-slate-900/95 dark:text-slate-100; }
+  .card { @apply min-w-0 rounded-lg border border-slate-200/80 bg-white/95 shadow-[0_14px_40px_rgba(15,23,42,0.07)] dark:border-slate-800 dark:bg-slate-900/95 dark:text-slate-100; }
   .hero-card { @apply rounded-lg border border-slate-200/85 bg-gradient-to-br from-white via-slate-50 to-sky-50 p-4 shadow-[0_14px_36px_rgba(15,23,42,0.07)] dark:border-slate-800 dark:bg-gradient-to-br dark:from-slate-900 dark:via-slate-900 dark:to-slate-950 dark:text-slate-100 sm:p-5; }
   .metric-card { @apply min-w-0 rounded-lg border border-slate-200/90 bg-white p-3 shadow-[0_8px_22px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:border-sky-200 dark:border-slate-800 dark:bg-slate-900 sm:p-4; }
   .metric-card span { @apply block text-[11px] font-bold uppercase tracking-normal text-slate-500 dark:text-slate-400; }
@@ -192,16 +192,6 @@
   .customer-progress-step-current { @apply border-amber-400 bg-amber-50 shadow-sm dark:border-amber-600 dark:bg-amber-950/40; }
   .customer-progress-step-current span { @apply bg-amber-500 ring-4 ring-amber-100 dark:ring-amber-900/60; }
   .customer-progress-step-current p { @apply text-amber-900 dark:text-amber-100; }
-  .client-order-stages { @apply grid gap-2; grid-template-columns: repeat(auto-fit, minmax(6.75rem, 1fr)); }
-  .client-order-stage { @apply flex min-h-24 flex-col items-center justify-center gap-2 rounded-lg border-2 border-slate-200 bg-slate-50 p-3 text-center text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-950/50 dark:text-slate-400; }
-  .client-order-stage__dot { @apply block h-4 w-4 rounded-full bg-slate-400 shadow-[0_0_0_4px_rgba(148,163,184,0.14)] dark:bg-slate-600; }
-  .client-order-stage__label { @apply text-center text-xs font-black uppercase leading-4 tracking-normal; }
-  .client-order-stage--completed { @apply border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-100; }
-  .client-order-stage--completed .client-order-stage__dot { @apply bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.16)]; }
-  .client-order-stage--current { @apply border-amber-400 bg-amber-50 text-amber-900 dark:border-amber-600 dark:bg-amber-950/40 dark:text-amber-100; }
-  .client-order-stage--current .client-order-stage__dot { @apply bg-amber-500 shadow-[0_0_0_4px_rgba(245,158,11,0.18)]; }
-  .client-order-stage--upcoming { @apply border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-800 dark:bg-slate-950/50 dark:text-slate-400; }
-  .client-order-stage--upcoming .client-order-stage__dot { @apply bg-slate-400 shadow-[0_0_0_4px_rgba(148,163,184,0.14)] dark:bg-slate-600; }
   .customer-info-tile { @apply rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/50; }
   .customer-info-tile strong { @apply mt-1 block text-sm font-black text-slate-950 dark:text-white; }
   .customer-history-list { @apply space-y-2; }
@@ -250,10 +240,6 @@
   }
 
   .customer-progress-steps {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-  }
-
-  .client-order-stages {
     grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 

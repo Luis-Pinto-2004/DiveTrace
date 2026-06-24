@@ -376,32 +376,68 @@ function openSelectedRunOrderGraph() {
         <div class="min-w-0">
           <p>Operação demo</p>
           <h3>Simulador de produção</h3>
-          <p class="section-description">Avance unidades pela linha para demonstrar fluxo, qualidade, retrabalho, recondicionamento e logística.</p>
+          <p class="section-description">
+            Avance unidades pela linha para demonstrar fluxo, qualidade, retrabalho, recondicionamento e logística.
+          </p>
         </div>
         <div class="flex flex-wrap gap-2">
-          <button class="btn-secondary" @click="refreshAll" :disabled="loading">Atualizar</button>
-          <button class="btn-secondary" @click="emit('openAnalytics')">Abrir analítica</button>
-          <button class="btn-secondary" @click="emit('openFiware')">Abrir FIWARE</button>
+          <button
+            class="btn-secondary"
+            :disabled="loading"
+            @click="refreshAll"
+          >
+            Atualizar
+          </button>
+          <button
+            class="btn-secondary"
+            @click="emit('openAnalytics')"
+          >
+            Abrir analítica
+          </button>
+          <button
+            class="btn-secondary"
+            @click="emit('openFiware')"
+          >
+            Abrir FIWARE
+          </button>
         </div>
       </div>
 
       <div class="kpi-grid mt-5">
-        <article v-for="card in statusCards" :key="card.key" class="kpi-card" :class="card.tone">
+        <article
+          v-for="card in statusCards"
+          :key="card.key"
+          class="kpi-card"
+          :class="card.tone"
+        >
           <span>{{ card.label }}</span>
           <strong>{{ card.value }}</strong>
           <p>{{ card.detail }}</p>
         </article>
       </div>
 
-      <div class="scenario-result-strip mt-4" :class="selectedRunOutcome.tone">
+      <div
+        class="scenario-result-strip mt-4"
+        :class="selectedRunOutcome.tone"
+      >
         <span>Resultado do cenário</span>
         <strong>{{ selectedRunOutcome.label }}</strong>
         <p>{{ selectedRunOutcome.detail }}</p>
       </div>
     </section>
 
-    <p v-if="errorMessage" class="alert-error">{{ errorMessage }}</p>
-    <p v-if="actionMessage" class="alert-ok">{{ actionMessage }}</p>
+    <p
+      v-if="errorMessage"
+      class="alert-error"
+    >
+      {{ errorMessage }}
+    </p>
+    <p
+      v-if="actionMessage"
+      class="alert-ok"
+    >
+      {{ actionMessage }}
+    </p>
 
     <section class="grid gap-4 xl:grid-cols-3">
       <article
@@ -416,9 +452,14 @@ function openSelectedRunOrderGraph() {
             <p>{{ scenario.key }}</p>
             <h3>{{ scenario.name }}</h3>
           </div>
-          <span class="state-pill" :class="scenarioStateTone(scenario)">{{ scenario.stepCount }} passos</span>
+          <span
+            class="state-pill"
+            :class="scenarioStateTone(scenario)"
+          >{{ scenario.stepCount }} passos</span>
         </div>
-        <p class="mt-3 text-sm text-slate-600 dark:text-slate-300">{{ scenario.description }}</p>
+        <p class="mt-3 text-sm text-slate-600 dark:text-slate-300">
+          {{ scenario.description }}
+        </p>
         <dl class="detail-grid mt-4">
           <div><dt>Resultado</dt><dd>{{ scenario.outcome }}</dd></div>
           <div><dt>Ordem</dt><dd>{{ scenario.defaultOrderNumber }}</dd></div>
@@ -426,7 +467,12 @@ function openSelectedRunOrderGraph() {
           <div><dt>Entidades</dt><dd>{{ scenario.entities.length }}</dd></div>
         </dl>
         <ul class="scenario-highlights mt-4">
-          <li v-for="item in scenario.highlights" :key="item">{{ item }}</li>
+          <li
+            v-for="item in scenario.highlights"
+            :key="item"
+          >
+            {{ item }}
+          </li>
         </ul>
       </article>
     </section>
@@ -443,8 +489,15 @@ function openSelectedRunOrderGraph() {
         <div class="form-grid mt-4">
           <label class="form-label">
             Cenário
-            <select v-model="selectedScenarioKey" class="form-input">
-              <option v-for="scenario in state.scenarios" :key="scenario.key" :value="scenario.key">
+            <select
+              v-model="selectedScenarioKey"
+              class="form-input"
+            >
+              <option
+                v-for="scenario in state.scenarios"
+                :key="scenario.key"
+                :value="scenario.key"
+              >
                 {{ scenario.name }}
               </option>
             </select>
@@ -452,12 +505,18 @@ function openSelectedRunOrderGraph() {
 
           <label class="form-label">
             Nome da simulação
-            <input v-model="runName" class="form-input" />
+            <input
+              v-model="runName"
+              class="form-input"
+            >
           </label>
 
           <label class="form-label">
             Velocidade
-            <select v-model="runSpeed" class="form-input">
+            <select
+              v-model="runSpeed"
+              class="form-input"
+            >
               <option value="Manual">Manual</option>
               <option value="Automatic">Automática</option>
             </select>
@@ -465,47 +524,123 @@ function openSelectedRunOrderGraph() {
 
           <label class="form-label">
             Notas
-            <textarea v-model="runNotes" class="form-input min-h-[92px]"></textarea>
+            <textarea
+              v-model="runNotes"
+              class="form-input min-h-[92px]"
+            />
           </label>
         </div>
 
         <div class="button-row mt-4">
-          <button class="btn-primary" :disabled="actionLoading || !selectedScenario" @click="createRun">Criar simulação</button>
-          <button class="btn-secondary" :disabled="actionLoading || !selectedRunId" @click="tickRun">Avançar passo</button>
-          <button class="btn-secondary" :disabled="actionLoading || !selectedRunId || selectedRun?.status !== 'Running'" @click="syncAutoRun">Automático</button>
-          <button class="btn-secondary" :disabled="actionLoading || !selectedRunId || selectedRun?.status !== 'Running'" @click="pauseRun">Pausar</button>
-          <button class="btn-secondary" :disabled="actionLoading || !selectedRunId || selectedRun?.status !== 'Paused'" @click="resumeRun">Retomar</button>
-          <button class="btn-danger" :disabled="actionLoading || !selectedRunId" @click="stopRun">Parar</button>
-          <button class="btn-secondary" :disabled="actionLoading || !selectedRunId" @click="resetRun">Preparar demo limpa</button>
+          <button
+            class="btn-primary"
+            :disabled="actionLoading || !selectedScenario"
+            @click="createRun"
+          >
+            Criar simulação
+          </button>
+          <button
+            class="btn-secondary"
+            :disabled="actionLoading || !selectedRunId"
+            @click="tickRun"
+          >
+            Avançar passo
+          </button>
+          <button
+            class="btn-secondary"
+            :disabled="actionLoading || !selectedRunId || selectedRun?.status !== 'Running'"
+            @click="syncAutoRun"
+          >
+            Automático
+          </button>
+          <button
+            class="btn-secondary"
+            :disabled="actionLoading || !selectedRunId || selectedRun?.status !== 'Running'"
+            @click="pauseRun"
+          >
+            Pausar
+          </button>
+          <button
+            class="btn-secondary"
+            :disabled="actionLoading || !selectedRunId || selectedRun?.status !== 'Paused'"
+            @click="resumeRun"
+          >
+            Retomar
+          </button>
+          <button
+            class="btn-danger"
+            :disabled="actionLoading || !selectedRunId"
+            @click="stopRun"
+          >
+            Parar
+          </button>
+          <button
+            class="btn-secondary"
+            :disabled="actionLoading || !selectedRunId"
+            @click="resetRun"
+          >
+            Preparar demo limpa
+          </button>
         </div>
 
         <div class="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/50">
-          <p class="text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">Estado atual</p>
-          <p class="mt-2 text-sm font-semibold text-slate-700 dark:text-slate-200">{{ selectedRunSummary }}</p>
-          <div v-if="selectedRun" class="mt-4 grid gap-3 sm:grid-cols-2">
+          <p class="text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">
+            Estado atual
+          </p>
+          <p class="mt-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+            {{ selectedRunSummary }}
+          </p>
+          <div
+            v-if="selectedRun"
+            class="mt-4 grid gap-3 sm:grid-cols-2"
+          >
             <div>
-              <p class="text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">Unidade</p>
-              <p class="font-bold">{{ selectedRun.unitCode || 'n/d' }}</p>
+              <p class="text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">
+                Unidade
+              </p>
+              <p class="font-bold">
+                {{ selectedRun.unitCode || 'n/d' }}
+              </p>
             </div>
             <div>
-              <p class="text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">Ordem</p>
-              <p class="font-bold">{{ selectedRun.orderNumber || 'n/d' }}</p>
+              <p class="text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">
+                Ordem
+              </p>
+              <p class="font-bold">
+                {{ selectedRun.orderNumber || 'n/d' }}
+              </p>
             </div>
             <div>
-              <p class="text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">Linha</p>
-              <p class="font-bold">{{ selectedRun.currentLine || 'n/d' }}</p>
+              <p class="text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">
+                Linha
+              </p>
+              <p class="font-bold">
+                {{ selectedRun.currentLine || 'n/d' }}
+              </p>
             </div>
             <div>
-              <p class="text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">Secção</p>
-              <p class="font-bold">{{ selectedRun.currentSection || 'n/d' }}</p>
+              <p class="text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">
+                Secção
+              </p>
+              <p class="font-bold">
+                {{ selectedRun.currentSection || 'n/d' }}
+              </p>
             </div>
             <div>
-              <p class="text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">Qualidade</p>
-              <p class="font-bold">{{ selectedRun.qualityStatus || 'n/d' }}</p>
+              <p class="text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">
+                Qualidade
+              </p>
+              <p class="font-bold">
+                {{ selectedRun.qualityStatus || 'n/d' }}
+              </p>
             </div>
             <div>
-              <p class="text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">Recondicionamento</p>
-              <p class="font-bold">{{ selectedRun.isReconditioned ? 'Recondicionada' : (selectedRun.recoveryStatus || 'n/d') }}</p>
+              <p class="text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">
+                Recondicionamento
+              </p>
+              <p class="font-bold">
+                {{ selectedRun.isReconditioned ? 'Recondicionada' : (selectedRun.recoveryStatus || 'n/d') }}
+              </p>
             </div>
           </div>
         </div>
@@ -517,10 +652,16 @@ function openSelectedRunOrderGraph() {
             <p>Run selecionada</p>
             <h3>{{ selectedRun?.name || 'Sem simulação selecionada' }}</h3>
           </div>
-          <span class="state-pill" :class="selectedRunTone">{{ formatRunStatus(selectedRun?.status) }}</span>
+          <span
+            class="state-pill"
+            :class="selectedRunTone"
+          >{{ formatRunStatus(selectedRun?.status) }}</span>
         </div>
 
-        <details v-if="selectedRun" class="technical-details mt-4">
+        <details
+          v-if="selectedRun"
+          class="technical-details mt-4"
+        >
           <summary>Detalhes técnicos</summary>
           <div class="detail-grid mt-3">
             <div><dt>Progresso</dt><dd>{{ selectedRunProgressLabel }}</dd></div>
@@ -533,10 +674,33 @@ function openSelectedRunOrderGraph() {
         </details>
 
         <div class="mt-4 flex flex-wrap gap-2">
-          <button class="btn-secondary" :disabled="!selectedRun?.productUnitId" @click="openSelectedRunUnitGraph">Abrir grafo da unidade</button>
-          <button class="btn-secondary" :disabled="!selectedRun?.manufacturingOrderId" @click="openSelectedRunOrderGraph">Abrir grafo da ordem</button>
-          <button class="btn-secondary" :disabled="!selectedRun?.productUnitId" @click="emit('openAnalytics')">Ver analítica</button>
-          <button class="btn-secondary" @click="emit('openFiware')">Ver monitor FIWARE</button>
+          <button
+            class="btn-secondary"
+            :disabled="!selectedRun?.productUnitId"
+            @click="openSelectedRunUnitGraph"
+          >
+            Abrir grafo da unidade
+          </button>
+          <button
+            class="btn-secondary"
+            :disabled="!selectedRun?.manufacturingOrderId"
+            @click="openSelectedRunOrderGraph"
+          >
+            Abrir grafo da ordem
+          </button>
+          <button
+            class="btn-secondary"
+            :disabled="!selectedRun?.productUnitId"
+            @click="emit('openAnalytics')"
+          >
+            Ver analítica
+          </button>
+          <button
+            class="btn-secondary"
+            @click="emit('openFiware')"
+          >
+            Ver monitor FIWARE
+          </button>
         </div>
 
         <div class="mt-5">
@@ -548,17 +712,34 @@ function openSelectedRunOrderGraph() {
           </div>
 
           <div class="timeline-shell">
-            <article v-for="step in selectedRunSteps" :key="step.id" class="timeline-card" :class="stepVisualTone(step)">
+            <article
+              v-for="step in selectedRunSteps"
+              :key="step.id"
+              class="timeline-card"
+              :class="stepVisualTone(step)"
+            >
               <div class="flex items-start justify-between gap-3">
                 <div>
-                  <p class="text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">Passo {{ step.stepNumber }} · {{ stepLabel(step.stepType) }}</p>
-                  <h4 class="text-base font-black">{{ step.description }}</h4>
+                  <p class="text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">
+                    Passo {{ step.stepNumber }} · {{ stepLabel(step.stepType) }}
+                  </p>
+                  <h4 class="text-base font-black">
+                    {{ step.description }}
+                  </h4>
                 </div>
-                <span class="state-pill" :class="stepVisualTone(step)">{{ step.result || 'n/d' }}</span>
+                <span
+                  class="state-pill"
+                  :class="stepVisualTone(step)"
+                >{{ step.result || 'n/d' }}</span>
               </div>
-              <p class="mt-2 text-xs font-semibold text-slate-500 dark:text-slate-400">{{ formatDate(step.executedAt) }}</p>
+              <p class="mt-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                {{ formatDate(step.executedAt) }}
+              </p>
             </article>
-            <div v-if="!selectedRunSteps.length" class="empty-state">
+            <div
+              v-if="!selectedRunSteps.length"
+              class="empty-state"
+            >
               <strong>Sem passos executados ainda.</strong>
             </div>
           </div>
@@ -572,7 +753,12 @@ function openSelectedRunOrderGraph() {
           <p>Execuções recentes</p>
           <h3>Runs disponíveis</h3>
         </div>
-        <button v-if="runs.length > 6" type="button" class="btn-secondary" @click="showAllRuns = !showAllRuns">
+        <button
+          v-if="runs.length > 6"
+          type="button"
+          class="btn-secondary"
+          @click="showAllRuns = !showAllRuns"
+        >
           {{ showAllRuns ? 'Mostrar últimas 6' : 'Ver todos' }}
         </button>
       </div>
@@ -587,12 +773,21 @@ function openSelectedRunOrderGraph() {
         >
           <div class="flex items-start justify-between gap-2">
             <div class="min-w-0 text-left">
-              <p class="text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">{{ run.scenarioName }}</p>
-              <h4 class="truncate font-black">{{ run.name }}</h4>
+              <p class="text-xs font-black uppercase tracking-normal text-slate-500 dark:text-slate-400">
+                {{ run.scenarioName }}
+              </p>
+              <h4 class="truncate font-black">
+                {{ run.name }}
+              </h4>
             </div>
-            <span class="state-pill" :class="statusTone(run.status)">{{ formatRunStatus(run.status) }}</span>
+            <span
+              class="state-pill"
+              :class="statusTone(run.status)"
+            >{{ formatRunStatus(run.status) }}</span>
           </div>
-          <p class="mt-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400">{{ run.runCode }} · {{ run.currentStep }}/{{ run.stepCount }} · {{ run.progressPercent }}%</p>
+          <p class="mt-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400">
+            {{ run.runCode }} · {{ run.currentStep }}/{{ run.stepCount }} · {{ run.progressPercent }}%
+          </p>
         </button>
       </div>
     </section>

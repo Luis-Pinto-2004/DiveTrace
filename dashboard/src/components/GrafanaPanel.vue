@@ -5,19 +5,38 @@
         <p>{{ t('Embedded operational dashboards') }}</p>
         <h3>{{ title }}</h3>
       </div>
-      <button v-if="showOpenButton && canRender" type="button" class="btn-secondary w-full sm:w-auto" @click="openInGrafana">
+      <button
+        v-if="showOpenButton && canRender"
+        type="button"
+        class="btn-secondary w-full sm:w-auto"
+        @click="openInGrafana"
+      >
         {{ t('Open in Grafana') }}
       </button>
     </div>
 
-    <p v-if="description" class="mt-3 text-sm text-slate-600 dark:text-slate-300">{{ description }}</p>
+    <p
+      v-if="description"
+      class="mt-3 text-sm text-slate-600 dark:text-slate-300"
+    >
+      {{ description }}
+    </p>
 
-    <p v-if="!canRender" class="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900 dark:border-amber-700/70 dark:bg-amber-900/30 dark:text-amber-100">
+    <p
+      v-if="!canRender"
+      class="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900 dark:border-amber-700/70 dark:bg-amber-900/30 dark:text-amber-100"
+    >
       {{ t('Panel not configured') }}
     </p>
 
-    <div v-else class="mt-4 min-w-0">
-      <div v-if="isLoading" class="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200">
+    <div
+      v-else
+      class="mt-4 min-w-0"
+    >
+      <div
+        v-if="isLoading"
+        class="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200"
+      >
         {{ t('Loading embedded panel...') }}
       </div>
       <iframe
@@ -28,11 +47,14 @@
         referrerpolicy="no-referrer"
         @load="onLoad"
         @error="onError"
-      ></iframe>
+      />
       <p class="mt-3 text-xs font-semibold text-slate-500 dark:text-slate-400">
         {{ t('If the embedded view does not render, open the dashboard in Grafana and sign in if required.') }}
       </p>
-      <p v-if="loadFailed" class="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700 dark:border-red-700/70 dark:bg-red-900/30 dark:text-red-100">
+      <p
+        v-if="loadFailed"
+        class="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700 dark:border-red-700/70 dark:bg-red-900/30 dark:text-red-100"
+      >
         {{ t('Grafana unavailable') }}
       </p>
     </div>

@@ -124,7 +124,7 @@ function meterClass(count: number): string {
 .dt-flow__section {
   position: relative;
   flex: 0 0 auto;
-  width: 150px;
+  width: 220px;
   background: var(--dt-surface);
   border: 1px solid var(--dt-border);
   border-radius: 10px;

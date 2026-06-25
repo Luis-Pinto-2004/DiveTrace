@@ -11,12 +11,13 @@ interface DemoStep {
   title: string
   message: string
   query?: Maybe<Record<string, string>>
-  scrollTo?: string
+  scrollTo?: Maybe<string>
   highlight?: Maybe<string | null>
   type?: Array<{ selector: string; text: string }>
   action?: () => void
   badge?: Maybe<string>
   dwell?: number
+  actDelay?: number
 }
 
 const LOGIN_INDEX = 0
@@ -47,9 +48,28 @@ function resolveTracked() {
   trackedOrderId.value = u?.orderId ?? 'O1'
 }
 
+// ---- segunda unidade (só para mostrar, no painel, a análise de unidades distintas) -
+const secondId = ref('')
+function resolveSecond() {
+  const diffOrder = ops.units.find((x) => {
+    const o = ops.orders.find((ord) => ord.id === x.orderId)
+    return (
+      o?.status === 'in_production' &&
+      x.state === 'active' &&
+      x.id !== trackedId.value &&
+      x.orderId !== trackedOrderId.value
+    )
+  })
+  const anyActive = ops.units.find((x) => x.state === 'active' && x.id !== trackedId.value)
+  secondId.value = (diffOrder ?? anyActive)?.id ?? ''
+}
+
 // ---- ações da demo — só estado cliente, nunca a base de dados -------------
 function selectTracked() {
   if (trackedId.value) ops.selectUnit(trackedId.value)
+}
+function selectSecond() {
+  if (secondId.value) ops.selectUnit(secondId.value)
 }
 function supportTracked() {
   const u = trackedUnit.value
@@ -89,57 +109,106 @@ const STEPS: DemoStep[] = [
   {
     route: '/cockpit',
     title: 'Painel de operações',
-    message: 'Vamos seguir uma unidade. O painel mostra onde está no fluxo de produção.',
+    message:
+      'Este é o painel de operações: mostra o estado da fábrica por linhas e secções. Cada unidade pode ser analisada — aqui uma unidade em produção e o seu percurso.',
+    action: selectSecond,
+    badge: 'Unidade selecionada',
+    scrollTo: '[data-demo="producao"]',
+    highlight: '[data-demo="producao"]',
+    dwell: 9000,
+  },
+  {
+    route: '/cockpit',
+    title: 'Painel de operações',
+    message:
+      'Selecionamos outra unidade, a que vamos seguir até ao fim. O painel mostra a secção atual, a encomenda e os eventos recentes.',
     action: selectTracked,
     badge: 'Unidade selecionada',
     scrollTo: '[data-demo="producao"]',
     highlight: '[data-demo="producao"]',
+    dwell: 9000,
   },
   {
     route: '/ordens',
     title: 'Encomenda em produção',
-    message: 'Esta é a encomenda da unidade acompanhada. Cada peça é uma unidade individual.',
+    message:
+      'Encomendas e produção: esta é a encomenda da unidade que seguimos, com o seu estado e as ações principais. Cada peça é uma unidade individual.',
+    scrollTo: () => `[data-demo-order="${trackedOrderId.value}"]`,
     highlight: () => `[data-demo-order="${trackedOrderId.value}"]`,
+    dwell: 10000,
   },
   {
     route: '/linhas',
-    title: 'Suporte e rastreabilidade',
-    message: 'No chão de fábrica a unidade segue num suporte: é isso que a torna rastreável.',
+    title: 'Seleção na linha',
+    message:
+      'Análise por linha: selecionamos a unidade na linha. Vê-se em que secção está e o seu estado atual.',
+    action: selectTracked,
+    badge: 'Unidade selecionada',
+    scrollTo: () => (trackedId.value ? `[data-demo-unit="${trackedId.value}"]` : '[data-demo="linha"]'),
+    highlight: () => (trackedId.value ? `[data-demo-unit="${trackedId.value}"]` : '[data-demo="linha"]'),
+    dwell: 9000,
+  },
+  {
+    route: '/linhas',
+    title: 'Estado e próxima etapa',
+    message:
+      'A unidade segue num suporte físico, o que a torna rastreável. Antes de avançar, confirma-se a próxima etapa e a capacidade da secção seguinte.',
     action: supportTracked,
     badge: 'Suporte ativo',
-    highlight: () => (trackedId.value ? `[data-demo-unit="${trackedId.value}"]` : '[data-demo="linha"]'),
+    scrollTo: '[data-demo="rota"]',
+    highlight: '[data-demo="rota"]',
+    dwell: 10000,
   },
   {
     route: '/linhas',
     title: 'Avanço pela rota',
-    message: 'A unidade avança para a etapa seguinte, e só se a secção tiver capacidade.',
+    message:
+      'A unidade avança para a secção seguinte e a linha atualiza-se. É uma rota produtiva, não uma simples mudança de estado.',
     action: advanceTracked,
     badge: () => `Avançou para ${ops.sectionName(trackedUnit.value?.sectionId ?? '')}`,
+    scrollTo: () => (trackedId.value ? `[data-demo-unit="${trackedId.value}"]` : '[data-demo="ocupacao"]'),
     highlight: () => (trackedId.value ? `[data-demo-unit="${trackedId.value}"]` : '[data-demo="ocupacao"]'),
-    dwell: 13000,
+    dwell: 12000,
   },
   {
     route: '/qualidade',
     title: 'Controlo de qualidade',
-    message: 'No controlo de qualidade decide-se: aprovar, recondicionar ou sucata.',
+    message:
+      'Quadro de qualidade: a unidade está pendente de decisão. Só depois de a observar é tomada a decisão — aprovar, recondicionar ou sucata.',
     action: approveTracked,
     badge: 'Qualidade validada, segue para rack',
+    actDelay: 2500,
     highlight: () => (trackedId.value ? `[data-demo-unit="${trackedId.value}"]` : '[data-demo="qualidade"]'),
-    dwell: 13000,
+    dwell: 12000,
   },
   {
     route: '/cliente',
     title: 'Acompanhamento pelo cliente',
-    message: 'O cliente vê o estado da sua encomenda, sem aceder aos dados internos da fábrica.',
+    message:
+      'O cliente acompanha o estado da sua encomenda, de forma simplificada e sem aceder aos dados internos da fábrica.',
+    scrollTo: () => `[data-demo-order="${trackedOrderId.value}"]`,
     highlight: () => `[data-demo-order="${trackedOrderId.value}"]`,
+    dwell: 9000,
   },
   {
     route: '/rastreabilidade',
     title: 'Mapa de rastreabilidade',
-    message: 'O grafo mostra todo o percurso da ordem: unidade, suporte, secções, qualidade e eventos.',
-    query: () => ({ gp: 'order', go: trackedOrderId.value || 'O1' }),
+    message:
+      'O grafo é uma ferramenta de análise, não uma imagem estática. Selecionamos a ordem de fabrico para ver os seus dados e ligações.',
+    query: () => ({ gp: 'order', go: trackedOrderId.value || 'O1', gsel: `order:${trackedOrderId.value || 'O1'}` }),
+    badge: 'Ordem selecionada',
     highlight: '[data-demo="grafo"]',
-    dwell: 14000,
+    dwell: 12000,
+  },
+  {
+    route: '/rastreabilidade',
+    title: 'Detalhe da unidade no grafo',
+    message:
+      'Agora a unidade: o detalhe mostra o percurso por secções, o suporte, a qualidade e os eventos. É assim que se vê toda a rastreabilidade.',
+    query: () => ({ gp: 'order', go: trackedOrderId.value || 'O1', gsel: `unit:${trackedId.value}` }),
+    badge: 'Unidade selecionada',
+    highlight: '[data-demo="grafo"]',
+    dwell: 13000,
   },
 ]
 
@@ -237,8 +306,9 @@ async function runStep(i: number) {
     }
   }
 
-  if (s.scrollTo) {
-    document.querySelector(s.scrollTo)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  const sc = resolve(s.scrollTo)
+  if (sc) {
+    document.querySelector(sc)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     await delay(620)
     if (my !== runId || !active.value) return
   }
@@ -247,13 +317,19 @@ async function runStep(i: number) {
   if (hl) setHighlight(hl)
 
   if (s.action) {
-    await delay(1100) // observar o elemento antes da ação
+    await delay(s.actDelay ?? 1100) // observar o elemento antes da ação
     if (my !== runId || !active.value) return
     s.action()
     actionLabel.value = resolve(s.badge) ?? ''
     await delay(360) // deixar a UI atualizar
     if (my !== runId || !active.value) return
-    if (hl) setHighlight(hl) // re-localizar (o elemento pode ter mudado)
+    if (hl) {
+      setHighlight(hl) // re-localizar (o elemento pode ter mudado de posição)
+      document.querySelector(hl)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      await delay(260)
+      if (my !== runId || !active.value) return
+      setHighlight(hl)
+    }
   }
 
   if (playing.value) scheduleNext(s.dwell ?? DWELL)
@@ -296,6 +372,7 @@ function restart() {
   clearTimer()
   ops.resetDemo()
   resolveTracked()
+  resolveSecond()
   index.value = 0
   playing.value = true
   void runStep(0)
@@ -311,13 +388,15 @@ function exit() {
   delete query.gp
   delete query.go
   delete query.gu
+  delete query.gsel
   void router.replace({ path: route.path, query })
 }
 
 function start() {
-  // Repõe o cenário para um estado conhecido (repetível, não destrutivo) e fixa a unidade.
+  // Repõe o cenário para um estado conhecido (repetível, não destrutivo) e fixa as unidades.
   ops.resetDemo()
   resolveTracked()
+  resolveSecond()
   index.value = stepForRoute(route.path)
   playing.value = true
   void runStep(index.value)

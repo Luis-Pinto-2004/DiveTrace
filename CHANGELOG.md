@@ -2,6 +2,38 @@
 
 Formato baseado em *Keep a Changelog*. Datas em ISO 8601.
 
+## [2.21.1] — 2026-06-25
+
+### Melhorado — leitura das caixas do fluxo (Análise por linha)
+- As caixas das secções no "Fluxo da linha" (`FlowMap`) passaram de `150px` para `220px`
+  de largura. Os códigos das unidades incluem a família do produto (ex.: `UP-PORTA-D-001-01`)
+  e a 150px ficavam truncados; agora leem-se por completo, facilitando identificar os
+  produtos em cada secção. Alteração apenas de largura (layout), sem mexer em cores nem no
+  tema claro. Ficheiro: `components/factory/FlowMap.vue`.
+
+
+## [2.21.0] — 2026-06-25
+
+### Melhorado — ritmo e clareza da demo guiada (apresentação)
+Intervenção cirúrgica, só no comportamento da demo (`?demo=1`). Não foram alteradas
+funcionalidades, modelo de dados, seeders, permissões, páginas, grafos nem lógica de
+produção. A demo continua repetível e não destrutiva (repõe o cenário no arranque).
+- **Painel de operações**: a demo passa a selecionar **duas unidades diferentes**, com
+  pausas, mostrando que o painel analisa unidades distintas e o respetivo percurso.
+- **Encomendas e produção**: ao entrar, faz scroll controlado e destaca a **encomenda
+  relevante** (já não mostra o fundo da página sem contexto).
+- **Análise por linha**: o avanço passou a estar dividido em **três etapas** (seleção →
+  estado e próxima etapa/capacidade → avanço), para se perceber a rota produtiva.
+- **Quadro de qualidade**: passa a **aguardar ~2,5 s** com a unidade pendente visível
+  antes da decisão de aprovação.
+- **Mapa de rastreabilidade**: a demo **seleciona dois nós** (ordem e unidade) e abre o
+  painel de detalhe, mostrando o grafo como ferramenta de análise.
+- Motor da demo: pausa pré-ação configurável por passo e reposicionamento (scroll) do
+  elemento após a ação. Ficheiros: `components/demo/DemoOverlay.vue`,
+  `views/LineAnalysisView.vue` (âncora da rota), `components/factory/TraceGraph.vue`
+  (seleção de nó por query, reativa).
+
+
 ## [2.20.1] — 2026-06-25
 
 ### Corrigido — conflito de porta do IoT Agent e portas na documentação

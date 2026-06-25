@@ -315,7 +315,10 @@ const sectionRows = computed(() =>
         />
       </div>
 
-      <div class="detail__route">
+      <div
+        class="detail__route"
+        data-demo="rota"
+      >
         <h3 class="detail__h3">
           Rota produtiva
         </h3>

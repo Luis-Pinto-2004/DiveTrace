@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   useOperationsStore,
@@ -79,9 +79,10 @@ const focusUnitId = ref<string>('')
 const focusOrderId = ref<string>('')
 
 // Perspetiva/elemento inicial via query (?gp=order&go=O1 ou ?gp=unit&gu=U123),
-// usado pela apresentação para focar uma ordem/unidade específica.
+// usado pela apresentação para focar uma ordem/unidade específica. Reativo para
+// a demo poder mudar de perspetiva entre passos sem voltar a montar o componente.
 const route = useRoute()
-onMounted(() => {
+function applyPerspectiveFromQuery() {
   const gp = route.query.gp
   if (gp === 'order' && typeof route.query.go === 'string') {
     perspective.value = 'order'
@@ -90,7 +91,9 @@ onMounted(() => {
     perspective.value = 'unit'
     focusUnitId.value = route.query.gu
   }
-})
+}
+onMounted(applyPerspectiveFromQuery)
+watch(() => [route.query.gp, route.query.go, route.query.gu], applyPerspectiveFromQuery)
 
 const orderedUnits = computed(() =>
   [...ops.units].sort((a, b) => a.label.localeCompare(b.label)),
@@ -468,6 +471,20 @@ function pick(n: GNode) {
 const selRecentEvents = computed(() =>
   selectedNode.value?.unit ? [...selectedNode.value.unit.history].reverse().slice(0, 4) : [],
 )
+
+// Seleção de nó controlável por query (?gsel=order:O1 | unit:<id> | support:<id>),
+// usada pela demo para abrir o painel de detalhe de um nó específico. Reativo para
+// permitir alternar o nó selecionado entre passos sem voltar a montar o componente.
+function applySelectionFromQuery() {
+  const sel = route.query.gsel
+  if (typeof sel === 'string' && sel) {
+    selectedId.value = sel
+    const node = graph.value.nodes.find((n) => n.id === sel)
+    if (node?.unit) ops.selectUnit(node.unit.id)
+  }
+}
+onMounted(applySelectionFromQuery)
+watch(() => route.query.gsel, applySelectionFromQuery)
 </script>
 
 <template>

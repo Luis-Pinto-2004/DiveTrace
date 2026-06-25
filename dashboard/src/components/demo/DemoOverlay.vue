@@ -1,80 +1,72 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { authenticate } from '@/data/demoUsers'
 
 interface DemoStep {
-  route: string | null
+  route: string
   title: string
-  points: string[]
+  message: string
+  scrollTo?: string
+  highlight?: string
+  type?: Array<{ selector: string; text: string }>
+  dwell?: number
 }
+
+const LOGIN_INDEX = 0
+const DWELL = 10000
 
 const STEPS: DemoStep[] = [
   {
-    route: '/cockpit',
-    title: 'Visão geral da fábrica',
-    points: [
-      'Painel de operações como dashboard: KPIs de unidades em curso, concluídas, em análise de qualidade e recondicionamento.',
-      'Visão rápida da produção: linhas, secções e unidades em curso num só ecrã.',
-      'Selecionar uma unidade mostra o seu percurso, estado atual e próxima etapa.',
+    route: '/login',
+    title: 'Início de sessão',
+    message: 'A entrar como Administrador, o perfil que mostra todas as funcionalidades.',
+    highlight: '[data-demo="login"]',
+    type: [
+      { selector: '[data-demo="login-user"]', text: 'admin' },
+      { selector: '[data-demo="login-pass"]', text: 'admin' },
     ],
+    dwell: 3000,
+  },
+  {
+    route: '/cockpit',
+    title: 'Painel de operações',
+    message: 'Visão geral da fábrica e prioridades do turno: unidades em curso, qualidade e produção.',
+    scrollTo: '[data-demo="producao"]',
+    highlight: '[data-demo="producao"]',
   },
   {
     route: '/ordens',
     title: 'Encomendas e ordens de fabrico',
-    points: [
-      'Uma encomenda de cliente dá origem a uma ordem de fabrico.',
-      'Aceitar a encomenda cria as unidades de produto individuais.',
-      'Iniciar a produção coloca as unidades na linha de montagem.',
-    ],
+    message: 'Pedido de cliente dá origem a uma ordem de fabrico; aceitar gera as unidades individuais.',
+    highlight: '[data-demo="encomendas"]',
   },
   {
     route: '/linhas',
-    title: 'Análise por linha e suporte',
-    points: [
-      'Movimentação das unidades pelas linhas e secções da fábrica.',
-      'O suporte é o elemento central da rastreabilidade: cada unidade ativa anda associada a um suporte.',
-      'Carga por secção, gargalos e ações operacionais (avançar etapa, transferir).',
-    ],
+    title: 'Produção e suporte',
+    message: 'Suporte atribuído: cada unidade é rastreável ao avançar pelas secções da linha.',
+    highlight: '[data-demo="linha"]',
   },
   {
     route: '/qualidade',
     title: 'Controlo de qualidade',
-    points: [
-      'Decisões de qualidade na Linha 4: aprovar, recondicionar ou marcar como sucata.',
-      'O recondicionamento é um desvio controlado, mantendo sempre a rastreabilidade da unidade.',
-    ],
+    message: 'Unidade em controlo de qualidade: aprovar, recondicionar ou marcar como sucata.',
+    highlight: '[data-demo="qualidade"]',
   },
   {
     route: '/rastreabilidade',
     title: 'Mapa de rastreabilidade',
-    points: [
-      'Grafo técnico com cliente, ordem, unidade, suporte, secção/linha, qualidade, recondicionamento, sucata, rack e eventos.',
-      'Três perspetivas: fábrica, ordem de fabrico e unidade de produto.',
-      'Selecionar um nó destaca as ligações relacionadas e abre o detalhe completo no painel lateral.',
-    ],
-  },
-  {
-    route: null,
-    title: 'Analítica e FIWARE (separador externo)',
-    points: [
-      'Grafana (http://localhost:3000) mostra o histórico e as tendências de WIP, qualidade e fluxo.',
-      'FIWARE / Orion-LD (http://localhost:1026) mantém o contexto da fábrica como entidades NGSI-LD.',
-      'Evidencia rastreabilidade e contexto interoperável, não apenas um CRUD.',
-    ],
+    message: 'Rastreabilidade completa no grafo: cliente, ordem, unidade, suporte, secções, qualidade e eventos.',
+    highlight: '[data-demo="grafo"]',
   },
   {
     route: '/cliente',
-    title: 'Área de cliente',
-    points: [
-      'O cliente consulta e cria as suas encomendas, sem acesso aos dados internos da fábrica.',
-      'Fecha o ciclo: do pedido do cliente à unidade rastreável na fábrica.',
-    ],
+    title: 'Acompanhamento pelo cliente',
+    message: 'O cliente acompanha as suas encomendas. Ciclo completo: do pedido à unidade rastreável.',
+    highlight: '[data-demo="cliente"]',
   },
 ]
-
-const AUTO_MS = 16000
 
 const route = useRoute()
 const router = useRouter()
@@ -83,85 +75,197 @@ const auth = useAuthStore()
 const active = computed(() => route.query.demo === '1')
 const index = ref(0)
 const playing = ref(false)
-let timer: ReturnType<typeof setInterval> | null = null
-
 const step = computed(() => STEPS[index.value])
 const isLast = computed(() => index.value === STEPS.length - 1)
 
-function goToStep() {
-  const target = STEPS[index.value]
-  if (target.route && route.path !== target.route) {
-    void router.push({ path: target.route, query: { demo: '1' } })
+let timer: ReturnType<typeof setTimeout> | null = null
+let runId = 0
+
+const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+function stepForRoute(path: string): number {
+  const i = STEPS.findIndex((s) => s.route === path)
+  return i >= 0 ? i : 0
+}
+
+// ---- destaque visual (anel sobre o elemento) -----------------------------
+const ring = ref<{ top: number; left: number; width: number; height: number } | null>(null)
+let highlightSel: string | null = null
+function recomputeRing() {
+  if (!highlightSel) {
+    ring.value = null
+    return
+  }
+  const el = document.querySelector(highlightSel)
+  if (!el) {
+    ring.value = null
+    return
+  }
+  const r = el.getBoundingClientRect()
+  ring.value = { top: r.top - 6, left: r.left - 6, width: r.width + 12, height: r.height + 12 }
+}
+function setHighlight(sel: string) {
+  highlightSel = sel
+  recomputeRing()
+}
+function clearHighlight() {
+  highlightSel = null
+  ring.value = null
+}
+
+// ---- escrita simulada ----------------------------------------------------
+async function typeInto(selector: string, text: string) {
+  const el = document.querySelector(selector) as HTMLInputElement | null
+  if (!el) return
+  el.focus()
+  el.value = ''
+  el.dispatchEvent(new Event('input', { bubbles: true }))
+  for (const ch of text) {
+    el.value += ch
+    el.dispatchEvent(new Event('input', { bubbles: true }))
+    await delay(95)
+  }
+  el.dispatchEvent(new Event('change', { bubbles: true }))
+}
+
+// ---- navegação preservando o modo demo -----------------------------------
+async function navigate(path: string) {
+  if (route.path !== path) {
+    try {
+      await router.push({ path, query: { demo: '1' } })
+    } catch {
+      /* navegação redundante ou cancelada: ignorar */
+    }
+    await nextTick()
   }
 }
-function next() {
-  if (index.value < STEPS.length - 1) {
-    index.value += 1
-    goToStep()
-  } else {
-    stopAuto()
+
+// ---- motor de passos -----------------------------------------------------
+async function runStep(i: number) {
+  const my = ++runId
+  const s = STEPS[i]
+  clearHighlight()
+  await navigate(s.route)
+  if (my !== runId || !active.value) return
+  await delay(240)
+  if (my !== runId || !active.value) return
+  if (s.type) {
+    for (const t of s.type) {
+      await typeInto(t.selector, t.text)
+      if (my !== runId || !active.value) return
+    }
+    if (i === LOGIN_INDEX && !auth.isAuthenticated) {
+      const session = authenticate('admin', 'admin')
+      if (session) auth.setUser(session)
+    }
   }
-}
-function prev() {
-  if (index.value > 0) {
-    index.value -= 1
-    goToStep()
+  if (s.scrollTo) {
+    document.querySelector(s.scrollTo)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    await delay(640)
+    if (my !== runId || !active.value) return
   }
+  if (s.highlight) setHighlight(s.highlight)
+  if (playing.value) scheduleNext(s.dwell ?? DWELL)
 }
-function stopAuto() {
-  playing.value = false
+
+function clearTimer() {
   if (timer) {
-    clearInterval(timer)
+    clearTimeout(timer)
     timer = null
   }
 }
-function togglePlay() {
-  if (playing.value) {
-    stopAuto()
-    return
+function scheduleNext(ms: number) {
+  clearTimer()
+  timer = setTimeout(() => {
+    if (playing.value && active.value) next()
+  }, ms)
+}
+function next() {
+  clearTimer()
+  if (index.value < STEPS.length - 1) {
+    index.value += 1
+    void runStep(index.value)
+  } else {
+    playing.value = false
   }
+}
+function prev() {
+  clearTimer()
+  if (index.value > 0) {
+    index.value -= 1
+    void runStep(index.value)
+  }
+}
+function togglePlay() {
+  playing.value = !playing.value
+  if (playing.value) scheduleNext(step.value.dwell ?? DWELL)
+  else clearTimer()
+}
+function restart() {
+  clearTimer()
+  index.value = 0
   playing.value = true
-  timer = setInterval(() => {
-    if (isLast.value) stopAuto()
-    else next()
-  }, AUTO_MS)
+  void runStep(0)
 }
 function exit() {
-  stopAuto()
+  clearTimer()
+  playing.value = false
+  clearHighlight()
+  window.scrollTo({ top: 0 })
   const query = { ...route.query }
   delete query.demo
   void router.replace({ path: route.path, query })
 }
 
-// Ao ativar o modo demo: autenticar como Administrador (sessão apenas) e ir ao 1.º passo.
+function start() {
+  index.value = stepForRoute(route.path)
+  playing.value = true
+  void runStep(index.value)
+}
+
 watch(
   active,
   (on) => {
-    if (!on) {
-      stopAuto()
-      return
+    if (on) {
+      void nextTick().then(start)
+    } else {
+      clearTimer()
+      playing.value = false
+      clearHighlight()
     }
-    if (!auth.isAuthenticated) {
-      const session = authenticate('admin', 'admin')
-      if (session) auth.setUser(session)
-    }
-    index.value = 0
-    goToStep()
   },
   { immediate: true },
 )
 
-onBeforeUnmount(stopAuto)
+function onScrollResize() {
+  recomputeRing()
+}
+onMounted(() => {
+  window.addEventListener('scroll', onScrollResize, true)
+  window.addEventListener('resize', onScrollResize)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('scroll', onScrollResize, true)
+  window.removeEventListener('resize', onScrollResize)
+  clearTimer()
+})
 </script>
 
 <template>
   <div
     v-if="active"
     class="demo"
-    role="region"
-    aria-label="Modo de apresentação"
   >
-    <div class="demo__bar">
+    <div
+      v-if="ring"
+      class="demo__ring"
+      :style="{ top: ring.top + 'px', left: ring.left + 'px', width: ring.width + 'px', height: ring.height + 'px' }"
+    />
+    <div
+      class="demo__bar"
+      role="region"
+      aria-label="Modo de apresentação"
+    >
       <div class="demo__head">
         <span class="demo__badge">Demo</span>
         <span class="demo__count">{{ index + 1 }} / {{ STEPS.length }}</span>
@@ -169,14 +273,9 @@ onBeforeUnmount(stopAuto)
           {{ step.title }}
         </h2>
       </div>
-      <ul class="demo__points">
-        <li
-          v-for="(p, i) in step.points"
-          :key="i"
-        >
-          {{ p }}
-        </li>
-      </ul>
+      <p class="demo__message">
+        {{ step.message }}
+      </p>
       <div class="demo__controls">
         <button
           type="button"
@@ -204,9 +303,16 @@ onBeforeUnmount(stopAuto)
         <button
           type="button"
           class="demo__btn demo__btn--ghost"
+          @click="restart"
+        >
+          Recomeçar
+        </button>
+        <button
+          type="button"
+          class="demo__btn demo__btn--ghost"
           @click="exit"
         >
-          Sair
+          Terminar
         </button>
       </div>
     </div>
@@ -216,14 +322,27 @@ onBeforeUnmount(stopAuto)
 <style scoped>
 .demo {
   position: fixed;
-  left: 50%;
-  bottom: 1rem;
-  transform: translateX(-50%);
-  z-index: 9999;
-  width: min(92vw, 720px);
+  inset: 0;
+  z-index: 9990;
+  pointer-events: none;
+}
+.demo__ring {
+  position: fixed;
+  z-index: 9991;
+  border: 2px solid var(--dt-brand-500);
+  border-radius: 12px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dt-brand-500) 30%, transparent),
+    0 0 0 9999px color-mix(in srgb, #0b2948 18%, transparent);
+  transition: top 0.25s ease, left 0.25s ease, width 0.25s ease, height 0.25s ease;
   pointer-events: none;
 }
 .demo__bar {
+  position: fixed;
+  left: 50%;
+  bottom: 1rem;
+  transform: translateX(-50%);
+  z-index: 9992;
+  width: min(92vw, 720px);
   pointer-events: auto;
   background: var(--dt-surface);
   border: 1px solid var(--dt-border);
@@ -258,16 +377,10 @@ onBeforeUnmount(stopAuto)
   font-weight: 900;
   color: var(--dt-text-strong);
 }
-.demo__points {
-  margin: 0.55rem 0 0.7rem;
-  padding-left: 1.1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-.demo__points li {
-  font-size: 0.76rem;
-  line-height: 1.35;
+.demo__message {
+  margin: 0.5rem 0 0.7rem;
+  font-size: 0.8rem;
+  line-height: 1.4;
   color: var(--dt-text-strong);
 }
 .demo__controls {

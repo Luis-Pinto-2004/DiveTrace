@@ -2,6 +2,33 @@
 
 Formato baseado em *Keep a Changelog*. Datas em ISO 8601.
 
+## [2.18.0] — 2026-06-25
+
+### Corrigido — modo de apresentação determinístico
+- O modo de demo passou a ser **orientado pelo URL** (`?demo=1`), sem qualquer estado
+  guardado em memória, `localStorage` ou `sessionStorage`. A **caixa de controlo aparece
+  sempre** que a aplicação é aberta em modo demo, em execuções repetidas e **após
+  refresh** do browser.
+- O guard de autenticação passou a **autenticar como Administrador** quando há `?demo=1`
+  (sem perder o modo ao redirecionar) e a permitir mostrar o ecrã de login. Ao **sair**,
+  o estado da apresentação é limpo; ao **recomeçar**, volta ao primeiro passo.
+
+### Alterado — demo mais automática e visual
+- A demo **avança sozinha** pelas páginas, faz **scroll automático** para a zona
+  relevante e **destaca** visualmente o elemento em foco, mantendo a caixa de
+  controlos no rodapé (**Anterior / Reproduzir / Pausar / Seguinte / Recomeçar /
+  Terminar**).
+- No passo de login, **simula a escrita** das credenciais de Administrador. O fluxo
+  cobre login, painel de operações, encomendas/produção, suporte, qualidade,
+  rastreabilidade e área de cliente, com mensagens curtas em PT-PT por passo.
+- **Não destrutivo**: não cria encomendas novas a cada execução nem altera dados,
+  permissões ou a lógica da aplicação; reutiliza os dados de demonstração existentes.
+
+### Alterado — documentação da demo
+- `docs/DEMO.md` reescrito para refletir o funcionamento real: arranque, o que acontece
+  automaticamente, controlos, como repetir, como sair e pontos a destacar.
+
+
 ## [2.17.0] — 2026-06-25
 
 ### Corrigido — grafo do Mapa de rastreabilidade (sem caixas sobrepostas)

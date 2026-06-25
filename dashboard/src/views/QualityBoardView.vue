@@ -74,7 +74,10 @@ function whyOffFlow(unit: Unit): string | null {
 </script>
 
 <template>
-  <div class="quality">
+  <div
+    class="quality"
+    data-demo="qualidade"
+  >
     <StatStrip :items="kpis" />
 
     <div class="quality__layout">

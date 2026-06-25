@@ -89,7 +89,10 @@ function cancel(order: Order) {
 </script>
 
 <template>
-  <div class="cust">
+  <div
+    class="cust"
+    data-demo="cliente"
+  >
     <StatStrip :items="kpis" />
 
     <div class="cust__grid">

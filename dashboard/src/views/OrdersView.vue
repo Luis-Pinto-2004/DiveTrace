@@ -54,7 +54,10 @@ function orderUnits(order: Order) {
 </script>
 
 <template>
-  <div class="orders">
+  <div
+    class="orders"
+    data-demo="encomendas"
+  >
     <StatStrip :items="kpis" />
 
     <div class="orders__board">

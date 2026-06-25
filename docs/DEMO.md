@@ -6,75 +6,61 @@ automóvel**, e não apenas como um CRUD.
 
 ## Como arrancar
 
-A forma mais simples (Windows):
+Forma mais simples (Windows):
 
 ```powershell
 ./scripts/run-demo.ps1
 ```
 
 O script arranca o ambiente (sem apagar dados), espera pela API e abre o browser já no
-**modo de apresentação**, autenticado como **Administrador** (o perfil que dá acesso a
-todas as funcionalidades).
+**modo de apresentação**.
 
-Em alternativa, com o ambiente já a correr, basta abrir:
+Com o ambiente já a correr, basta abrir:
 
 ```
 http://localhost:8088/login?demo=1
 ```
 
-> O modo de apresentação é **opcional** e **não destrutivo**: apenas guia a navegação e
-> mostra os pontos a explicar. Não altera permissões nem a lógica da aplicação, e
-> reutiliza os dados de demonstração existentes. Para sair, carregue em **Sair** no
-> rodapé (ou remova `?demo=1` do endereço).
+## O que acontece automaticamente
 
-## Como funciona o modo de apresentação
+A demo é guiada e avança sozinha pelos passos principais:
 
-No rodapé aparece uma barra com os passos guiados:
+1. **Início de sessão** — mostra o ecrã de login e escreve as credenciais de
+   Administrador (o perfil que dá acesso a todas as funcionalidades).
+2. **Painel de operações** — visão geral da fábrica e prioridades do turno.
+3. **Encomendas e ordens de fabrico** — do pedido de cliente às unidades individuais.
+4. **Produção e suporte** — o suporte como elemento central da rastreabilidade.
+5. **Controlo de qualidade** — aprovar, recondicionar ou marcar sucata.
+6. **Mapa de rastreabilidade** — o grafo técnico com todas as relações.
+7. **Acompanhamento pelo cliente** — o ciclo fecha do lado do cliente.
+
+Em cada passo, a aplicação **navega para a página certa**, faz **scroll** para a zona
+relevante e **destaca** o elemento em foco, enquanto a caixa no rodapé explica, em
+português, o que está a ser mostrado.
+
+## Controlos (caixa no rodapé)
 
 - **Anterior / Seguinte** — avançar manualmente.
-- **Reproduzir / Pausar** — avanço automático (cerca de 16 segundos por passo), tempo
-  suficiente para explicar cada ecrã.
-- **Sair** — termina o modo de apresentação.
+- **Reproduzir / Pausar** — ligar/desligar o avanço automático (a demo arranca já a
+  reproduzir).
+- **Recomeçar** — voltar ao primeiro passo.
+- **Terminar** — sair do modo de apresentação.
 
-Cada passo navega para a página certa e mostra os pontos a destacar.
+## Repetir e sair
 
-## Fluxo da apresentação
+- Para **repetir**, basta voltar a correr o script ou abrir de novo
+  `http://localhost:8088/login?demo=1`. A demo é determinística: arranca sempre do
+  início, com os controlos visíveis. Não depende de estado guardado.
+- Para **sair**, carregue em **Terminar** (ou remova `?demo=1` do endereço). O estado da
+  apresentação é limpo.
+- A demo **continua a funcionar após um refresh** do browser, retomando a página atual.
 
-1. **Visão geral da fábrica** (Painel de operações)
-   - KPIs do turno: em curso, concluídas, em análise de qualidade, recondicionamento.
-   - Visão rápida da produção: linhas, secções e unidades em curso.
-   - Selecionar uma unidade mostra o seu percurso, estado e próxima etapa.
+## Segurança dos dados
 
-2. **Encomendas e ordens de fabrico**
-   - Uma encomenda de cliente dá origem a uma ordem de fabrico.
-   - Aceitar a encomenda cria as unidades de produto individuais.
-   - Iniciar a produção coloca as unidades na linha.
-
-3. **Análise por linha e suporte**
-   - Movimentação das unidades pelas linhas e secções.
-   - O **suporte** é o elemento central da rastreabilidade: cada unidade ativa anda
-     associada a um suporte.
-   - Carga por secção, gargalos e ações operacionais (avançar etapa, transferir).
-
-4. **Controlo de qualidade**
-   - Decisões na Linha 4: aprovar, recondicionar ou marcar como sucata.
-   - O recondicionamento é um desvio controlado, mantendo a rastreabilidade.
-
-5. **Mapa de rastreabilidade**
-   - Grafo técnico com cliente, ordem, unidade, suporte, secção/linha, qualidade,
-     recondicionamento, sucata, rack e eventos.
-   - Três perspetivas: fábrica, ordem de fabrico e unidade.
-   - Selecionar um nó destaca as ligações relacionadas e abre o detalhe lateral.
-
-6. **Analítica e FIWARE** (separador externo)
-   - **Grafana** (http://localhost:3000, `admin`/`admin`): histórico e tendências de
-     WIP, qualidade e fluxo.
-   - **FIWARE / Orion-LD** (http://localhost:1026): contexto da fábrica como entidades
-     NGSI-LD. Demonstra rastreabilidade e contexto interoperável.
-
-7. **Área de cliente**
-   - O cliente consulta e cria as suas encomendas, sem aceder aos dados internos da
-     fábrica. Fecha o ciclo: do pedido do cliente à unidade rastreável na fábrica.
+O modo de apresentação é **não destrutivo**: apenas guia a navegação, faz scroll e
+destaca elementos. Não cria encomendas novas a cada execução, não altera permissões nem
+a lógica da aplicação, e não interfere com FIWARE, Grafana, qualidade, encomendas ou
+rastreabilidade. Reutiliza os dados de demonstração existentes.
 
 ## Pontos diferenciadores a sublinhar
 
@@ -82,9 +68,10 @@ Cada passo navega para a página certa e mostra os pontos a destacar.
 - **Suporte** como elemento essencial da rastreabilidade no chão de fábrica.
 - **Rastreabilidade visual por grafo**, com várias perspetivas de análise.
 - **Qualidade** com decisões reais (aprovar / recondicionar / sucata).
-- Integração **FIWARE** (contexto NGSI-LD) e **Grafana** (monitorização temporal).
+- Integração **FIWARE** (contexto NGSI-LD) e **Grafana** (monitorização temporal),
+  acessíveis em http://localhost:1026 e http://localhost:3000.
 
-## Dicas
+## Dica
 
-- Para uma demonstração mais rápida nas próximas vezes: `./scripts/run-demo.ps1 -NoBuild`.
-- Evite `docker compose down -v` antes da apresentação, para manter os dados de demo.
+Para arranques seguintes mais rápidos: `./scripts/run-demo.ps1 -NoBuild`. Evite
+`docker compose down -v` antes da apresentação, para manter os dados de demonstração.

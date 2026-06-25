@@ -120,7 +120,10 @@ function onSelect(id: string) {
       </section>
     </div>
 
-    <div class="cockpit__production">
+    <div
+      class="cockpit__production"
+      data-demo="producao"
+    >
       <section class="card cockpit__flow">
         <div class="card__head">
           <h2 class="card__title">

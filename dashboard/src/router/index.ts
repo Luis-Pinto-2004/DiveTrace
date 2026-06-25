@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { authenticate } from '@/data/demoUsers'
 import AppShell from '@/components/layout/AppShell.vue'
 import LoginView from '@/views/LoginView.vue'
 
@@ -105,8 +106,16 @@ function landingFor(roleKey: string | null): string {
 
 router.beforeEach((to) => {
   const auth = useAuthStore()
+  const demo = to.query.demo === '1'
+  // Modo de apresentação: garante sessão de Administrador (sessão apenas), exceto na
+  // própria página de login, para que deep-links e refresh com ?demo=1 não percam o modo.
+  if (demo && !auth.isAuthenticated && to.path !== '/login') {
+    const session = authenticate('admin', 'admin')
+    if (session) auth.setUser(session)
+  }
   if (to.meta?.public) {
-    if (auth.isAuthenticated && to.name === 'login') return landingFor(auth.roleKey)
+    // Na demo, permitir permanecer no login (para mostrar a entrada) mesmo se autenticado.
+    if (auth.isAuthenticated && to.name === 'login' && !demo) return landingFor(auth.roleKey)
     return true
   }
   if (!auth.isAuthenticated) {

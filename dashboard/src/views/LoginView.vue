@@ -47,7 +47,10 @@ function quick(roleKey: string) {
 
 <template>
   <div class="dt-login">
-    <div class="dt-login__panel">
+    <div
+      class="dt-login__panel"
+      data-demo="login"
+    >
       <div class="dt-login__brand">
         <div class="dt-login__logo">
           <img
@@ -73,6 +76,7 @@ function quick(roleKey: string) {
             type="text"
             autocomplete="username"
             placeholder="supervisor"
+            data-demo="login-user"
           >
         </label>
         <label class="dt-login__field">
@@ -82,6 +86,7 @@ function quick(roleKey: string) {
             type="password"
             autocomplete="current-password"
             placeholder="••••••"
+            data-demo="login-pass"
           >
         </label>
         <p

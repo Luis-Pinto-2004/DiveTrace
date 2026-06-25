@@ -120,7 +120,10 @@ const sectionRows = computed(() =>
 </script>
 
 <template>
-  <div class="line">
+  <div
+    class="line"
+    data-demo="linha"
+  >
     <div
       class="line__tabs"
       role="tablist"

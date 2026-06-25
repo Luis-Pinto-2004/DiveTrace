@@ -11,7 +11,6 @@ export type RoleKey =
   | 'supervisor'
   | 'operator'
   | 'quality'
-  | 'logistics'
   | 'client'
   | 'demoViewer'
 
@@ -57,13 +56,6 @@ export const ROLE_PROFILES: Record<RoleKey, RoleProfile> = {
     backendRole: 'QualityTechnician',
     jobTitle: 'Técnico de qualidade',
     homeView: 'reconditioning',
-  },
-  logistics: {
-    key: 'logistics',
-    label: 'Logística',
-    backendRole: 'Logistics',
-    jobTitle: 'Técnico de logística',
-    homeView: 'racks',
   },
   client: {
     key: 'client',

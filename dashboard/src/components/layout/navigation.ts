@@ -14,7 +14,7 @@ export interface NavSection {
 }
 
 // Perfis "internos" (fábrica) — tudo menos o cliente.
-const INTERNAL: RoleKey[] = ['admin', 'supervisor', 'operator', 'quality', 'logistics']
+const INTERNAL: RoleKey[] = ['admin', 'supervisor', 'operator', 'quality']
 
 export const NAV_SECTIONS: NavSection[] = [
   {
@@ -40,7 +40,7 @@ export const NAV_SECTIONS: NavSection[] = [
     title: 'Administração',
     links: [
       { to: '/funcionarios', label: 'Funcionários e recursos', icon: 'user', roles: ['admin', 'supervisor'] },
-      { to: '/gestao', label: 'Gestão de dados', icon: 'settings', roles: ['admin', 'logistics'] },
+      { to: '/gestao', label: 'Gestão de dados', icon: 'settings', roles: ['admin', 'supervisor'] },
     ],
   },
   {

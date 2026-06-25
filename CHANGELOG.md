@@ -2,6 +2,68 @@
 
 Formato baseado em *Keep a Changelog*. Datas em ISO 8601.
 
+## [2.17.0] — 2026-06-25
+
+### Corrigido — grafo do Mapa de rastreabilidade (sem caixas sobrepostas)
+- Adicionada uma **compactação por coluna que garante um espaçamento mínimo** entre
+  caixas, eliminando sobreposições, sobretudo na zona "Secção / Linha" e onde várias
+  unidades passam pela mesma etapa. O alinhamento por faixas mantém-se; só afasta os
+  nós onde colidiriam.
+- **Mais espaço vertical** por faixa, **colunas e nós mais largos** (texto cabe melhor).
+  Estrutura, filtros, painel lateral e realce de ligações ao selecionar mantêm-se.
+
+### Adicionado — modo de apresentação (demo) e script
+- Novo **modo de apresentação opcional** ativado por `?demo=1` (ex.:
+  `http://localhost:8088/login?demo=1`). Mostra passos guiados no rodapé (Anterior /
+  Reproduzir / Seguinte / Sair), com avanço manual ou automático, autentica como
+  **Administrador** e percorre: visão geral, encomendas/produção, análise por linha e
+  suporte, qualidade, rastreabilidade, analítica/FIWARE e área de cliente.
+- O modo demo é **não destrutivo**: não altera permissões nem a lógica da aplicação,
+  reutiliza os dados existentes e não interfere com FIWARE, Grafana, qualidade,
+  encomendas ou rastreabilidade.
+- Novo script **`scripts/run-demo.ps1`**: arranca o ambiente (sem apagar dados), espera
+  pela API e abre o browser já em modo de apresentação.
+
+### Alterado — documentação final limpa
+- **`README.md` reescrito** como porta de entrada clara: o que é, problema que resolve no
+  DRIVOLUTION WP3, módulos, tecnologias, arranque, utilizadores demo, testes e demo.
+- Pasta `docs` organizada: mantidas `diagrams/` e `postman/`, **`DESIGN_NOTES.md` movido**
+  de `docs/mockups/` para `docs/`, e **`mockups/` removida**. Removidos os ficheiros de
+  fases antigas/intermédias.
+- Documentação final reescrita e coerente: **Setup e execução**, **FIWARE**, **Grafana**,
+  **Demo de apresentação** e **Perfis**.
+
+
+## [2.16.0] — 2026-06-24
+
+### Alterado — perfis de utilizador (remoção do perfil "Logística")
+- O perfil de acesso **Logística** foi **removido** como tipo de utilizador. A sua
+  função (racks, armazenamento e movimentações pós-linha, além da **Gestão de dados**)
+  passou para o **Supervisor**, que assume a visão de gestão operacional e logística.
+- Ficam apenas os perfis com diferenças reais: **Administrador, Supervisor, Operador,
+  Qualidade e Cliente**.
+- Atualizadas todas as referências de **acesso/login/permissões**: utilizador demo e
+  botão de login rápido de logística removidos, `RoleKey` e mapa de perfis sem
+  logística, **Gestão de dados** acessível a Administrador e Supervisor, navegação e
+  router atualizados, documentação (`PERFIS.md`) e testes ajustados.
+- **Mantidos** os conceitos de **logística do domínio** (racks, suportes, expedição,
+  logística pós-linha) e o **tipo de recurso "Logística"** na página de Funcionários.
+
+### Alterado — Mapa de rastreabilidade: legibilidade das ligações do grafo
+- **Alinhamento por faixas:** cada unidade passa a ter a sua linha, com o **suporte,
+  secção/linha, qualidade, recondicionamento, sucata e rack alinhados** horizontalmente
+  com a unidade; as **ordens ficam centradas** nas suas unidades e os **clientes**
+  centrados nas suas ordens. O percurso de cada encomenda fica visualmente mais lógico.
+- **Mais espaço vertical** entre nós dentro de cada coluna (clientes, ordens, unidades,
+  suportes, secções, qualidade, etc.), para seguir as ligações sem cruzamentos.
+- **Ligações discretas por omissão** e com **realce na interação:** ao passar o rato ou
+  selecionar um nó (cliente, ordem, unidade, suporte…), só as ligações e nós
+  relacionados ganham destaque, enquanto os restantes ficam apagados. Mantém-se a visão
+  completa da fábrica, mas a análise de um percurso específico fica muito mais fácil.
+- Alterações concentradas no grafo (`TraceGraph`/`TraceMapView`); sem mexer na lógica de
+  produção, FIWARE, qualidade, cliente, encomendas ou análise por linha.
+
+
 ## [2.15.0] — 2026-06-24
 
 ### Alterado — Painel de operações mais limpo e orientado a análise

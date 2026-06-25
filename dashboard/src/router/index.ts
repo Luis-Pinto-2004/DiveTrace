@@ -16,7 +16,7 @@ const ProfileView = () => import('@/views/ProfileView.vue')
 const ClassicView = () => import('@/views/ClassicView.vue')
 
 // Perfis "internos" (fábrica) — tudo menos o cliente.
-const INTERNAL = ['admin', 'supervisor', 'operator', 'quality', 'logistics']
+const INTERNAL = ['admin', 'supervisor', 'operator', 'quality']
 
 const routes: RouteRecordRaw[] = [
   { path: '/login', name: 'login', component: LoginView, meta: { public: true } },
@@ -65,7 +65,7 @@ const routes: RouteRecordRaw[] = [
         path: 'gestao',
         name: 'management',
         component: ManagementView,
-        meta: { title: 'Gestão de dados', subtitle: 'Criar produtos, linhas e secções', roles: ['admin', 'logistics'] },
+        meta: { title: 'Gestão de dados', subtitle: 'Criar produtos, linhas e secções', roles: ['admin', 'supervisor'] },
       },
       {
         path: 'funcionarios',

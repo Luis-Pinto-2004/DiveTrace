@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test'
  * que o cliente está isolado das vistas internas de produção.
  */
 
-const profiles = ['operador', 'qualidade', 'logistica', 'cliente'] as const
+const profiles = ['operador', 'qualidade', 'cliente'] as const
 
 for (const profile of profiles) {
   test(`início de sessão demo como ${profile}`, async ({ page }) => {

@@ -1,33 +1,29 @@
-# Configuração e Execução — DriveTrace Core
+# Setup e execução
 
-Guia prático para colocar a plataforma a correr, em ambiente de demonstração,
-e para validar rapidamente que tudo está operacional.
+Guia para instalar e executar o DriveTrace Core localmente.
 
-> A autenticação é **demo/local** — não representa segurança de produção.
-> Ver `docs/NOTAS_TECNICAS.md`, secção "Permissões e autenticação".
+## Requisitos
 
-## 1. Requisitos
+- **Docker** e **Docker Compose** (forma recomendada — arranca tudo: base de dados,
+  API, frontend, FIWARE e Grafana).
+- Em alternativa, para correr os componentes à parte: **Node.js 20+** e **.NET 8 SDK**.
 
-| Ferramenta | Versão alvo | Notas |
-|---|---|---|
-| Docker + Docker Compose | recente | Caminho recomendado para a demo completa |
-| .NET SDK | 8.0.x | Apenas para correr/testar a API fora do Docker |
-| Node.js | 22 LTS | Apenas para desenvolvimento do frontend |
-| npm | 10.x | Incluído no Node 22 |
+## Arranque rápido (Docker)
 
-## 2. Primeira execução (Docker — recomendado)
+A partir da raiz do projeto:
 
 ```bash
-# A partir da raiz do repositório
-cp .env.example .env        # ajustar segredos se necessário
 docker compose up -d --build
 ```
 
-O arranque levanta a base de dados, a API, o frontend, o FIWARE (Orion-LD,
-MongoDB, IoT Agent, QuantumLeap) e o Grafana. A API semeia automaticamente os
-dados demo no primeiro arranque.
+Aguardar a API ficar pronta (semeia a base de dados no primeiro arranque) e abrir o
+dashboard. Em Windows pode usar o script de espera:
 
-### URLs
+```powershell
+./scripts/wait-api.ps1
+```
+
+## Endereços
 
 | Serviço | URL |
 |---|---|
@@ -36,8 +32,12 @@ dados demo no primeiro arranque.
 | Saúde da API | http://localhost:5181/health |
 | Grafana | http://localhost:3000 |
 | Orion-LD (FIWARE) | http://localhost:1026/version |
+| Base de dados (TimescaleDB) | porta 15432 |
 
-### Credenciais demo
+## Utilizadores de demonstração
+
+Autenticação local de demonstração (não é segurança de produção). Utilizador e
+palavra-passe iguais:
 
 | Perfil | Utilizador | Palavra-passe |
 |---|---|---|
@@ -45,84 +45,52 @@ dados demo no primeiro arranque.
 | Supervisor | `supervisor` | `supervisor` |
 | Operador | `operador` | `operador` |
 | Qualidade | `qualidade` | `qualidade` |
-| Logística | `logistica` | `logistica` |
 | Cliente | `cliente` | `cliente` |
 
-No ecrã de início de sessão existem botões de acesso rápido para cada perfil.
-
-## 3. Execuções seguintes
+## Gestão do ambiente
 
 ```bash
-docker compose up -d          # sem reconstruir imagens
+docker compose up -d          # arrancar (sem reconstruir imagens)
+docker compose down           # parar, mantendo os dados (volumes)
+docker compose down -v        # parar e apagar os dados (reset total)
+docker compose config         # validar a configuração do compose
 ```
 
-## 4. Parar serviços
+> Evite `down -v` se quiser manter os dados de demonstração entre sessões.
 
-```bash
-docker compose down           # mantém volumes/dados
-docker compose down -v        # remove volumes (reset total)
-```
+## Executar os componentes à parte (sem Docker)
 
-## 5. Repor a demo (reset de dados)
-
-```bash
-docker compose down -v
-docker compose up -d --build
-```
-
-## 6. Desenvolvimento local (sem Docker)
-
-### Frontend
+Frontend:
 
 ```bash
 cd dashboard
-npm ci
-npm run dev          # servidor de desenvolvimento em http://localhost:5173
+npm install
+npm run dev          # desenvolvimento em http://localhost:5173
+npm run build        # build de produção
+npm run test         # testes unitários
 ```
 
-### Backend
+Backend:
 
 ```bash
 cd api
 dotnet restore
 dotnet run           # API em http://localhost:5181
+dotnet test ./Tests/DriveTraceCore.Api.Tests.csproj
 ```
 
-A cadeia de ligação por defeito aponta para `127.0.0.1:15432` (ver
-`api/appsettings.json`); ajustar conforme a base de dados disponível.
+## Demo de apresentação
 
-## 7. Validação rápida (smoke)
+Para uma apresentação guiada, consulte [DEMO.md](DEMO.md). Em Windows:
 
-```bash
-# Frontend: type-check, build e testes unitários
-cd dashboard
-npm run build
-npm run test
-
-# Backend: build e testes unitários
-cd ..
-dotnet build ./DriveTrace-Core.sln --configuration Release
-dotnet test ./api/Tests/DriveTraceCore.Api.Tests.csproj
-
-# Configuração do Docker Compose
-docker compose config
+```powershell
+./scripts/run-demo.ps1
 ```
 
-### Testes end-to-end e Lighthouse
+## Problemas comuns
 
-```bash
-cd dashboard
-npx playwright install --with-deps chromium
-npm run test:e2e          # fluxos críticos por perfil
-npm run lighthouse        # metas de performance/acessibilidade
-```
-
-## 8. Resolução de problemas
-
-| Sintoma | Causa provável | Ação |
+| Sintoma | Causa provável | Resolução |
 |---|---|---|
-| Dashboard não carrega dados | API ainda a arrancar/semear | Aguardar; verificar `http://localhost:5181/health` |
-| Porta ocupada | Conflito com serviço local | Ajustar portas no `docker-compose.yml` |
-| Grafana sem dados | Base ainda vazia | Confirmar que a API semeou os dados demo |
-| Erro de ligação à BD (local) | Porta/credenciais | Rever `appsettings.json` e a BD ativa |
-| E2E falha por browser | Browsers Playwright em falta | `npx playwright install --with-deps chromium` |
+| Dashboard sem dados | API ainda a arrancar/semear | Aguardar; verificar `http://localhost:5181/health` |
+| Porta ocupada | Outro serviço a usar a porta | Parar o serviço em conflito ou ajustar o `docker-compose.yml` |
+| Grafana sem gráficos | QuantumLeap ainda sem histórico | Gerar atividade na aplicação e aguardar a recolha |

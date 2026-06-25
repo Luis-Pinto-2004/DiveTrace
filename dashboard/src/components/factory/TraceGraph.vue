@@ -161,7 +161,7 @@ function buildForUnit(nodes: Map<string, GNode>, edges: GEdge[], u: Unit) {
   }
   // secção / linha
   const si = sectionInfo(u.sectionId)
-  const secId = `section:${u.sectionId}`
+  const secId = `section:${u.id}`
   nodes.set(secId, { id: secId, type: 'section', code: si.name, sub: si.lineCode, tone: 'neutral', fields: [
     { k: 'Secção', v: si.name },
     { k: 'Linha', v: si.lineCode },
@@ -169,7 +169,7 @@ function buildForUnit(nodes: Map<string, GNode>, edges: GEdge[], u: Unit) {
   edges.push({ from: uId, to: secId, kind: 'location' })
   // rack
   if (u.sectionId === 'SEC-RACK') {
-    const rId = 'rack:SEC-RACK'
+    const rId = `rack:${u.id}`
     nodes.set(rId, { id: rId, type: 'rack', code: 'Rack', sub: 'Armazenamento', tone: 'ok' })
     edges.push({ from: uId, to: rId, kind: 'rack' })
   }
@@ -223,32 +223,132 @@ const graph = computed<{ nodes: GNode[]; edges: GEdge[] }>(() => {
   return { nodes: visibleNodes, edges: visibleEdges }
 })
 
-// ------- Layout: colunas por categoria ------------------------------------
-const COL_W = 210
-const NODE_W = 168
-const NODE_H = 46
-const NODE_GAP = 14
-const HEAD_H = 30
+// ------- Layout: colunas por categoria, alinhado por faixas ---------------
+const COL_W = 232
+const NODE_W = 182
+const NODE_H = 48
+const HEAD_H = 32
+const ROW_H = NODE_H + 44 // espaçamento vertical por faixa (unidade)
+const ORDER_GAP = 40 // espaço extra entre encomendas
+const MAT_STEP = NODE_H + 18
+const MIN_GAP = NODE_H + 22 // gap mínimo garantido entre caixas na mesma coluna
+
+const DOWNSTREAM: NodeType[] = ['support', 'section', 'quality', 'recond', 'scrap', 'rack']
 
 const layout = computed(() => {
-  const byCat = new Map<NodeType, GNode[]>()
-  for (const n of graph.value.nodes) {
-    if (!byCat.has(n.type)) byCat.set(n.type, [])
-    byCat.get(n.type)!.push(n)
+  const g = graph.value
+  const nodeById = new Map(g.nodes.map((n) => [n.id, n]))
+  // categorias visíveis -> colunas
+  const present = CATS.filter((c) => g.nodes.some((n) => n.type === c.key))
+  const colX = new Map<NodeType, number>()
+  present.forEach((c, i) => colX.set(c.key, i * COL_W + 10))
+
+  // encomenda de cada unidade (edge order -> unit, kind produces)
+  const orderOfUnit = new Map<string, string>()
+  for (const e of g.edges) if (e.kind === 'produces') orderOfUnit.set(e.to, e.from)
+  // unidade dona de cada nó downstream / evento (edge unit -> node)
+  const ownerUnit = new Map<string, string>()
+  for (const e of g.edges) {
+    if ([...DOWNSTREAM, 'event'].includes(e.kind) && nodeById.get(e.from)?.type === 'unit') {
+      ownerUnit.set(e.to, e.from)
+    }
   }
-  const cols = CATS.filter((c) => byCat.has(c.key))
-  const pos = new Map<string, { x: number; y: number }>()
-  let maxRows = 0
-  cols.forEach((c, colIdx) => {
-    const list = byCat.get(c.key)!
-    maxRows = Math.max(maxRows, list.length)
-    list.forEach((n, i) => {
-      pos.set(n.id, { x: colIdx * COL_W + 10, y: HEAD_H + i * (NODE_H + NODE_GAP) })
+  // eventos por unidade
+  const eventsByUnit = new Map<string, string[]>()
+  for (const n of g.nodes) {
+    if (n.type !== 'event') continue
+    const ou = ownerUnit.get(n.id)
+    if (!ou) continue
+    if (!eventsByUnit.has(ou)) eventsByUnit.set(ou, [])
+    eventsByUnit.get(ou)!.push(n.id)
+  }
+
+  const y = new Map<string, number>()
+  const orderCenters = new Map<string, number[]>()
+  let cursor = HEAD_H
+  let lastOrder: string | undefined
+  g.nodes
+    .filter((n) => n.type === 'unit')
+    .forEach((u) => {
+      const ord = orderOfUnit.get(u.id)
+      if (lastOrder !== undefined && ord !== lastOrder) cursor += ORDER_GAP
+      lastOrder = ord
+      const evs = eventsByUnit.get(u.id) ?? []
+      const span = Math.max(1, evs.length)
+      const bandTop = cursor
+      const centerY = bandTop + (span * ROW_H) / 2 - NODE_H / 2
+      y.set(u.id, centerY)
+      evs.forEach((evId, i) => y.set(evId, bandTop + i * ROW_H))
+      if (ord) {
+        if (!orderCenters.has(ord)) orderCenters.set(ord, [])
+        orderCenters.get(ord)!.push(centerY)
+      }
+      cursor = bandTop + span * ROW_H
     })
+
+  // downstream alinhado ao centro da unidade dona
+  for (const n of g.nodes) {
+    if (DOWNSTREAM.includes(n.type)) {
+      const ou = ownerUnit.get(n.id)
+      if (ou && y.has(ou)) y.set(n.id, y.get(ou)!)
+    }
+  }
+  // ordens centradas nas suas unidades
+  for (const o of g.nodes) {
+    if (o.type !== 'order') continue
+    const cs = orderCenters.get(o.id)
+    if (cs && cs.length) y.set(o.id, cs.reduce((a, b) => a + b, 0) / cs.length)
+  }
+  // materiais empilhados junto à encomenda (na coluna de materiais)
+  const matsByOrder = new Map<string, GNode[]>()
+  for (const m of g.nodes) {
+    if (m.type !== 'material') continue
+    const e = g.edges.find((x) => x.kind === 'material' && x.from === m.id)
+    const ord = e?.to ? orderOfUnit.get(e.to) : undefined
+    const key = ord ?? 'noord'
+    if (!matsByOrder.has(key)) matsByOrder.set(key, [])
+    matsByOrder.get(key)!.push(m)
+  }
+  matsByOrder.forEach((list, ord) => {
+    const base = ord !== 'noord' ? y.get(ord) ?? HEAD_H : HEAD_H
+    list.forEach((m, i) => y.set(m.id, base + i * MAT_STEP))
   })
-  const width = cols.length * COL_W + 10
-  const height = HEAD_H + maxRows * (NODE_H + NODE_GAP) + 10
-  return { cols, pos, width, height }
+  // clientes centrados nas suas encomendas (edge customer -> order, belongs)
+  for (const c of g.nodes) {
+    if (c.type !== 'customer') continue
+    const cs = g.edges
+      .filter((e) => e.kind === 'belongs' && e.from === c.id)
+      .map((e) => y.get(e.to))
+      .filter((v): v is number => v != null)
+    if (cs.length) y.set(c.id, cs.reduce((a, b) => a + b, 0) / cs.length)
+  }
+
+  const pos = new Map<string, { x: number; y: number }>()
+  for (const n of g.nodes) {
+    pos.set(n.id, { x: colX.get(n.type) ?? 0, y: y.get(n.id) ?? HEAD_H })
+  }
+
+  // Compactação por coluna: garante um gap mínimo entre caixas (sem sobreposição).
+  // Preserva o alinhamento por faixa quando já há espaço; só afasta onde colidiria.
+  const byColumn = new Map<number, GNode[]>()
+  for (const n of g.nodes) {
+    const x = pos.get(n.id)!.x
+    if (!byColumn.has(x)) byColumn.set(x, [])
+    byColumn.get(x)!.push(n)
+  }
+  for (const list of byColumn.values()) {
+    list.sort((a, b) => pos.get(a.id)!.y - pos.get(b.id)!.y)
+    let prevY = -Infinity
+    for (const n of list) {
+      const p = pos.get(n.id)!
+      if (p.y < prevY + MIN_GAP) p.y = prevY + MIN_GAP
+      prevY = p.y
+    }
+  }
+
+  let maxY = 0
+  for (const p of pos.values()) maxY = Math.max(maxY, p.y + NODE_H)
+  return { cols: present, pos, width: present.length * COL_W + 10, height: maxY + 20 }
 })
 
 function nodePos(id: string) {
@@ -318,9 +418,34 @@ function resetView() {
   panY.value = 10
 }
 
-// ------- Seleção + painel -------------------------------------------------
+// ------- Seleção + realce por rato/seleção --------------------------------
 const selectedId = ref<string>('')
+const hoverId = ref<string>('')
 const selectedNode = computed(() => graph.value.nodes.find((n) => n.id === selectedId.value) ?? null)
+const activeId = computed(() => hoverId.value || selectedId.value)
+const activeNeighbors = computed(() => {
+  const id = activeId.value
+  const s = new Set<string>()
+  if (!id) return s
+  s.add(id)
+  for (const e of graph.value.edges) {
+    if (e.from === id) s.add(e.to)
+    if (e.to === id) s.add(e.from)
+  }
+  return s
+})
+function edgeIsActive(e: GEdge) {
+  const id = activeId.value
+  return !!id && (e.from === id || e.to === id)
+}
+function edgeOpacity(e: GEdge) {
+  if (!activeId.value) return 0.22
+  return edgeIsActive(e) ? 0.95 : 0.05
+}
+function nodeOpacity(n: GNode) {
+  if (!activeId.value) return 1
+  return activeNeighbors.value.has(n.id) ? 1 : 0.28
+}
 function pick(n: GNode) {
   selectedId.value = n.id
   if (n.unit) ops.selectUnit(n.unit.id)
@@ -491,12 +616,13 @@ const selRecentEvents = computed(() =>
             <path
               v-for="(e, i) in graph.edges"
               :key="i"
+              class="tg-edge"
               :d="edgePath(e)"
               fill="none"
               :stroke="`var(--dt-${EDGE_STYLE[e.kind].tone}-solid)`"
               :stroke-dasharray="EDGE_STYLE[e.kind].dash"
-              :stroke-width="e.kind === 'location' || e.kind === 'produces' ? 2 : 1.4"
-              :opacity="0.6"
+              :stroke-width="edgeIsActive(e) ? 2.6 : e.kind === 'location' || e.kind === 'produces' ? 1.8 : 1.3"
+              :opacity="edgeOpacity(e)"
               marker-end="url(#tg-ar)"
             />
 
@@ -507,7 +633,10 @@ const selRecentEvents = computed(() =>
               class="tg-node"
               :class="{ 'is-sel': n.id === selectedId }"
               :transform="`translate(${nodePos(n.id).x} ${nodePos(n.id).y})`"
+              :style="{ opacity: nodeOpacity(n) }"
               @click="pick(n)"
+              @mouseenter="hoverId = n.id"
+              @mouseleave="hoverId = ''"
             >
               <title>{{ TYPE_LABEL[n.type] }} · {{ n.code }}</title>
               <rect
@@ -548,7 +677,7 @@ const selRecentEvents = computed(() =>
                 :y="34"
                 class="tg-code"
                 :fill="`var(--dt-${n.tone}-text)`"
-              >{{ n.code.length > 20 ? n.code.slice(0, 19) + '…' : n.code }}</text>
+              >{{ n.code.length > 24 ? n.code.slice(0, 23) + '…' : n.code }}</text>
               <circle
                 v-if="n.unit"
                 :cx="NODE_W - 12"
@@ -773,6 +902,10 @@ const selRecentEvents = computed(() =>
 }
 .tg-node {
   cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+.tg-edge {
+  transition: opacity 0.15s ease, stroke-width 0.15s ease;
 }
 .tg-type {
   font-size: 8.5px;

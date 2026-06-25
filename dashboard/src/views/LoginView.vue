@@ -16,7 +16,6 @@ const landingByRole: Record<string, string> = {
   client: '/cliente',
   quality: '/qualidade',
   operator: '/cockpit',
-  logistics: '/rastreabilidade',
   supervisor: '/cockpit',
   admin: '/cockpit',
 }

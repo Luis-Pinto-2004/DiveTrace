@@ -29,7 +29,7 @@ export const DEMO_USERS: DemoCredential[] = [
     role: 'Supervisor',
     roleKey: 'supervisor',
     password: 'supervisor',
-    permissions: ['Orders.View', 'Orders.Manage', 'ProductUnits.View', 'ProductUnits.Trace', 'Quality.View'],
+    permissions: ['Orders.View', 'Orders.Manage', 'ProductUnits.View', 'ProductUnits.Trace', 'Quality.View', 'Racks.View', 'Supports.Manage', 'Materials.View', 'Data.Manage'],
   },
   {
     id: 'operador',
@@ -50,16 +50,6 @@ export const DEMO_USERS: DemoCredential[] = [
     roleKey: 'quality',
     password: 'qualidade',
     permissions: ['Quality.View', 'ProductUnits.View', 'ProductUnits.Trace'],
-  },
-  {
-    id: 'logistica',
-    name: 'Técnico de logística',
-    username: 'logistica',
-    email: 'logistica@drivetrace.local',
-    role: 'Logística',
-    roleKey: 'logistics',
-    password: 'logistica',
-    permissions: ['Racks.View', 'Supports.Manage', 'Materials.View'],
   },
   {
     id: 'cliente',

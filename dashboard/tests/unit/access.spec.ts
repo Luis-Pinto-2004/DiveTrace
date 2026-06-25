@@ -14,15 +14,14 @@ describe('access map', () => {
     expect(keys).toContain('supervisor')
     expect(keys).toContain('operator')
     expect(keys).toContain('quality')
-    expect(keys).toContain('logistics')
     expect(keys).toContain('client')
+    expect(keys).not.toContain('logistics')
   })
 
   it('homeViewForRole devolve a vista inicial correta por perfil', () => {
     expect(homeViewForRole('supervisor')).toBe('overview')
     expect(homeViewForRole('operator')).toBe('operator')
     expect(homeViewForRole('quality')).toBe('reconditioning')
-    expect(homeViewForRole('logistics')).toBe('racks')
     expect(homeViewForRole('client')).toBe('customerOrders')
   })
 
@@ -39,7 +38,7 @@ describe('access map', () => {
 
   it('roleLabel devolve etiquetas PT-PT', () => {
     expect(roleLabel('admin')).toBe('Administrador')
-    expect(roleLabel('logistics')).toBe('Logística')
+    expect(roleLabel('supervisor')).toBe('Supervisor')
   })
 
   it('isAdminRole distingue o administrador', () => {

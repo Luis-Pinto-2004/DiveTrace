@@ -50,11 +50,3 @@ ponto e etiqueta textual (acessibilidade WCAG 2.1 AA).
 `ActivityFeed`, `PageHeader`, `EmptyState`, `LoadingState`,
 `ConfirmationDialog`, `SmartFormField`. Todos tipados, acessíveis e baseados em
 tokens.
-
-## Mockups
-
-- `supervisor-command-center.svg` — centro de comando do supervisor.
-- `operator-workbench.svg` — bancada do operador.
-
-Os mockups são de alta fidelidade e derivam diretamente dos tokens acima
-(cores, tipografia, espaçamento), servindo de referência para as vistas reais.

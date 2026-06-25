@@ -14,11 +14,15 @@ praticamente iguais.
 | Perfil | Função real | Páginas | Ações-chave |
 |---|---|---|---|
 | **Administrador** | Configuração e gestão global | Todas | Tudo: dados, funcionários, encomendas, qualidade, interface clássico |
-| **Supervisor / Gerente** | Acompanhar produção, linhas, qualidade e decisões operacionais | Painel, Encomendas, Análise por linha, Qualidade, Rastreabilidade, **Funcionários** | Aceitar/iniciar encomendas, decisões de qualidade, gerir recursos |
+| **Supervisor / Gerente** | Gestão operacional e logística: produção, linhas, racks/pós-linha, qualidade e dados | Painel, Encomendas, Análise por linha, Qualidade, Rastreabilidade, **Gestão de dados**, **Funcionários** | Aceitar/iniciar encomendas, decisões de qualidade, gerir dados e recursos, acompanhar rack/expedição |
 | **Operador** | Executar ações simples na linha | Painel (estado), Análise por linha, Rastreabilidade | Avançar etapa, atribuir suporte, transferir (desvio) |
 | **Qualidade** | Validar, aprovar, recondicionar ou marcar sucata | Quadro de qualidade, Análise por linha, Rastreabilidade | Decisões de qualidade na Linha 4 |
-| **Logística** | Suportes, racks e movimentações pós-linha | Gestão de dados, Análise por linha, Rastreabilidade | Configurar dados, acompanhar rack/expedição |
 | **Cliente** | Acompanhar encomendas | As minhas encomendas | Submeter pedidos e ver estado |
+
+> O perfil **Logística** deixou de existir como tipo de acesso. A sua função (racks,
+> armazenamento e movimentações pós-linha, além da gestão de dados) passou para o
+> **Supervisor**. Os conceitos de logística da fábrica (racks, suportes, expedição) e o
+> tipo de recurso *Logística* nos funcionários mantêm-se.
 
 ## Porque é que os perfis não são redundantes
 
@@ -26,11 +30,12 @@ praticamente iguais.
   rastreabilidade (contexto de chão de fábrica), mas só a Qualidade tem o **Quadro
   de qualidade** com as decisões (aprovar / análise / recondicionar / sucata). O
   Operador executa ações simples; a Qualidade decide.
-- **Operador vs Logística** — a Logística acede à **Gestão de dados** (produtos,
-  linhas, secções) e foca-se no pós-linha (rack/expedição); o Operador não.
-- **Supervisor vs Administrador** — o Supervisor acompanha produção e gere
-  recursos/funcionários, mas **não** acede à configuração global nem ao interface
-  clássico, reservados ao Administrador.
+- **Gestão de dados** — a **Gestão de dados** (produtos, linhas, secções) é agora
+  acessível ao **Administrador** e ao **Supervisor**.
+- **Supervisor vs Administrador** — o Supervisor faz a gestão operacional e logística
+  (produção, racks/pós-linha, qualidade, dados) e gere recursos/funcionários, mas
+  **não** acede à configuração global nem ao interface clássico, reservados ao
+  Administrador.
 - **Cliente** — área completamente separada (apenas as suas encomendas), sem acesso
   a dados internos da fábrica.
 

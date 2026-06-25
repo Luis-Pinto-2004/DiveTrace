@@ -2,20 +2,62 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useOperationsStore } from '@/stores/operations'
 import { authenticate } from '@/data/demoUsers'
 
 interface DemoStep {
   route: string
   title: string
   message: string
+  query?: Record<string, string>
   scrollTo?: string
   highlight?: string
   type?: Array<{ selector: string; text: string }>
+  action?: () => void
   dwell?: number
 }
 
 const LOGIN_INDEX = 0
-const DWELL = 10000
+const DWELL = 11000
+
+const route = useRoute()
+const router = useRouter()
+const auth = useAuthStore()
+const ops = useOperationsStore()
+
+// Ações de demonstração — operam apenas no estado cliente (nunca na base de dados).
+function startSubmittedOrder() {
+  const o = ops.orders.find((x) => x.id === 'O7')
+  if (o?.status === 'submitted') {
+    ops.acceptOrder('O7')
+    ops.startProduction('O7')
+  }
+}
+function selectRepresentativeUnit() {
+  const u = ops.units.find((x) => {
+    const o = ops.orders.find((ord) => ord.id === x.orderId)
+    return o?.status === 'in_production' && x.state === 'active'
+  })
+  if (u) ops.selectUnit(u.id)
+}
+function advanceRepresentativeUnit() {
+  const u = ops.units.find((x) => {
+    const o = ops.orders.find((ord) => ord.id === x.orderId)
+    const info = ops.advanceInfo(x.id)
+    return o?.status === 'in_production' && x.state === 'active' && !!info && !info.atEnd && !info.blocked
+  })
+  if (u) {
+    ops.selectUnit(u.id)
+    ops.advanceUnit(u.id)
+  }
+}
+function approveQualityUnit() {
+  const u = ops.units.find((x) => x.sectionId === 'SEC-CQ' && x.quality === 'pending')
+  if (u) {
+    ops.selectUnit(u.id)
+    ops.decideQuality(u.id, 'approve')
+  }
+}
 
 const STEPS: DemoStep[] = [
   {
@@ -27,38 +69,44 @@ const STEPS: DemoStep[] = [
       { selector: '[data-demo="login-user"]', text: 'admin' },
       { selector: '[data-demo="login-pass"]', text: 'admin' },
     ],
-    dwell: 3000,
+    dwell: 3200,
   },
   {
     route: '/cockpit',
     title: 'Painel de operações',
     message: 'Visão geral da fábrica e prioridades do turno: unidades em curso, qualidade e produção.',
+    action: selectRepresentativeUnit,
     scrollTo: '[data-demo="producao"]',
     highlight: '[data-demo="producao"]',
   },
   {
     route: '/ordens',
     title: 'Encomendas e ordens de fabrico',
-    message: 'Pedido de cliente dá origem a uma ordem de fabrico; aceitar gera as unidades individuais.',
+    message: 'Pedido de cliente aceite: unidades de produto individuais geradas e produção iniciada.',
+    action: startSubmittedOrder,
     highlight: '[data-demo="encomendas"]',
   },
   {
     route: '/linhas',
     title: 'Produção e suporte',
-    message: 'Suporte atribuído: cada unidade é rastreável ao avançar pelas secções da linha.',
+    message: 'Suporte atribuído e unidade a avançar pela rota, respeitando a capacidade da secção.',
+    action: advanceRepresentativeUnit,
     highlight: '[data-demo="linha"]',
   },
   {
     route: '/qualidade',
     title: 'Controlo de qualidade',
-    message: 'Unidade em controlo de qualidade: aprovar, recondicionar ou marcar como sucata.',
+    message: 'Decisão de qualidade aplicada: unidade aprovada e encaminhada para o rack.',
+    action: approveQualityUnit,
     highlight: '[data-demo="qualidade"]',
   },
   {
     route: '/rastreabilidade',
     title: 'Mapa de rastreabilidade',
-    message: 'Rastreabilidade completa no grafo: cliente, ordem, unidade, suporte, secções, qualidade e eventos.',
+    message: 'Rastreabilidade completa de uma ordem no grafo: unidades, suporte, secções, qualidade e eventos.',
+    query: { gp: 'order', go: 'O1' },
     highlight: '[data-demo="grafo"]',
+    dwell: 13000,
   },
   {
     route: '/cliente',
@@ -68,10 +116,6 @@ const STEPS: DemoStep[] = [
   },
 ]
 
-const route = useRoute()
-const router = useRouter()
-const auth = useAuthStore()
-
 const active = computed(() => route.query.demo === '1')
 const index = ref(0)
 const playing = ref(false)
@@ -80,7 +124,6 @@ const isLast = computed(() => index.value === STEPS.length - 1)
 
 let timer: ReturnType<typeof setTimeout> | null = null
 let runId = 0
-
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 function stepForRoute(path: string): number {
@@ -88,7 +131,7 @@ function stepForRoute(path: string): number {
   return i >= 0 ? i : 0
 }
 
-// ---- destaque visual (anel sobre o elemento) -----------------------------
+// ---- destaque visual -----------------------------------------------------
 const ring = ref<{ top: number; left: number; width: number; height: number } | null>(null)
 let highlightSel: string | null = null
 function recomputeRing() {
@@ -129,12 +172,13 @@ async function typeInto(selector: string, text: string) {
 }
 
 // ---- navegação preservando o modo demo -----------------------------------
-async function navigate(path: string) {
-  if (route.path !== path) {
+async function navigate(path: string, extra: Record<string, string> = {}) {
+  const queryDiffers = Object.keys(extra).some((k) => route.query[k] !== extra[k])
+  if (route.path !== path || queryDiffers) {
     try {
-      await router.push({ path, query: { demo: '1' } })
+      await router.push({ path, query: { demo: '1', ...extra } })
     } catch {
-      /* navegação redundante ou cancelada: ignorar */
+      /* navegação redundante/cancelada: ignorar */
     }
     await nextTick()
   }
@@ -145,7 +189,7 @@ async function runStep(i: number) {
   const my = ++runId
   const s = STEPS[i]
   clearHighlight()
-  await navigate(s.route)
+  await navigate(s.route, s.query ?? {})
   if (my !== runId || !active.value) return
   await delay(240)
   if (my !== runId || !active.value) return
@@ -158,6 +202,11 @@ async function runStep(i: number) {
       const session = authenticate('admin', 'admin')
       if (session) auth.setUser(session)
     }
+  }
+  if (s.action) {
+    s.action()
+    await delay(320)
+    if (my !== runId || !active.value) return
   }
   if (s.scrollTo) {
     document.querySelector(s.scrollTo)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -203,6 +252,7 @@ function togglePlay() {
 }
 function restart() {
   clearTimer()
+  ops.resetDemo()
   index.value = 0
   playing.value = true
   void runStep(0)
@@ -214,10 +264,15 @@ function exit() {
   window.scrollTo({ top: 0 })
   const query = { ...route.query }
   delete query.demo
+  delete query.gp
+  delete query.go
+  delete query.gu
   void router.replace({ path: route.path, query })
 }
 
 function start() {
+  // Repõe o estado de demonstração para um ponto conhecido (repetível, não destrutivo).
+  ops.resetDemo()
   index.value = stepForRoute(route.path)
   playing.value = true
   void runStep(index.value)

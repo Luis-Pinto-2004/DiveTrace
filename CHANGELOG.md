@@ -2,6 +2,36 @@
 
 Formato baseado em *Keep a Changelog*. Datas em ISO 8601.
 
+## [2.19.0] — 2026-06-25
+
+### Alterado — regras de capacidade consolidadas e visíveis
+- A regra de capacidade das secções passou a estar **aplicada de forma consistente** em
+  todos os pontos de movimento: avanço da rota, transferência entre linhas, decisões de
+  qualidade, recondicionamento e armazenamento/rack. Se a secção de destino estiver
+  cheia, a unidade **não avança nem se sobrepõe** e fica em espera com a mensagem
+  **“Secção cheia, aguarda disponibilidade”**. As exceções de capacidade alargada
+  (matérias-primas, buffers, rack e expedição) mantêm-se.
+- **Interface reflete a indisponibilidade**: o botão de avançar fica desativado e avisa
+  quando a próxima secção está cheia; o diálogo de transferência marca as secções cheias
+  e bloqueia a confirmação; o botão de recondicionar fica desativado quando o
+  recondicionamento está cheio; o detalhe da unidade mostra o estado da próxima etapa.
+- Novos getters de apoio (`advanceInfo`, `decisionTarget`, `sectionName`) e **3 testes**
+  que confirmam que uma unidade não avança/transfere/decide para uma secção cheia
+  (total: 63 testes).
+
+### Alterado — demo do ciclo completo, não destrutiva e repetível
+- A demo passou a **demonstrar o ciclo completo com ações reais**: aceitar e iniciar uma
+  ordem (gerando as unidades individuais), atribuir suporte e avançar pela rota
+  (respeitando a capacidade), aplicar uma decisão de qualidade e abrir o **grafo de uma
+  ordem de fabrico**, terminando na área de cliente.
+- O cenário é **reposto a um estado conhecido no arranque** (e no **Recomeçar**), pelo
+  que **várias execuções dão sempre o mesmo resultado**. As ações operam apenas sobre o
+  estado de demonstração do cliente: **não criam encomendas novas nem escrevem na base
+  de dados**.
+- Mantém a navegação automática, o scroll, o destaque dos elementos e a caixa de
+  controlos (Anterior / Reproduzir / Pausar / Seguinte / Recomeçar / Terminar).
+
+
 ## [2.18.0] — 2026-06-25
 
 ### Corrigido — modo de apresentação determinístico

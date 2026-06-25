@@ -42,6 +42,7 @@ const lineUnits = computed(() =>
 )
 
 const selected = computed(() => ops.selectedUnit)
+const advanceState = computed(() => (selected.value ? ops.advanceInfo(selected.value.id) : null))
 
 function pick(id: string) {
   ops.selectUnit(id)
@@ -249,7 +250,9 @@ const sectionRows = computed(() =>
               <button
                 type="button"
                 class="mini"
-                title="Avançar etapa"
+                :class="{ 'mini--blocked': ops.advanceInfo(unit.id)?.blocked }"
+                :disabled="ops.advanceInfo(unit.id)?.blocked"
+                :title="ops.advanceInfo(unit.id)?.blocked ? 'Secção cheia, aguarda disponibilidade' : 'Avançar etapa'"
                 @click="advance(unit.id)"
               >
                 ▸
@@ -304,6 +307,18 @@ const sectionRows = computed(() =>
           Rota produtiva
         </h3>
         <RouteStepper :unit="selected" />
+        <p
+          v-if="advanceState && !advanceState.atEnd"
+          class="detail__next"
+          :class="{ 'detail__next--blocked': advanceState.blocked }"
+        >
+          <template v-if="advanceState.blocked">
+            Próxima etapa: {{ advanceState.sectionName }}. Secção cheia, aguarda disponibilidade (cap. {{ advanceState.capacity }}).
+          </template>
+          <template v-else>
+            Próxima etapa: {{ advanceState.sectionName }}. Disponível.
+          </template>
+        </p>
       </div>
 
       <div class="detail__support">
@@ -590,6 +605,32 @@ const sectionRows = computed(() =>
 .mini:hover {
   border-color: #0877d8;
   color: #0877d8;
+}
+.mini:disabled,
+.mini--blocked {
+  opacity: 0.45;
+  cursor: not-allowed;
+  border-color: var(--dt-critical-border);
+  color: var(--dt-critical-text);
+}
+.mini:disabled:hover {
+  border-color: var(--dt-critical-border);
+  color: var(--dt-critical-text);
+}
+.detail__next {
+  margin: 0.55rem 0 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--dt-ok-text);
+  background: var(--dt-ok-surface);
+  border: 1px solid var(--dt-ok-border);
+  border-radius: var(--dt-radius);
+  padding: 0.4rem 0.55rem;
+}
+.detail__next--blocked {
+  color: var(--dt-warn-text);
+  background: var(--dt-warn-surface);
+  border-color: var(--dt-warn-border);
 }
 .line__zone-note {
   margin: 0;

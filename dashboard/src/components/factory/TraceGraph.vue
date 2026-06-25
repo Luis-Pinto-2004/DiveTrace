@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import {
   useOperationsStore,
   routeView,
@@ -76,6 +77,20 @@ type Perspective = 'factory' | 'unit' | 'order'
 const perspective = ref<Perspective>('factory')
 const focusUnitId = ref<string>('')
 const focusOrderId = ref<string>('')
+
+// Perspetiva/elemento inicial via query (?gp=order&go=O1 ou ?gp=unit&gu=U123),
+// usado pela apresentação para focar uma ordem/unidade específica.
+const route = useRoute()
+onMounted(() => {
+  const gp = route.query.gp
+  if (gp === 'order' && typeof route.query.go === 'string') {
+    perspective.value = 'order'
+    focusOrderId.value = route.query.go
+  } else if (gp === 'unit' && typeof route.query.gu === 'string') {
+    perspective.value = 'unit'
+    focusUnitId.value = route.query.gu
+  }
+})
 
 const orderedUnits = computed(() =>
   [...ops.units].sort((a, b) => a.label.localeCompare(b.label)),

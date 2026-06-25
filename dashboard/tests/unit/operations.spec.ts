@@ -128,3 +128,64 @@ describe('operations store — conclusão de encomenda pronta', () => {
     expect(ops.orders.find((o) => o.id === inProd!.id)?.status).toBe('in_production')
   })
 })
+
+describe('operations store — regras de capacidade', () => {
+  it('uma unidade não avança para uma secção cheia', () => {
+    const ops = useOperationsStore()
+    const order = ops.placeOrder({ customer: 'Teste', product: 'Capô', quantity: 2, lineId: 'L1' })
+    ops.acceptOrder(order.id)
+    ops.startProduction(order.id)
+    const [a, b] = ops.units.filter((u) => u.orderId === order.id)
+    const mp = ops.lineById('L1')!.sections[0].id // SEC-MP (buffer, cap. alargada)
+    const atrib = ops.lineById('L1')!.sections[1].id // cap. 1
+
+    ops.advanceUnit(a.id)
+    expect(ops.unitById(a.id)!.sectionId).toBe(atrib)
+    expect(ops.isSectionFull(atrib)).toBe(true)
+
+    // b tenta avançar para a mesma secção (cheia): fica em espera, não sobrepõe.
+    ops.advanceUnit(b.id)
+    expect(ops.unitById(b.id)!.sectionId).toBe(mp)
+    expect(ops.advanceInfo(b.id)!.blocked).toBe(true)
+    expect(ops.sectionOccupancy(atrib)).toBe(1)
+  })
+
+  it('a transferência entre secções respeita a capacidade', () => {
+    const ops = useOperationsStore()
+    const order = ops.placeOrder({ customer: 'Teste', product: 'Capô', quantity: 2, lineId: 'L1' })
+    ops.acceptOrder(order.id)
+    ops.startProduction(order.id)
+    const [a, b] = ops.units.filter((u) => u.orderId === order.id)
+    const mp = ops.lineById('L1')!.sections[0].id
+    const atrib = ops.lineById('L1')!.sections[1].id
+
+    ops.advanceUnit(a.id)
+    expect(ops.unitById(a.id)!.sectionId).toBe(atrib)
+
+    // Transferir b para a secção cheia: não permitido, b fica.
+    ops.transferUnit(b.id, atrib)
+    expect(ops.unitById(b.id)!.sectionId).toBe(mp)
+  })
+
+  it('uma decisão de qualidade não move a unidade para uma secção cheia', () => {
+    const ops = useOperationsStore()
+    const cap = ops.sectionCapacity('SEC-RETRAB')
+    const cqUnits = ops.units.filter((u) => u.sectionId === 'SEC-CQ' && u.state !== 'scrap')
+
+    // Encher o recondicionamento até à capacidade.
+    let i = 0
+    while (ops.sectionOccupancy('SEC-RETRAB') < cap && i < cqUnits.length) {
+      ops.decideQuality(cqUnits[i].id, 'recondition')
+      i += 1
+    }
+    expect(ops.isSectionFull('SEC-RETRAB')).toBe(true)
+
+    // Uma unidade ainda em CQ não consegue ir para o recondicionamento cheio.
+    const remaining = cqUnits.find((u) => u.sectionId === 'SEC-CQ')
+    if (remaining) {
+      expect(ops.decisionTarget(remaining.id, 'recondition')!.blocked).toBe(true)
+      ops.decideQuality(remaining.id, 'recondition')
+      expect(ops.unitById(remaining.id)!.sectionId).toBe('SEC-CQ')
+    }
+  })
+})

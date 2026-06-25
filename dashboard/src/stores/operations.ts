@@ -853,12 +853,82 @@ export const useOperationsStore = defineStore('operations', {
         return occ >= cap
       }
     },
+    sectionName(state) {
+      return (sectionId: string): string => {
+        for (const l of state.lines) {
+          const s = l.sections.find((x) => x.id === sectionId)
+          if (s) return s.name
+        }
+        return sectionId
+      }
+    },
+    /** Próxima secção da rota e se está disponível (para avançar). */
+    advanceInfo(state) {
+      return (unitId: string): { atEnd: boolean; blocked: boolean; sectionName: string; capacity: number } | null => {
+        const unit = state.units.find((u) => u.id === unitId)
+        if (!unit) return null
+        const line = findLine(state.lines, unit.lineId)
+        if (!line) return null
+        const next = nextSection(line, unit.sectionId)
+        if (!next) return { atEnd: true, blocked: false, sectionName: '', capacity: 0 }
+        return {
+          atEnd: false,
+          blocked: this.isSectionFull(next.id, unit.id),
+          sectionName: next.name,
+          capacity: this.sectionCapacity(next.id),
+        }
+      }
+    },
+    /** Secção de destino de uma decisão de qualidade e se está disponível. */
+    decisionTarget(state) {
+      return (
+        unitId: string,
+        decision: string,
+      ): { code: string | null; blocked: boolean; sectionName: string; capacity: number } | null => {
+        const unit = state.units.find((u) => u.id === unitId)
+        if (!unit) return null
+        const targets: Record<string, string | null> = {
+          approve: 'SEC-RACK',
+          review: 'SEC-CQ',
+          recoverable: 'SEC-CQ',
+          recondition: 'SEC-RETRAB',
+          reconditioned: 'SEC-RACK',
+          scrap: null,
+        }
+        const code = targets[decision] ?? null
+        if (!code) return { code: null, blocked: false, sectionName: '', capacity: 0 }
+        return {
+          code,
+          blocked: code !== unit.sectionId && this.isSectionFull(code, unit.id),
+          sectionName: this.sectionName(code),
+          capacity: this.sectionCapacity(code),
+        }
+      }
+    },
   },
 
   actions: {
     log(title: string, tone: StatusTone, detail?: string) {
       this.activity.unshift({ id: (activitySeq += 1), at: now(), title, tone, detail })
       if (this.activity.length > 80) this.activity.length = 80
+    },
+
+    /** Repõe o estado de demonstração (cliente) para um ponto conhecido e repetível. */
+    resetDemo() {
+      unitSeq = 1000
+      orderSeq = 0
+      activitySeq = 1
+      productSeq = 100
+      materialSeq = 100
+      const seed = buildSeed()
+      this.lines = LINES.map((l) => ({ ...l, sections: l.sections.map((s) => ({ ...s })) })) as Line[]
+      this.units = seed.units as Unit[]
+      this.orders = seed.orders as Order[]
+      this.supports = seed.supports as Support[]
+      this.activity = seedActivity() as ActivityRecord[]
+      this.products = SEED_PRODUCTS.map((p) => ({ ...p })) as ProductRef[]
+      this.materials = SEED_MATERIALS.map((m) => ({ ...m })) as MaterialRef[]
+      this.selectedUnitId = null
     },
     selectUnit(id: string | null) {
       this.selectedUnitId = id
@@ -996,7 +1066,7 @@ export const useOperationsStore = defineStore('operations', {
       }
       // Regra de capacidade: secção cheia → fica em espera (não sobrepõe).
       if (this.isSectionFull(next.id, unit.id)) {
-        this.pushUnitEvent(unit, `Em espera para ${next.name}`, 'warn', `Secção cheia (cap. ${this.sectionCapacity(next.id)})`)
+        this.pushUnitEvent(unit, `Secção cheia, aguarda disponibilidade`, 'warn', `${next.name} (cap. ${this.sectionCapacity(next.id)})`)
         this.log(`${unit.label} em espera · ${next.name} cheia`, 'warn', line.code)
         return
       }
@@ -1120,7 +1190,7 @@ export const useOperationsStore = defineStore('operations', {
         if (!l4 || !sec) return
         if (sec.id !== unit.sectionId && this.isSectionFull(sec.id, unit.id)) {
           // secção de destino cheia → mantém posição (aguarda espaço), sem sobrepor
-          this.pushUnitEvent(unit, `Aguarda espaço em ${sec.name}`, 'warn', `cap. ${this.sectionCapacity(sec.id)}`)
+          this.pushUnitEvent(unit, `Secção cheia, aguarda disponibilidade`, 'warn', `${sec.name} (cap. ${this.sectionCapacity(sec.id)})`)
           return
         }
         unit.lineId = l4.id

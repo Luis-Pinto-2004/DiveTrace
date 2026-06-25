@@ -25,8 +25,19 @@ watch(
 const targetLine = computed(() => ops.lineById(targetLineId.value))
 const sections = computed(() => targetLine.value?.sections ?? [])
 const isInterline = computed(() => props.unit && targetLineId.value !== props.unit.lineId)
-// Desvio interlinha exige motivo explícito.
-const canConfirm = computed(() => !isInterline.value || reason.value.trim().length > 0)
+// Capacidade da secção de destino (exclui a própria unidade).
+const targetFull = computed(() =>
+  props.unit && targetSectionId.value !== props.unit.sectionId
+    ? ops.isSectionFull(targetSectionId.value, props.unit.id)
+    : false,
+)
+function sectionFull(sectionId: string): boolean {
+  return props.unit && sectionId !== props.unit.sectionId ? ops.isSectionFull(sectionId, props.unit.id) : false
+}
+// Desvio interlinha exige motivo; destino não pode estar cheio.
+const canConfirm = computed(
+  () => !targetFull.value && (!isInterline.value || reason.value.trim().length > 0),
+)
 
 watch(targetLineId, () => {
   const first = sections.value[0]
@@ -86,9 +97,16 @@ function confirm() {
               v-for="sec in sections"
               :key="sec.id"
               :value="sec.id"
-            >{{ sec.name }}</option>
+              :disabled="sectionFull(sec.id)"
+            >{{ sec.name }}{{ sectionFull(sec.id) ? ' (cheia)' : '' }}</option>
           </select>
         </label>
+        <p
+          v-if="targetFull"
+          class="dt-tr__warn"
+        >
+          Secção cheia, aguarda disponibilidade. Escolha outra secção.
+        </p>
 
         <label
           v-if="isInterline"
@@ -162,6 +180,16 @@ function confirm() {
   margin: 0.15rem 0 1rem;
   font-size: 0.8125rem;
   color: var(--dt-neutral-text);
+}
+.dt-tr__warn {
+  margin: 0 0 0.6rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--dt-warn-text);
+  background: var(--dt-warn-surface);
+  border: 1px solid var(--dt-warn-border);
+  border-radius: var(--dt-radius);
+  padding: 0.4rem 0.55rem;
 }
 .dt-tr__field {
   display: flex;

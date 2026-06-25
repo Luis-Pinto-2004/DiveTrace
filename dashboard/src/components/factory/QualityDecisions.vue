@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useOperationsStore, type Unit } from '@/stores/operations'
 
 const props = defineProps<{ unit: Unit }>()
@@ -8,6 +9,10 @@ type Decision = 'approve' | 'review' | 'recondition' | 'reconditioned' | 'scrap'
 function decide(d: Decision) {
   ops.decideQuality(props.unit.id, d)
 }
+
+// Capacidade da secção de destino do recondicionamento (SEC-RETRAB).
+const recondInfo = computed(() => ops.decisionTarget(props.unit.id, 'recondition'))
+const recondBlocked = computed(() => recondInfo.value?.blocked ?? false)
 </script>
 
 <template>
@@ -39,6 +44,9 @@ function decide(d: Decision) {
       v-else
       type="button"
       class="qd__btn qd__btn--action"
+      :class="{ 'qd__btn--off': recondBlocked }"
+      :disabled="recondBlocked"
+      :title="recondBlocked ? 'Secção cheia, aguarda disponibilidade' : 'Enviar para recondicionamento'"
       @click="decide('recondition')"
     >
       Recondicionar
@@ -51,6 +59,12 @@ function decide(d: Decision) {
       Sucata
     </button>
   </div>
+  <p
+    v-if="recondBlocked && unit.quality !== 'reconditioning'"
+    class="qd__warn"
+  >
+    Recondicionamento: secção cheia, aguarda disponibilidade (cap. {{ recondInfo?.capacity }}).
+  </p>
 </template>
 
 <style scoped>
@@ -79,5 +93,15 @@ function decide(d: Decision) {
 }
 .qd__btn--danger {
   background: var(--dt-critical-solid);
+}
+.qd__btn--off {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.qd__warn {
+  margin: 0.4rem 0 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--dt-warn-text);
 }
 </style>

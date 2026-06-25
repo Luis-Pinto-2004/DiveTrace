@@ -143,7 +143,7 @@ Write-Host "DriveTrace Core - FIWARE smoke test"
 Write-Host "-----------------------------------"
 
 Show-Result -Name "Orion-LD version" -Url "http://localhost:1026/version" | Out-Null
-Show-Result -Name "IoT Agent about" -Url "http://localhost:4041/iot/about" | Out-Null
+Show-Result -Name "IoT Agent about" -Url "http://localhost:14041/iot/about" | Out-Null
 Show-Result -Name "QuantumLeap version" -Url "http://localhost:8668/version" | Out-Null
 Show-Result -Name "API Swagger" -Url "http://localhost:5181/swagger" | Out-Null
 Get-FiwareContextObject | Out-Null

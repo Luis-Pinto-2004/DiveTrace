@@ -54,7 +54,7 @@ Aguardar a API ficar pronta e abrir o dashboard.
 |---|---|
 | Dashboard | http://localhost:8088 |
 | API + Swagger | http://localhost:5181/swagger |
-| Grafana | http://localhost:3000 |
+| Grafana | http://localhost:33010 |
 | Orion-LD (FIWARE) | http://localhost:1026/version |
 
 ### Utilizadores de demonstração

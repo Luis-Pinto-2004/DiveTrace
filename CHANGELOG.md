@@ -2,6 +2,46 @@
 
 Formato baseado em *Keep a Changelog*. Datas em ISO 8601.
 
+## [2.20.1] — 2026-06-25
+
+### Corrigido — conflito de porta do IoT Agent e portas na documentação
+- `docker-compose.yml`: o **IoT Agent** passou a publicar a API no host em **`14041`**
+  (`14041:4041`), evitando o erro de arranque em Windows quando a porta `4041` cai numa
+  gama reservada pelo sistema. **A porta interna mantém-se `4041`**: `IOTA_NORTH_PORT` e
+  `IOTA_PROVIDER_URL` (`http://iot-agent:4041`) não foram alterados, pelo que a
+  comunicação dentro da rede Docker continua igual. O acesso externo passa a ser
+  `http://localhost:14041`.
+- `scripts/test-fiware.ps1`: a verificação externa do IoT Agent passou a usar
+  `http://localhost:14041/iot/about` (continua a validar Orion-LD, IoT Agent,
+  QuantumLeap, API e o contexto FIWARE).
+- `docs/FIWARE.md`: tabela de portas atualizada (host → Docker), clarificando a porta
+  interna `4041`, a externa `14041` e o endpoint de payload/dispositivos `7896`.
+- Correção de coerência: as referências ao **Grafana** na documentação e no
+  `run-demo.ps1` passaram de `localhost:3000` para **`localhost:33010`**, que é a porta
+  publicada no host por defeito (`${GRAFANA_PORT:-33010}:3000`).
+
+
+## [2.20.0] — 2026-06-25
+
+### Alterado — demo como narrativa visual de uma unidade concreta
+- A demo deixou de ser uma sequência de saltos entre páginas e passou a **acompanhar a
+  mesma unidade do início ao fim**: seleção no painel, suporte, avanço pela rota
+  (respeitando a capacidade), controlo de qualidade e encaminhamento para rack,
+  acompanhamento pelo cliente e grafo de rastreabilidade da ordem.
+- A caixa de apresentação foi **redesenhada** (formatação estável em todas as páginas) e
+  passou a mostrar sempre **qual a unidade acompanhada e onde está**, com uma
+  **confirmação visível da ação** de cada passo (por exemplo “✓ Suporte ativo”,
+  “✓ Avançou para Controlo de qualidade”, “✓ Qualidade validada”).
+- Cada passo **destaca o elemento afetado** (encomenda, unidade, secção, cartão de
+  qualidade, nó do grafo) e dá **tempo para observar** a alteração antes e depois da
+  ação, em vez de mudanças instantâneas.
+- A análise por linha passa a **focar automaticamente a linha da unidade selecionada**,
+  para a unidade acompanhada estar sempre visível.
+- Mantém-se **determinística, repetível e não destrutiva**: repõe o cenário e a unidade
+  no arranque, a caixa de controlo aparece sempre, e nada é escrito na base de dados.
+- Controlos: Anterior / Pausar / Retomar / Seguinte / Recomeçar / Terminar.
+
+
 ## [2.19.0] — 2026-06-25
 
 ### Alterado — regras de capacidade consolidadas e visíveis

@@ -30,7 +30,7 @@ dashboard. Em Windows pode usar o script de espera:
 | Dashboard (frontend) | http://localhost:8088 |
 | API + Swagger | http://localhost:5181/swagger |
 | Saúde da API | http://localhost:5181/health |
-| Grafana | http://localhost:3000 |
+| Grafana | http://localhost:33010 |
 | Orion-LD (FIWARE) | http://localhost:1026/version |
 | Base de dados (TimescaleDB) | porta 15432 |
 

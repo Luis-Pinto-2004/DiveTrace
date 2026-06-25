@@ -80,7 +80,7 @@ services:
       - mongo-db
       - orion
     ports:
-      - "4041:4041"
+      - "14041:4041"
       - "7896:7896"
     environment:
       IOTA_CB_HOST: orion

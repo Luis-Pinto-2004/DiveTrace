@@ -2,68 +2,83 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { useOperationsStore } from '@/stores/operations'
+import { useOperationsStore, type Unit } from '@/stores/operations'
 import { authenticate } from '@/data/demoUsers'
 
+type Maybe<T> = T | (() => T)
 interface DemoStep {
   route: string
   title: string
   message: string
-  query?: Record<string, string>
+  query?: Maybe<Record<string, string>>
   scrollTo?: string
-  highlight?: string
+  highlight?: Maybe<string | null>
   type?: Array<{ selector: string; text: string }>
   action?: () => void
+  badge?: Maybe<string>
   dwell?: number
 }
 
 const LOGIN_INDEX = 0
-const DWELL = 11000
+const DWELL = 12000
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const ops = useOperationsStore()
 
-// Ações de demonstração — operam apenas no estado cliente (nunca na base de dados).
-function startSubmittedOrder() {
-  const o = ops.orders.find((x) => x.id === 'O7')
-  if (o?.status === 'submitted') {
-    ops.acceptOrder('O7')
-    ops.startProduction('O7')
-  }
+// ---- unidade acompanhada (o caso concreto seguido do início ao fim) ------
+const trackedId = ref('')
+const trackedOrderId = ref('O1')
+const trackedUnit = computed<Unit | undefined>(() => ops.unitById(trackedId.value))
+const trackedLabel = computed(() => trackedUnit.value?.label ?? '')
+const trackedSectionName = computed(() =>
+  trackedUnit.value ? ops.sectionName(trackedUnit.value.sectionId) : '',
+)
+function resolveTracked() {
+  const u =
+    ops.units.find((x) => x.orderId === 'O1' && x.sectionId === 'SEC-MONT-FINAL') ??
+    ops.units.find((x) => x.sectionId === 'SEC-MONT-FINAL' && x.state === 'active') ??
+    ops.units.find((x) => {
+      const o = ops.orders.find((ord) => ord.id === x.orderId)
+      return o?.status === 'in_production' && x.state === 'active'
+    })
+  trackedId.value = u?.id ?? ''
+  trackedOrderId.value = u?.orderId ?? 'O1'
 }
-function selectRepresentativeUnit() {
-  const u = ops.units.find((x) => {
-    const o = ops.orders.find((ord) => ord.id === x.orderId)
-    return o?.status === 'in_production' && x.state === 'active'
-  })
-  if (u) ops.selectUnit(u.id)
+
+// ---- ações da demo — só estado cliente, nunca a base de dados -------------
+function selectTracked() {
+  if (trackedId.value) ops.selectUnit(trackedId.value)
 }
-function advanceRepresentativeUnit() {
-  const u = ops.units.find((x) => {
-    const o = ops.orders.find((ord) => ord.id === x.orderId)
-    const info = ops.advanceInfo(x.id)
-    return o?.status === 'in_production' && x.state === 'active' && !!info && !info.atEnd && !info.blocked
-  })
-  if (u) {
-    ops.selectUnit(u.id)
-    ops.advanceUnit(u.id)
-  }
+function supportTracked() {
+  const u = trackedUnit.value
+  if (u) ops.ensureSupport(u)
+  if (trackedId.value) ops.selectUnit(trackedId.value)
 }
-function approveQualityUnit() {
-  const u = ops.units.find((x) => x.sectionId === 'SEC-CQ' && x.quality === 'pending')
-  if (u) {
-    ops.selectUnit(u.id)
-    ops.decideQuality(u.id, 'approve')
+function advanceTracked() {
+  const id = trackedId.value
+  if (!id) return
+  const info = ops.advanceInfo(id)
+  if (info && !info.atEnd && info.blocked) {
+    // Libertar uma vaga concluindo uma inspeção pendente na secção de destino.
+    const blocker = ops.units.find(
+      (x) => x.sectionId === 'SEC-CQ' && x.quality === 'pending' && x.id !== id,
+    )
+    if (blocker) ops.decideQuality(blocker.id, 'approve')
   }
+  ops.selectUnit(id)
+  ops.advanceUnit(id)
+}
+function approveTracked() {
+  if (trackedId.value) ops.decideQuality(trackedId.value, 'approve')
 }
 
 const STEPS: DemoStep[] = [
   {
     route: '/login',
     title: 'Início de sessão',
-    message: 'A entrar como Administrador, o perfil que mostra todas as funcionalidades.',
+    message: 'Entramos como Administrador para acompanhar uma encomenda do início ao fim.',
     highlight: '[data-demo="login"]',
     type: [
       { selector: '[data-demo="login-user"]', text: 'admin' },
@@ -74,58 +89,74 @@ const STEPS: DemoStep[] = [
   {
     route: '/cockpit',
     title: 'Painel de operações',
-    message: 'Visão geral da fábrica e prioridades do turno: unidades em curso, qualidade e produção.',
-    action: selectRepresentativeUnit,
+    message: 'Vamos seguir uma unidade. O painel mostra onde está no fluxo de produção.',
+    action: selectTracked,
+    badge: 'Unidade selecionada',
     scrollTo: '[data-demo="producao"]',
     highlight: '[data-demo="producao"]',
   },
   {
     route: '/ordens',
-    title: 'Encomendas e ordens de fabrico',
-    message: 'Pedido de cliente aceite: unidades de produto individuais geradas e produção iniciada.',
-    action: startSubmittedOrder,
-    highlight: '[data-demo="encomendas"]',
+    title: 'Encomenda em produção',
+    message: 'Esta é a encomenda da unidade acompanhada. Cada peça é uma unidade individual.',
+    highlight: () => `[data-demo-order="${trackedOrderId.value}"]`,
   },
   {
     route: '/linhas',
-    title: 'Produção e suporte',
-    message: 'Suporte atribuído e unidade a avançar pela rota, respeitando a capacidade da secção.',
-    action: advanceRepresentativeUnit,
-    highlight: '[data-demo="linha"]',
+    title: 'Suporte e rastreabilidade',
+    message: 'No chão de fábrica a unidade segue num suporte: é isso que a torna rastreável.',
+    action: supportTracked,
+    badge: 'Suporte ativo',
+    highlight: () => (trackedId.value ? `[data-demo-unit="${trackedId.value}"]` : '[data-demo="linha"]'),
+  },
+  {
+    route: '/linhas',
+    title: 'Avanço pela rota',
+    message: 'A unidade avança para a etapa seguinte, e só se a secção tiver capacidade.',
+    action: advanceTracked,
+    badge: () => `Avançou para ${ops.sectionName(trackedUnit.value?.sectionId ?? '')}`,
+    highlight: () => (trackedId.value ? `[data-demo-unit="${trackedId.value}"]` : '[data-demo="ocupacao"]'),
+    dwell: 13000,
   },
   {
     route: '/qualidade',
     title: 'Controlo de qualidade',
-    message: 'Decisão de qualidade aplicada: unidade aprovada e encaminhada para o rack.',
-    action: approveQualityUnit,
-    highlight: '[data-demo="qualidade"]',
-  },
-  {
-    route: '/rastreabilidade',
-    title: 'Mapa de rastreabilidade',
-    message: 'Rastreabilidade completa de uma ordem no grafo: unidades, suporte, secções, qualidade e eventos.',
-    query: { gp: 'order', go: 'O1' },
-    highlight: '[data-demo="grafo"]',
+    message: 'No controlo de qualidade decide-se: aprovar, recondicionar ou sucata.',
+    action: approveTracked,
+    badge: 'Qualidade validada, segue para rack',
+    highlight: () => (trackedId.value ? `[data-demo-unit="${trackedId.value}"]` : '[data-demo="qualidade"]'),
     dwell: 13000,
   },
   {
     route: '/cliente',
     title: 'Acompanhamento pelo cliente',
-    message: 'O cliente acompanha as suas encomendas. Ciclo completo: do pedido à unidade rastreável.',
-    highlight: '[data-demo="cliente"]',
+    message: 'O cliente vê o estado da sua encomenda, sem aceder aos dados internos da fábrica.',
+    highlight: () => `[data-demo-order="${trackedOrderId.value}"]`,
+  },
+  {
+    route: '/rastreabilidade',
+    title: 'Mapa de rastreabilidade',
+    message: 'O grafo mostra todo o percurso da ordem: unidade, suporte, secções, qualidade e eventos.',
+    query: () => ({ gp: 'order', go: trackedOrderId.value || 'O1' }),
+    highlight: '[data-demo="grafo"]',
+    dwell: 14000,
   },
 ]
 
 const active = computed(() => route.query.demo === '1')
 const index = ref(0)
 const playing = ref(false)
+const actionLabel = ref('')
 const step = computed(() => STEPS[index.value])
 const isLast = computed(() => index.value === STEPS.length - 1)
+const showTracked = computed(() => !!trackedLabel.value && step.value.route !== '/login')
 
 let timer: ReturnType<typeof setTimeout> | null = null
 let runId = 0
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
-
+function resolve<T>(v: Maybe<T> | undefined): T | undefined {
+  return typeof v === 'function' ? (v as () => T)() : v
+}
 function stepForRoute(path: string): number {
   const i = STEPS.findIndex((s) => s.route === path)
   return i >= 0 ? i : 0
@@ -147,7 +178,7 @@ function recomputeRing() {
   const r = el.getBoundingClientRect()
   ring.value = { top: r.top - 6, left: r.left - 6, width: r.width + 12, height: r.height + 12 }
 }
-function setHighlight(sel: string) {
+function setHighlight(sel: string | null) {
   highlightSel = sel
   recomputeRing()
 }
@@ -184,15 +215,17 @@ async function navigate(path: string, extra: Record<string, string> = {}) {
   }
 }
 
-// ---- motor de passos -----------------------------------------------------
+// ---- motor de passos: destacar, observar, agir, observar -----------------
 async function runStep(i: number) {
   const my = ++runId
   const s = STEPS[i]
+  actionLabel.value = ''
   clearHighlight()
-  await navigate(s.route, s.query ?? {})
+  await navigate(s.route, resolve(s.query) ?? {})
   if (my !== runId || !active.value) return
-  await delay(240)
+  await delay(420)
   if (my !== runId || !active.value) return
+
   if (s.type) {
     for (const t of s.type) {
       await typeInto(t.selector, t.text)
@@ -203,17 +236,26 @@ async function runStep(i: number) {
       if (session) auth.setUser(session)
     }
   }
-  if (s.action) {
-    s.action()
-    await delay(320)
-    if (my !== runId || !active.value) return
-  }
+
   if (s.scrollTo) {
     document.querySelector(s.scrollTo)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    await delay(640)
+    await delay(620)
     if (my !== runId || !active.value) return
   }
-  if (s.highlight) setHighlight(s.highlight)
+
+  const hl = resolve(s.highlight) ?? null
+  if (hl) setHighlight(hl)
+
+  if (s.action) {
+    await delay(1100) // observar o elemento antes da ação
+    if (my !== runId || !active.value) return
+    s.action()
+    actionLabel.value = resolve(s.badge) ?? ''
+    await delay(360) // deixar a UI atualizar
+    if (my !== runId || !active.value) return
+    if (hl) setHighlight(hl) // re-localizar (o elemento pode ter mudado)
+  }
+
   if (playing.value) scheduleNext(s.dwell ?? DWELL)
 }
 
@@ -253,6 +295,7 @@ function togglePlay() {
 function restart() {
   clearTimer()
   ops.resetDemo()
+  resolveTracked()
   index.value = 0
   playing.value = true
   void runStep(0)
@@ -261,6 +304,7 @@ function exit() {
   clearTimer()
   playing.value = false
   clearHighlight()
+  actionLabel.value = ''
   window.scrollTo({ top: 0 })
   const query = { ...route.query }
   delete query.demo
@@ -271,8 +315,9 @@ function exit() {
 }
 
 function start() {
-  // Repõe o estado de demonstração para um ponto conhecido (repetível, não destrutivo).
+  // Repõe o cenário para um estado conhecido (repetível, não destrutivo) e fixa a unidade.
   ops.resetDemo()
+  resolveTracked()
   index.value = stepForRoute(route.path)
   playing.value = true
   void runStep(index.value)
@@ -287,6 +332,7 @@ watch(
       clearTimer()
       playing.value = false
       clearHighlight()
+      actionLabel.value = ''
     }
   },
   { immediate: true },
@@ -316,22 +362,41 @@ onBeforeUnmount(() => {
       class="demo__ring"
       :style="{ top: ring.top + 'px', left: ring.left + 'px', width: ring.width + 'px', height: ring.height + 'px' }"
     />
-    <div
+    <section
       class="demo__bar"
       role="region"
       aria-label="Modo de apresentação"
     >
-      <div class="demo__head">
-        <span class="demo__badge">Demo</span>
+      <header class="demo__top">
+        <span class="demo__chip">Demo</span>
         <span class="demo__count">{{ index + 1 }} / {{ STEPS.length }}</span>
         <h2 class="demo__title">
           {{ step.title }}
         </h2>
-      </div>
+        <transition name="demo-pop">
+          <span
+            v-if="actionLabel"
+            class="demo__done"
+          >✓ {{ actionLabel }}</span>
+        </transition>
+      </header>
+
+      <p
+        v-if="showTracked"
+        class="demo__track"
+      >
+        A acompanhar: <strong>{{ trackedLabel }}</strong>
+        <span
+          v-if="trackedSectionName"
+          class="demo__where"
+        >· {{ trackedSectionName }}</span>
+      </p>
+
       <p class="demo__message">
         {{ step.message }}
       </p>
-      <div class="demo__controls">
+
+      <footer class="demo__controls">
         <button
           type="button"
           class="demo__btn"
@@ -345,7 +410,7 @@ onBeforeUnmount(() => {
           class="demo__btn demo__btn--primary"
           @click="togglePlay"
         >
-          {{ playing ? 'Pausar' : 'Reproduzir' }}
+          {{ playing ? 'Pausar' : 'Retomar' }}
         </button>
         <button
           type="button"
@@ -369,8 +434,8 @@ onBeforeUnmount(() => {
         >
           Terminar
         </button>
-      </div>
-    </div>
+      </footer>
+    </section>
   </div>
 </template>
 
@@ -386,56 +451,81 @@ onBeforeUnmount(() => {
   z-index: 9991;
   border: 2px solid var(--dt-brand-500);
   border-radius: 12px;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dt-brand-500) 30%, transparent),
-    0 0 0 9999px color-mix(in srgb, #0b2948 18%, transparent);
-  transition: top 0.25s ease, left 0.25s ease, width 0.25s ease, height 0.25s ease;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dt-brand-500) 32%, transparent),
+    0 0 0 9999px color-mix(in srgb, #0b2948 16%, transparent);
+  transition: top 0.28s ease, left 0.28s ease, width 0.28s ease, height 0.28s ease;
   pointer-events: none;
 }
 .demo__bar {
   position: fixed;
   left: 50%;
-  bottom: 1rem;
+  bottom: 1.1rem;
   transform: translateX(-50%);
   z-index: 9992;
-  width: min(92vw, 720px);
+  width: min(94vw, 760px);
   pointer-events: auto;
   background: var(--dt-surface);
   border: 1px solid var(--dt-border);
   border-radius: var(--dt-radius-lg);
   box-shadow: var(--dt-shadow-card);
-  padding: 0.8rem 1rem;
+  padding: 0.85rem 1.05rem 0.8rem;
 }
-.demo__head {
+.demo__top {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.55rem;
   flex-wrap: wrap;
 }
-.demo__badge {
+.demo__chip {
   background: var(--dt-brand-500);
   color: #fff;
-  font-size: 0.62rem;
+  font-size: 0.6rem;
   font-weight: 900;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 0.15rem 0.45rem;
+  letter-spacing: 0.06em;
+  padding: 0.16rem 0.5rem;
   border-radius: 9999px;
 }
 .demo__count {
   font-size: 0.7rem;
   font-weight: 800;
   color: var(--dt-neutral-text);
+  font-variant-numeric: tabular-nums;
 }
 .demo__title {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 0.98rem;
   font-weight: 900;
   color: var(--dt-text-strong);
 }
+.demo__done {
+  margin-left: auto;
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: var(--dt-ok-text);
+  background: var(--dt-ok-surface);
+  border: 1px solid var(--dt-ok-border);
+  border-radius: 9999px;
+  padding: 0.2rem 0.55rem;
+  white-space: nowrap;
+}
+.demo__track {
+  margin: 0.5rem 0 0.25rem;
+  font-size: 0.74rem;
+  color: var(--dt-neutral-text);
+}
+.demo__track strong {
+  color: var(--dt-text-strong);
+}
+.demo__where {
+  margin-left: 0.25rem;
+  font-weight: 700;
+  color: var(--dt-brand-600, var(--dt-brand-500));
+}
 .demo__message {
-  margin: 0.5rem 0 0.7rem;
-  font-size: 0.8rem;
-  line-height: 1.4;
+  margin: 0.35rem 0 0.7rem;
+  font-size: 0.82rem;
+  line-height: 1.42;
   color: var(--dt-text-strong);
 }
 .demo__controls {
@@ -449,7 +539,7 @@ onBeforeUnmount(() => {
   background: var(--dt-surface);
   color: var(--dt-text-strong);
   border-radius: 8px;
-  padding: 0.35rem 0.7rem;
+  padding: 0.36rem 0.72rem;
   font-size: 0.74rem;
   font-weight: 800;
   cursor: pointer;
@@ -465,5 +555,12 @@ onBeforeUnmount(() => {
 }
 .demo__btn--ghost {
   color: var(--dt-neutral-text);
+}
+.demo-pop-enter-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.demo-pop-enter-from {
+  opacity: 0;
+  transform: translateY(-4px) scale(0.96);
 }
 </style>

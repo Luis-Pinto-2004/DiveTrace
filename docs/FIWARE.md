@@ -7,12 +7,17 @@ interoperabilidade com outras ferramentas do ecossistema.
 
 ## Componentes
 
-| Componente | Imagem | Função | Porta |
+| Componente | Imagem | Função | Portas (host → Docker) |
 |---|---|---|---|
-| **Orion-LD** | `fiware/orion-ld` | Context Broker NGSI-LD: guarda o estado atual das entidades | 1026 |
-| **IoT Agent JSON** | `fiware/iotagent-json` | Recebe medições em JSON e publica no Orion | 4041 / 7896 |
-| **QuantumLeap** | `fiware/quantum-leap` | Subscreve o Orion e persiste o histórico temporal | 8668 |
-| **MongoDB** | `mongo:4.4` | Armazenamento do Orion e do IoT Agent | 27017 |
+| **Orion-LD** | `fiware/orion-ld` | Context Broker NGSI-LD: guarda o estado atual das entidades | `1026` |
+| **IoT Agent JSON** | `fiware/iotagent-json` | Recebe medições em JSON e publica no Orion | API: `14041` → `4041` · payload/dispositivos: `7896` |
+| **QuantumLeap** | `fiware/quantum-leap` | Subscreve o Orion e persiste o histórico temporal | `8668` |
+| **MongoDB** | `mongo:4.4` | Armazenamento do Orion e do IoT Agent | `27017` |
+
+> **Porta do IoT Agent**: dentro da rede Docker o IoT Agent continua a usar a porta
+> `4041` (e `IOTA_PROVIDER_URL` permanece `http://iot-agent:4041`). No host (Windows) o
+> acesso externo passou a ser feito por **`http://localhost:14041`**, porque a porta
+> `4041` cai numa gama reservada pelo sistema operativo e impedia o container de arrancar.
 
 ## O que é publicado
 

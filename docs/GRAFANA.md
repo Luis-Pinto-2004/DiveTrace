@@ -8,9 +8,12 @@ recolhido pelo **QuantumLeap** (ver [FIWARE.md](FIWARE.md)).
 
 | Item | Valor |
 |---|---|
-| URL | http://localhost:3000 |
+| URL | http://localhost:33010 |
 | Utilizador | `admin` |
 | Palavra-passe | `admin` |
+
+> No host, o Grafana é publicado na porta **33010** por defeito (mapeada para a `3000`
+> interna do container). A porta externa pode ser ajustada com a variável `GRAFANA_PORT`.
 
 A visualização anónima está ativa, pelo que os painéis podem também ser incorporados.
 

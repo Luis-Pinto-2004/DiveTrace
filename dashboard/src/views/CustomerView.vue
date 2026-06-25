@@ -164,6 +164,7 @@ function cancel(order: Order) {
         <article
           v-for="order in myOrders"
           :key="order.id"
+          :data-demo-order="order.id"
           class="track"
         >
           <div class="track__head">

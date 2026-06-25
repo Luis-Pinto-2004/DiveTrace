@@ -118,6 +118,7 @@ function whyOffFlow(unit: Unit): string | null {
           <DecisionCard
             v-for="unit in filtered"
             :key="unit.id"
+            :data-demo-unit="unit.id"
             :title="unit.label"
             :context="`${unit.product} · ${orderName(unit)} · ${locationOf(unit)}`"
             :status-label="unitStatusLabel(unit)"

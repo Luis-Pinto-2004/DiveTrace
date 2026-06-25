@@ -51,7 +51,7 @@ try {
   Write-Host ""
   Write-Host "Enderecos uteis:"
   Write-Host "  Dashboard : http://localhost:8088"
-  Write-Host "  Grafana   : http://localhost:3000  (admin/admin)"
+  Write-Host "  Grafana   : http://localhost:33010  (admin/admin)"
   Write-Host "  FIWARE    : http://localhost:1026/version"
   Write-Host "  Guiao     : docs/DEMO.md"
 }

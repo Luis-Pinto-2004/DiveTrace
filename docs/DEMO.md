@@ -1,8 +1,8 @@
 # Demo de apresentação
 
-Guião para apresentar o DriveTrace Core de forma calma e controlada. A demo mostra a
-aplicação como uma **plataforma de rastreabilidade e monitorização de WIP para produção
-automóvel**, e não apenas como um CRUD.
+Guião para apresentar o DriveTrace Core como uma **narrativa visual**: a demo acompanha
+**uma unidade concreta do início ao fim**, para mostrar a rastreabilidade WIP no chão de
+fábrica de forma clara, mesmo para quem vê a aplicação pela primeira vez.
 
 ## Como arrancar
 
@@ -21,53 +21,50 @@ Com o ambiente já a correr, basta abrir:
 http://localhost:8088/login?demo=1
 ```
 
-## O que acontece automaticamente
+## O que a demo mostra
 
-A demo é guiada, avança sozinha e **demonstra o ciclo completo** com ações reais sobre
-um cenário de demonstração controlado:
+A demo segue **a mesma unidade** ao longo de todo o percurso. Em cada passo, a caixa no
+rodapé indica sempre **qual é a unidade acompanhada e onde está agora**, e cada ação fica
+**destacada no ecrã** com uma confirmação (por exemplo “✓ Suporte ativo”):
 
-1. **Início de sessão** — mostra o login e escreve as credenciais de Administrador.
-2. **Painel de operações** — visão geral da fábrica; seleciona uma unidade para mostrar
-   o seu percurso.
-3. **Encomendas e ordens de fabrico** — aceita uma encomenda submetida e inicia a
-   produção, **gerando as unidades de produto individuais**.
-4. **Produção e suporte** — **atribui o suporte** e faz a unidade **avançar pela rota**,
-   respeitando a capacidade da secção.
-5. **Controlo de qualidade** — aplica uma **decisão de qualidade** (aprovação) e
-   encaminha a unidade para o rack.
-6. **Mapa de rastreabilidade** — abre o **grafo de uma ordem de fabrico**, com unidades,
-   suporte, secções, qualidade e eventos.
-7. **Acompanhamento pelo cliente** — o ciclo fecha do lado do cliente.
+1. **Início de sessão** — entra como Administrador (escrita simulada das credenciais).
+2. **Painel de operações** — seleciona a unidade a acompanhar e mostra-a no fluxo.
+3. **Encomenda em produção** — destaca a encomenda dessa unidade.
+4. **Suporte e rastreabilidade** — mostra o suporte que torna a unidade rastreável.
+5. **Avanço pela rota** — a unidade avança para a etapa seguinte, respeitando a
+   capacidade da secção; vê-se a mudança de secção.
+6. **Controlo de qualidade** — aplica a decisão (aprovação) e encaminha para o rack.
+7. **Acompanhamento pelo cliente** — destaca a encomenda na área de cliente.
+8. **Mapa de rastreabilidade** — abre o grafo dessa ordem, com unidade, suporte, secções,
+   qualidade e eventos.
 
-Em cada passo, a aplicação navega para a página certa, faz **scroll** para a zona
-relevante e **destaca** o elemento em foco, enquanto a caixa no rodapé explica, em
-português, o que está a acontecer.
+Em cada passo a aplicação navega para a página certa, faz **scroll** para a zona
+relevante e **destaca** o elemento afetado, com tempo suficiente para observar a
+alteração antes e depois da ação.
 
 ## Controlos (caixa no rodapé)
 
 - **Anterior / Seguinte** — avançar manualmente.
-- **Reproduzir / Pausar** — ligar/desligar o avanço automático (arranca a reproduzir).
+- **Pausar / Retomar** — ligar/desligar o avanço automático (arranca a reproduzir).
 - **Recomeçar** — repor o cenário e voltar ao primeiro passo.
 - **Terminar** — sair do modo de apresentação.
 
 ## Repetir e sair
 
 - A demo é **determinística e repetível**: ao arrancar (ou ao **Recomeçar**), o cenário
-  é **reposto a um estado conhecido**, pelo que **várias execuções dão sempre o mesmo
-  resultado**. Não depende de estado guardado.
-- Pode correr a demo **várias vezes seguidas** sem reiniciar o projeto: a caixa de
-  controlo aparece sempre.
+  e a unidade acompanhada são **repostos ao mesmo estado inicial**. **Várias execuções
+  dão sempre o mesmo resultado** e a caixa de controlo **aparece sempre**.
+- Pode correr a demo **várias vezes seguidas** sem reiniciar o projeto nem limpar volumes.
 - A demo **continua a funcionar após um refresh** do browser.
 - Para **sair**, carregue em **Terminar** (ou remova `?demo=1` do endereço).
 
 ## Segurança dos dados
 
-O modo de apresentação é **não destrutivo**. As ações demonstradas (aceitar/iniciar
-ordem, gerar unidades, atribuir suporte, avançar, decidir qualidade) operam apenas sobre
-o **estado de demonstração do cliente**, que é **reposto no arranque** — **não criam
-encomendas novas a cada execução nem escrevem na base de dados**, e não alteram
-permissões nem a lógica da aplicação. Não interferem com FIWARE, Grafana, qualidade,
-encomendas ou rastreabilidade reais.
+O modo de apresentação é **não destrutivo**. As ações demonstradas (selecionar, suporte,
+avançar, decidir qualidade) operam apenas sobre o **estado de demonstração do cliente**,
+que é **reposto no arranque** — **não criam encomendas novas nem escrevem na base de
+dados**, e não interferem com FIWARE, Grafana, qualidade, encomendas ou rastreabilidade
+reais.
 
 ## Pontos diferenciadores a sublinhar
 
@@ -77,7 +74,7 @@ encomendas ou rastreabilidade reais.
 - **Rastreabilidade visual por grafo**, com várias perspetivas de análise.
 - **Qualidade** com decisões reais (aprovar / recondicionar / sucata).
 - Integração **FIWARE** (contexto NGSI-LD) e **Grafana** (monitorização temporal),
-  acessíveis em http://localhost:1026 e http://localhost:3000.
+  acessíveis em http://localhost:1026 e http://localhost:33010.
 
 ## Dica
 

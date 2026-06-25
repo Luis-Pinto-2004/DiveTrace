@@ -80,6 +80,7 @@ function orderUnits(order: Order) {
         <article
           v-for="order in col.orders"
           :key="order.id"
+          :data-demo-order="order.id"
           class="order-card"
           :class="`order-card--${order.status}`"
         >

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   useOperationsStore,
   unitStatusLabel,
@@ -43,6 +43,15 @@ const lineUnits = computed(() =>
 
 const selected = computed(() => ops.selectedUnit)
 const advanceState = computed(() => (selected.value ? ops.advanceInfo(selected.value.id) : null))
+// Ao selecionar uma unidade (inclui o modo de apresentação), foca a sua linha.
+watch(
+  () => ops.selectedUnit?.id,
+  () => {
+    const u = ops.selectedUnit
+    if (u && u.lineId !== activeLineId.value) activeLineId.value = u.lineId
+  },
+  { immediate: true },
+)
 
 function pick(id: string) {
   ops.selectUnit(id)
@@ -158,7 +167,10 @@ const sectionRows = computed(() =>
         />
       </section>
 
-      <section class="card line__sections">
+      <section
+        class="card line__sections"
+        data-demo="ocupacao"
+      >
         <h2 class="card__title">
           Secções e responsáveis
         </h2>
@@ -212,6 +224,7 @@ const sectionRows = computed(() =>
           <li
             v-for="unit in lineUnits"
             :key="unit.id"
+            :data-demo-unit="unit.id"
             class="unit-row"
             :class="{ 'unit-row--sel': unit.id === ops.selectedUnitId }"
           >
